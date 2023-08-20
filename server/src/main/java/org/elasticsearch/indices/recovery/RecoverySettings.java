@@ -52,24 +52,24 @@ public class RecoverySettings {
         Setting.intSetting("indices.recovery.max_concurrent_operations", 1, 1, 4, Property.Dynamic, Property.NodeScope);
 
     /**
-     * how long to wait before retrying after issues cause by cluster state syncing between nodes
+     * how long to wait before retrying after issues cause by cluster state syncing between nodes nodes之间出现问题，需要等多长时间再重试。
      * i.e., local node is not yet known on remote node, remote shard not yet started etc.
      */
     public static final Setting<TimeValue> INDICES_RECOVERY_RETRY_DELAY_STATE_SYNC_SETTING =
         Setting.positiveTimeSetting("indices.recovery.retry_delay_state_sync", TimeValue.timeValueMillis(500),
             Property.Dynamic, Property.NodeScope);
 
-    /** how long to wait before retrying after network related issues */
+    /** how long to wait before retrying after network related issues 网络原因需要等多长时间再重试*/
     public static final Setting<TimeValue> INDICES_RECOVERY_RETRY_DELAY_NETWORK_SETTING =
         Setting.positiveTimeSetting("indices.recovery.retry_delay_network", TimeValue.timeValueSeconds(5),
             Property.Dynamic, Property.NodeScope);
 
-    /** timeout value to use for requests made as part of the recovery process */
+    /** timeout value to use for requests made as part of the recovery process 用于作为恢复过程一部分发出的请求的超时时间*/
     public static final Setting<TimeValue> INDICES_RECOVERY_INTERNAL_ACTION_TIMEOUT_SETTING =
         Setting.positiveTimeSetting("indices.recovery.internal_action_timeout", TimeValue.timeValueMinutes(15),
             Property.Dynamic, Property.NodeScope);
 
-    /** timeout value to use for the retrying of requests made as part of the recovery process */
+    /** timeout value to use for the retrying of requests made as part of the recovery process 重试请求的超时时间*/
     public static final Setting<TimeValue> INDICES_RECOVERY_INTERNAL_ACTION_RETRY_TIMEOUT_SETTING =
         Setting.positiveTimeSetting("indices.recovery.internal_action_retry_timeout", TimeValue.timeValueMinutes(1),
             Property.Dynamic, Property.NodeScope);
@@ -85,7 +85,7 @@ public class RecoverySettings {
 
     /**
      * recoveries that don't show any activity for more then this interval will be failed.
-     * defaults to `indices.recovery.internal_action_long_timeout`
+     * defaults to `indices.recovery.internal_action_long_timeout` 超过此时间间隔未显示任何活动的恢复将失败
      */
     public static final Setting<TimeValue> INDICES_RECOVERY_ACTIVITY_TIMEOUT_SETTING =
         Setting.timeSetting("indices.recovery.recovery_activity_timeout",

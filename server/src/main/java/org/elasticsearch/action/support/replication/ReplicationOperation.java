@@ -125,7 +125,7 @@ public class ReplicationOperation<
     private void handlePrimaryResult(final PrimaryResultT primaryResult) {
         this.primaryResult = primaryResult;
         final ReplicaRequest replicaRequest = primaryResult.replicaRequest();
-        if (replicaRequest != null) {
+        if (replicaRequest != null) { //这里执行副本写入请求
             if (logger.isTraceEnabled()) {
                 logger.trace("[{}] op [{}] completed on primary for request [{}]", primary.routingEntry().shardId(), opType, request);
             }
@@ -181,7 +181,7 @@ public class ReplicationOperation<
     private void performOnReplicas(final ReplicaRequest replicaRequest, final long globalCheckpoint,
                                    final long maxSeqNoOfUpdatesOrDeletes, final ReplicationGroup replicationGroup,
                                    final PendingReplicationActions pendingReplicationActions) {
-        // for total stats, add number of unassigned shards and
+        // for total stats, add number of unassigned shards and //加上所有的unassigned状态和initializing状态的shard数量，这些暂时都不能接收操作
         // number of initializing shards that are not ready yet to receive operations (recovery has not opened engine yet on the target)
         totalShards.addAndGet(replicationGroup.getSkippedShards().size());
 
@@ -204,7 +204,7 @@ public class ReplicationOperation<
         pendingActions.incrementAndGet();
         final ActionListener<ReplicaResponse> replicationListener = new ActionListener<ReplicaResponse>() {
             @Override
-            public void onResponse(ReplicaResponse response) {
+            public void onResponse(ReplicaResponse response) {//replica处理完成，则修改checkpoint
                 successfulShards.incrementAndGet();
                 try {
                     updateCheckPoints(shard, response::localCheckpoint, response::globalCheckpoint);

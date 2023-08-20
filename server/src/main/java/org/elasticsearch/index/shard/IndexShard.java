@@ -3270,12 +3270,12 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                 && isSearchIdle()
                 && indexSettings.isExplicitRefresh() == false
                 && active.get()) { // it must be active otherwise we might not free up segment memory once the shard became inactive
-                // lets skip this refresh since we are search idle and
+                // lets skip this refresh since we are search idle and // 如果查询空闲，就先跳过refresh
                 // don't necessarily need to refresh. the next searcher access will register a refreshListener and that will
-                // cause the next schedule to refresh.
+                // cause the next schedule to refresh.//下一次查询请求会触发refresh调度
                 final Engine engine = getEngine();
                 engine.maybePruneDeletes(); // try to prune the deletes in the engine if we accumulated some
-                setRefreshPending(engine);
+                setRefreshPending(engine);//
                 return false;
             } else {
                 if (logger.isTraceEnabled()) {
@@ -3289,21 +3289,21 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         return false;
     }
 
-    /**
+    /** 计算查询是否处于空闲状态，lyh TODO：这里需要注意，读写分离模式下 主分片一直都不会被搜索。算这个有啥用？
      * Returns true if this shards is search idle
      */
     public final boolean isSearchIdle() {
         return (threadPool.relativeTimeInMillis() - lastSearcherAccess.get()) >= indexSettings.getSearchIdleAfter().getMillis();
     }
 
-    /**
+    /**  会记录最近一次搜索请求，所以也可以获取，主要是为了计算查询空闲时间
      * Returns the last timestamp the searcher was accessed. This is a relative timestamp in milliseconds.
      */
     final long getLastSearcherAccess() {
         return lastSearcherAccess.get();
     }
 
-    /**
+    /** 是否有因为查询空闲而设置的 refresh pending
      * Returns true if this shard has some scheduled refresh that is pending because of search-idle.
      */
     public final boolean hasRefreshPending() {
@@ -3312,7 +3312,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
 
     private void setRefreshPending(Engine engine) {
         final Translog.Location lastWriteLocation = engine.getTranslogLastWriteLocation();
-        pendingRefreshLocation.updateAndGet(curr -> {
+        pendingRefreshLocation.updateAndGet(curr -> { // 记录数字较大的位置
             if (curr == null || curr.compareTo(lastWriteLocation) <= 0) {
                 return lastWriteLocation;
             } else {

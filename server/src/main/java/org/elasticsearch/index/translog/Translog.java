@@ -116,7 +116,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
     public static final int DEFAULT_HEADER_SIZE_IN_BYTES = TranslogHeader.headerSizeInBytes(UUIDs.randomBase64UUID());
 
     // the list of translog readers is guaranteed to be in order of translog generation
-    private final List<TranslogReader> readers = new ArrayList<>();
+    private final List<TranslogReader> readers = new ArrayList<>();//Translog读取器，此列表保证按照生成的顺序排列
     private final BigArrays bigArrays;
     protected final ReleasableLock readLock;
     protected final ReleasableLock writeLock;
@@ -542,7 +542,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
                     throw new IllegalArgumentException("Operation term is newer than the current term; "
                         + "current term[" + current.getPrimaryTerm() + "], operation term[" + operation + "]");
                 }
-                return current.add(bytes, operation.seqNo());
+                return current.add(bytes, operation.seqNo());//写入
             }
         } catch (final AlreadyClosedException | IOException ex) {
             closeOnTragicEvent(ex);

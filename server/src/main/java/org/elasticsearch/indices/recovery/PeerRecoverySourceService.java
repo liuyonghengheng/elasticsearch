@@ -80,8 +80,8 @@ public class PeerRecoverySourceService extends AbstractLifecycleComponent implem
         this.transportService = transportService;
         this.indicesService = indicesService;
         this.recoverySettings = recoverySettings;
-        // When the target node wants to start a peer recovery it sends a START_RECOVERY request to the source
-        // node. Upon receiving START_RECOVERY, the source node will initiate the peer recovery.
+        // When the target node wants to start a peer recovery it sends a START_RECOVERY request to the source ；target 给 source发送 START_RECOVERY 请求
+        // node. Upon receiving START_RECOVERY, the source node will initiate the peer recovery. ；收到请求后会初始化recovery
         transportService.registerRequestHandler(Actions.START_RECOVERY, ThreadPool.Names.GENERIC, StartRecoveryRequest::new,
             new StartRecoveryTransportRequestHandler());
         // When the target node's START_RECOVERY request has failed due to a network disconnection, it will
@@ -143,7 +143,7 @@ public class PeerRecoverySourceService extends AbstractLifecycleComponent implem
         if (request.isPrimaryRelocation() && (routingEntry.relocating() == false ||
             routingEntry.relocatingNodeId().equals(request.targetNode().getId()) == false)) {
             logger.debug("delaying recovery of {} as source shard is not marked yet as relocating to {}",
-                request.shardId(), request.targetNode());
+                request.shardId(), request.targetNode());//前提是shard状态已经变成relocating
             throw new DelayRecoveryException("source shard is not marked yet as relocating to [" + request.targetNode() + "]");
         }
 

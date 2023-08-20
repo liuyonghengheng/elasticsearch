@@ -56,7 +56,7 @@ public abstract class AbstractRunnable implements Runnable {
     public abstract void onFailure(Exception e);
 
     /**
-     * This should be executed if the thread-pool executing this action rejected the execution.
+     * This should be executed if the thread-pool executing this action rejected the execution.//如果被线程池拒绝执行了，需要执行这个函数
      * The default implementation forwards to {@link #onFailure(Exception)}
      */
     public void onRejection(Exception e) {
@@ -65,7 +65,7 @@ public abstract class AbstractRunnable implements Runnable {
 
     /**
      * This method has the same semantics as {@link Runnable#run()}
-     * @throws InterruptedException if the run method throws an InterruptedException
+     * @throws InterruptedException if the run method throws an InterruptedException //可能会抛出中断异常
      */
     protected abstract void doRun() throws Exception;
 }

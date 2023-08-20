@@ -179,7 +179,7 @@ public class TranslogWriter extends BaseTranslogReader implements Closeable {
 
     /**
      * Add the given bytes to the translog with the specified sequence number; returns the location the bytes were written to.
-     *
+     * 带着sequence number 后面有啥用？
      * @param data  the bytes to write
      * @param seqNo the sequence number associated with the operation
      * @return the location the bytes were written to

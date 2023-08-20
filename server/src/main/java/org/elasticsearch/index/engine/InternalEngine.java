@@ -139,7 +139,7 @@ public class InternalEngine extends Engine {
 
     private final Lock flushLock = new ReentrantLock();
     private final ReentrantLock optimizeLock = new ReentrantLock();
-
+    // version映射的uid（以BytesRef的形式。我们使用哈希变体，因为我们要对其进行迭代，并检查对已有keys的删除和添加
     // A uid (in the form of BytesRef) to the version map
     // we use the hashed variant since we iterate over it and check removal and additions on existing keys
     private final LiveVersionMap versionMap = new LiveVersionMap();
@@ -338,13 +338,13 @@ public class InternalEngine extends Engine {
      * This reference manager delegates all it's refresh calls to another (internal) ReaderManager
      * The main purpose for this is that if we have external refreshes happening we don't issue extra
      * refreshes to clear version map memory etc. this can cause excessive segment creation if heavy indexing
-     * is happening and the refresh interval is low (ie. 1 sec)
-     *
+     * is happening and the refresh interval is low (ie. 1 sec) 这个引用管理器将它的所有刷新调用委托给另一个（内部）ReaderManager。
+     * 这样做的主要目的是，如果发生外部刷新，我们不会发出额外的刷新来清除版本映射内存等。如果发生重索引且刷新间隔较低（即1秒），这可能会导致过度的段创建
      * This also prevents segment starvation where an internal reader holds on to old segments literally forever
      * since no indexing is happening and refreshes are only happening to the external reader manager, while with
      * this specialized implementation an external refresh will immediately be reflected on the internal reader
      * and old segments can be released in the same way previous version did this (as a side-effect of _refresh)
-     */
+     *///这也能避免segment饥饿，（例如一个内部的reader一直持有旧的segment 由于没有索引操作发生或者所有的刷新操作都发生在外部的reader manager，）但是当有这个特殊的实现时，一个外部的刷新会马上反映在这个内部的reader上，并且可以以与以前版本相同的方式释放旧段
     @SuppressForbidden(reason = "reference counting is required here")
     private static final class ExternalReaderManager extends ReferenceManager<ElasticsearchDirectoryReader> {
         private final BiConsumer<ElasticsearchDirectoryReader, ElasticsearchDirectoryReader> refreshListener;
@@ -946,14 +946,14 @@ public class InternalEngine extends Engine {
                     assert index.seqNo() >= 0 : "ops should have an assigned seq no.; origin: " + index.origin();
 
                     if (plan.indexIntoLucene || plan.addStaleOpToLucene) {
-                        indexResult = indexIntoLucene(index, plan);
+                        indexResult = indexIntoLucene(index, plan);//写入lucene
                     } else {
                         indexResult = new IndexResult(
                             plan.versionForIndexing, index.primaryTerm(), index.seqNo(), plan.currentNotFoundOrDeleted);
                     }
                 }
-                if (index.origin().isFromTranslog() == false) {
-                    final Translog.Location location;
+                if (index.origin().isFromTranslog() == false) {//如果doc操作本来就是来自translog，则不需要再次写入translog了
+                    final Translog.Location location;//写入translog
                     if (indexResult.getResultType() == Result.Type.SUCCESS) {
                         location = translog.add(new Translog.Index(index, indexResult));
                     } else if (indexResult.getSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO) {
@@ -968,7 +968,7 @@ public class InternalEngine extends Engine {
                 }
                 if (plan.indexIntoLucene && indexResult.getResultType() == Result.Type.SUCCESS) {
                     final Translog.Location translogLocation = trackTranslogLocation.get() ? indexResult.getTranslogLocation() : null;
-                    versionMap.maybePutIndexUnderLock(index.uid().bytes(),
+                    versionMap.maybePutIndexUnderLock(index.uid().bytes(),//这里的uid就_id
                         new IndexVersionValue(translogLocation, plan.versionForIndexing, index.seqNo(), index.primaryTerm()));
                 }
                 localCheckpointTracker.markSeqNoAsProcessed(indexResult.getSeqNo());
@@ -1107,7 +1107,7 @@ public class InternalEngine extends Engine {
         /* Update the document's sequence number and primary term; the sequence number here is derived here from either the sequence
          * number service if this is on the primary, or the existing document's sequence number if this is on the replica. The
          * primary term here has already been set, see IndexShard#prepareIndex where the Engine$Index operation is created.
-         */
+         *///更新文档的sequence number和primary term；这里的序列号是从序列号服务派生出来的（如果它在主文档上），或者是从现有文档的序列号派生出来的，如果它在副本上。此处的主要术语已经设置，请参阅创建Engine$Index操作的IndexShard#prepareIndex。
         index.parsedDoc().updateSeqID(index.seqNo(), index.primaryTerm());
         index.parsedDoc().version().setLongValue(plan.versionForIndexing);
         try {
@@ -1676,7 +1676,7 @@ public class InternalEngine extends Engine {
                     // the second refresh will only do the extra work we have to do for warming caches etc.
                     ReferenceManager<ElasticsearchDirectoryReader> referenceManager = getReferenceManager(scope);
                     // it is intentional that we never refresh both internal / external together
-                    if (block) {
+                    if (block) { //这是有意的操作，内部和外部不能同时一起刷新？
                         referenceManager.maybeRefreshBlocking();
                         refreshed = true;
                     } else {

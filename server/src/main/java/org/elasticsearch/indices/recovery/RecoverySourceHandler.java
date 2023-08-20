@@ -96,8 +96,8 @@ import java.util.stream.StreamSupport;
  * RecoverySourceHandler handles the three phases of shard recovery, which is
  * everything relating to copying the segment files as well as sending translog
  * operations across the wire once the segments have been copied.
- *
- * Note: There is always one source handler per recovery that handles all the
+ * 主要负责复制segment文件，发送 translog 操作
+ * Note: There is always one source handler per recovery that handles all the //只有一个 source handler
  * file and translog transfer. This handler is completely isolated from other recoveries
  * while the {@link RateLimiter} passed via {@link RecoverySettings} is shared across recoveries
  * originating from this nodes to throttle the number bytes send during file transfer. The transaction log
@@ -203,7 +203,7 @@ public class RecoverySourceHandler {
             // because when doing a rolling upgrade from earlier than 7.4 we may create some leases that are initially unsatisfied. It's
             // possible there are other cases where we cannot satisfy all leases, because that's not a property we currently expect to hold.
             // Also it's pretty cheap when soft deletes are enabled, and it'd be a disaster if we tried a sequence-number-based recovery
-            // without having a complete history.
+            // without having a complete history. 此外，启用软删除时成本相当低廉，如果我们在没有完整历史记录的情况下尝试基于序列号的恢复，那将是一场灾难。
 
             if (isSequenceNumberBasedRecovery && softDeletesEnabled && retentionLeaseRef.get() != null) {
                 // all the history we need is retained by an existing retention lease, so we do not need a separate retention lock
