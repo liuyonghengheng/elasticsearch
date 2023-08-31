@@ -162,7 +162,7 @@ public class InternalEngine extends Engine {
     // max_seq_no_of_updates_or_deletes tracks the max seq_no of update or delete operations that have been processed in this engine.
     // An index request is considered as an update if it overwrites existing documents with the same docId in the Lucene index.
     // The value of this marker never goes backwards, and is tracked/updated differently on primary and replica.
-    private final AtomicLong maxSeqNoOfUpdatesOrDeletes;
+    private final AtomicLong maxSeqNoOfUpdatesOrDeletes;// 最大的seq_no，主分片操作
     private final CounterMetric numVersionLookups = new CounterMetric();
     private final CounterMetric numIndexVersionsLookups = new CounterMetric();
     // Lucene operations since this engine was opened - not include operations from existing segments.
@@ -987,7 +987,7 @@ public class InternalEngine extends Engine {
             try {
                 if (e instanceof AlreadyClosedException == false && treatDocumentFailureAsTragicError(index)) {
                     failEngine("index id[" + index.id() + "] origin[" + index.origin() + "] seq#[" + index.seqNo() + "]", e);
-                } else {
+                } else { // IO 异常，有些情况需要关闭这个engine，shard，并上报master
                     maybeFailEngine("index id[" + index.id() + "] origin[" + index.origin() + "] seq#[" + index.seqNo() + "]", e);
                 }
             } catch (Exception inner) {
