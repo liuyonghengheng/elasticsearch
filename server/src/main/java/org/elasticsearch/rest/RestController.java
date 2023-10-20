@@ -254,8 +254,8 @@ public class RestController implements HttpServerTransport.Dispatcher {
                 // This header is intended for internal use only.
                 client.threadPool().getThreadContext().putHeader(SYSTEM_INDEX_ACCESS_CONTROL_HEADER_KEY, Boolean.FALSE.toString());
             }
-
-            handler.handleRequest(request, responseChannel, client);
+            //上面先做一些简单的处理和检查
+            handler.handleRequest(request, responseChannel, client);//对应的handler处理请求
         } catch (Exception e) {
             responseChannel.sendResponse(new BytesRestResponse(responseChannel, e));
         }
@@ -322,9 +322,9 @@ public class RestController implements HttpServerTransport.Dispatcher {
         try {
             // Resolves the HTTP method and fails if the method is invalid
             requestMethod = request.method();
-            // Loop through all possible handlers, attempting to dispatch the request
+            // Loop through all possible handlers, attempting to dispatch the request//获取所有可能的handler并分发请求
             Iterator<MethodHandlers> allHandlers = getAllHandlers(request.params(), rawPath);
-            while (allHandlers.hasNext()) {
+            while (allHandlers.hasNext()) { //找到一个handler并分发请求，后续会通过找到的handler处理对应的请求
                 final RestHandler handler;
                 final MethodHandlers handlers = allHandlers.next();
                 if (handlers == null) {
@@ -337,8 +337,8 @@ public class RestController implements HttpServerTransport.Dispatcher {
                       return;
                   }
                 } else {
-                    dispatchRequest(request, channel, handler);
-                    return;
+                    dispatchRequest(request, channel, handler);//找到第一个就分发，并返回
+                    return;//最多只会被处理一次
                 }
             }
         } catch (final IllegalArgumentException e) {

@@ -27,12 +27,12 @@ import org.elasticsearch.common.util.concurrent.AbstractRunnable;
 /**
  * Base class for {@link Runnable}s that need to call {@link ActionListener#onFailure(Exception)} in case an uncaught
  * exception or error is thrown while the actual action is run.
- */
+ *///在父类的基础上加了一个listener，可用于自定义结果处理
 public abstract class ActionRunnable<Response> extends AbstractRunnable {
 
     protected final ActionListener<Response> listener;
 
-    /**
+    /** 生成一个Runnable，这个类执doRun行时会调用给定的runnable 和 listener
      * Creates a {@link Runnable} that invokes the given listener with {@code null} after the given runnable has executed.
      * @param listener Listener to invoke
      * @param runnable Runnable to execute
@@ -58,7 +58,7 @@ public abstract class ActionRunnable<Response> extends AbstractRunnable {
         return ActionRunnable.wrap(listener, l -> l.onResponse(supplier.get()));
     }
 
-    /**
+    /** 创建Runnable，包裹listener 和 consumer，listener的调用交给consumer，类似访问者模式
      * Creates a {@link Runnable} that wraps the given listener and a consumer of it that is executed when the {@link Runnable} is run.
      * Invokes {@link ActionListener#onFailure(Exception)} on it if an exception is thrown on executing the consumer.
      * @param listener ActionListener to wrap

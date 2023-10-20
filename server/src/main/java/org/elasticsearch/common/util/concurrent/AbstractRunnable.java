@@ -21,7 +21,7 @@ package org.elasticsearch.common.util.concurrent;
 
 /**
  * An extension to runnable.
- */
+ *///加了一些失败，拒绝，后置相关的处理，子类主逻辑实现doRun
 public abstract class AbstractRunnable implements Runnable {
 
     /**

@@ -496,7 +496,7 @@ public class ActionModule extends AbstractModule {
             }
         }
         ActionRegistry actions = new ActionRegistry();
-
+        //注册actions，依赖注入的方式，这里的绑定是写死的，不能动态配置，不过可以改成动态配置，不过这里是全局的
         actions.register(MainAction.INSTANCE, TransportMainAction.class);
         actions.register(NodesInfoAction.INSTANCE, TransportNodesInfoAction.class);
         actions.register(RemoteInfoAction.INSTANCE, TransportRemoteInfoAction.class);
@@ -584,7 +584,7 @@ public class ActionModule extends AbstractModule {
         actions.register(MultiGetAction.INSTANCE, TransportMultiGetAction.class,
                 TransportShardMultiGetAction.class);
         actions.register(BulkAction.INSTANCE, TransportBulkAction.class,
-                TransportShardBulkAction.class);
+                TransportShardBulkAction.class);//注册BulkAction写入请求对应的action，绑定BulkAction 和 TransportBulkAction
         actions.register(SearchAction.INSTANCE, TransportSearchAction.class);
         actions.register(SearchScrollAction.INSTANCE, TransportSearchScrollAction.class);
         actions.register(MultiSearchAction.INSTANCE, TransportMultiSearchAction.class);
