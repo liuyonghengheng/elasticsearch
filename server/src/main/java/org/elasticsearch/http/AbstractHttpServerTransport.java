@@ -333,13 +333,13 @@ public abstract class AbstractHttpServerTransport extends AbstractLifecycleCompo
 
         Exception badRequestCause = exception;
 
-        /*
+        /* 首先会对request 的格式进行合法性检查，比如一些参数或者 Content-Type，如果有些部分有问题会尝试把这部分直接去掉，然后生成一个新的request
          * We want to create a REST request from the incoming request from Netty. However, creating this request could fail if there
          * are incorrectly encoded parameters, or the Content-Type header is invalid. If one of these specific failures occurs, we
          * attempt to create a REST request again without the input that caused the exception (e.g., we remove the Content-Type header,
          * or skip decoding the parameters). Once we have a request in hand, we then dispatch the request as a bad request with the
          * underlying exception that caused us to treat the request as bad.
-         */
+         */// 一旦我们手头有一个请求，我们就会将该请求作为一个坏请求进行调度，并附带导致我们将该请求视为坏请求的潜在异常。
         final RestRequest restRequest;
         {
             RestRequest innerRestRequest;
@@ -357,7 +357,7 @@ public abstract class AbstractHttpServerTransport extends AbstractLifecycleCompo
 
         final HttpTracer trace = tracer.maybeTraceRequest(restRequest, exception);
 
-        /*
+        /*//创建发送返回数据的 channel
          * We now want to create a channel used to send the response on. However, creating this channel can fail if there are invalid
          * parameter values for any of the filter_path, human, or pretty parameters. We detect these specific failures via an
          * IllegalArgumentException from the channel constructor and then attempt to create a new channel that bypasses parsing of these

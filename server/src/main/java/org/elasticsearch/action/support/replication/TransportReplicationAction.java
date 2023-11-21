@@ -424,6 +424,7 @@ public abstract class TransportReplicationAction<
                         onCompletionListener.onResponse(response);
                     }, e -> handleException(primaryShardReference, e));
 
+
                     new ReplicationOperation<>(primaryRequest.getRequest(), primaryShardReference,
                         ActionListener.map(responseListener, result -> result.finalResponseIfSuccessful),
                         newReplicasProxy(), logger, threadPool, actionName, primaryRequest.getPrimaryTerm(), initialRetryBackoffBound,

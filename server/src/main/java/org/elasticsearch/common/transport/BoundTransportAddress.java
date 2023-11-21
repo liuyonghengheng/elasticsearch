@@ -26,7 +26,7 @@ import org.elasticsearch.common.network.InetAddresses;
 
 import java.io.IOException;
 
-/**
+/** 有界传输地址是｛@link TransportAddress｝的元组，一个数组表示传输绑定到的地址，另一个数组是已发布的数组，表示客户端应该通信的地址。
  * A bounded transport address is a tuple of {@link TransportAddress}, one array that represents
  * the addresses the transport is bound to, and the other is the published one that represents the address clients
  * should communicate on.

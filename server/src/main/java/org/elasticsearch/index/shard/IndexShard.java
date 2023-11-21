@@ -3520,32 +3520,32 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         // which settings changes could possibly have happened, so here we forcefully push any config changes to the new engine.
         onSettingsChanged();
     }
-
-    /**
+     // 主副本每一条写入和删除 sequence number 都会+1, 在将请求发送给副本时要带上。
+    /** 返回由在这个shard中已经处理过的更新或者删除操作产生的最大的序列号，或者从{@link #advanceMaxSeqNoOfUpdatesOrDeletes(long)}这里获取的序列号
      * Returns the maximum sequence number of either update or delete operations have been processed in this shard
      * or the sequence number from {@link #advanceMaxSeqNoOfUpdatesOrDeletes(long)}. An index request is considered
      * as an update operation if it overwrites the existing documents in Lucene index with the same document id.
-     * <p>
+     * <p> 一个index请求被认为是一个更新操作，如果他覆盖了已经存在的doc，并且在lucen index中有相同的doc id。
      * The primary captures this value after executes a replication request, then transfers it to a replica before
      * executing that replication request on a replica.
-     */
+     *///在执行一个replication request之后，主副本捕获这个值，然后将它传送给一个replica，并且要在这个replica上执行replication request之前
     public long getMaxSeqNoOfUpdatesOrDeletes() {
         return getEngine().getMaxSeqNoOfUpdatesOrDeletes();
     }
 
-    /**
+    /** 副本 会调用这个方法 来增加在她自己引擎中的 max_seq_no_of_updates 标记，增加到至少等于她从主副本收到的max_seq_no_of_updates值。
      * A replica calls this method to advance the max_seq_no_of_updates marker of its engine to at least the max_seq_no_of_updates
      * value (piggybacked in a replication request) that it receives from its primary before executing that replication request.
      * The receiving value is at least as high as the max_seq_no_of_updates on the primary was when any of the operations of that
-     * replication request were processed on it.
-     * <p>
+     * replication request were processed on it. 接收值至少与主副本上处理该复replication request的任何操作时的max_seq_no_of_updates一样高。
+     * <p> 一个shard副本 也会通过调用这个方法来加载 seq_no ，传入的参数则是从等待恢复中的主分片收到的seq_no值，并且在他重放远端主分片的translog之前。
      * A replica shard also calls this method to bootstrap the max_seq_no_of_updates marker with the value that it received from
      * the primary in peer-recovery, before it replays remote translog operations from the primary. The receiving value is at least
      * as high as the max_seq_no_of_updates on the primary was when any of these operations were processed on it.
      * <p>
      * These transfers guarantee that every index/delete operation when executing on a replica engine will observe this marker a value
      * which is at least the value of the max_seq_no_of_updates marker on the primary after that operation was executed on the primary.
-     *
+     * 这些调用保证每一个index/delete 操作在副本引擎上执行时，能够观察到这个值至少和主分片上的max_seq_no_of_updates值相等
      * @see #acquireReplicaOperationPermit(long, long, long, ActionListener, String, Object)
      * @see RecoveryTarget#indexTranslogOperations(List, int, long, long, RetentionLeases, long, ActionListener)
      */

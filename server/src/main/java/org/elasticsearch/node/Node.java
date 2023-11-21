@@ -301,7 +301,7 @@ public class Node implements Closeable {
                    Collection<Class<? extends Plugin>> classpathPlugins, boolean forbidPrivateIndexSettings) {
         final List<Closeable> resourcesToClose = new ArrayList<>(); // register everything we need to release in the case of an error
         boolean success = false;
-        try {
+        try { //配置
             Settings tmpSettings = Settings.builder().put(initialEnvironment.settings())
                 .put(Client.CLIENT_TYPE_SETTING_S.getKey(), CLIENT_TYPE).build();
 
@@ -341,7 +341,7 @@ public class Node implements Closeable {
                     initialEnvironment.configFile(), Arrays.toString(initialEnvironment.dataFiles()),
                     initialEnvironment.logsFile(), initialEnvironment.pluginsFile());
             }
-
+            //实例化PluginsService, pluginsFile 应该是 $ES_HOME/plugins
             this.pluginsService = new PluginsService(tmpSettings, initialEnvironment.configFile(), initialEnvironment.modulesFile(),
                 initialEnvironment.pluginsFile(), classpathPlugins);
             final Settings settings = pluginsService.updatedSettings();
@@ -395,8 +395,8 @@ public class Node implements Closeable {
             final ScriptService scriptService = newScriptService(settings, scriptModule.engines, scriptModule.contexts);
             AnalysisModule analysisModule = new AnalysisModule(this.environment, pluginsService.filterPlugins(AnalysisPlugin.class));
             // this is as early as we can validate settings at this point. we already pass them to ScriptModule as well as ThreadPool
-            // so we might be late here already
-
+            // so we might be late here already 已经被使用了现在检查也有点晚了？
+            // 这是我们目前可以验证设置的最早时间。我们已经将它们传递给ScriptModule和ThreadPool，所以我们可能已经迟到了
             final Set<SettingUpgrader<?>> settingsUpgraders = pluginsService.filterPlugins(Plugin.class)
                     .stream()
                     .map(Plugin::getSettingUpgraders)
@@ -561,7 +561,7 @@ public class Node implements Closeable {
                 threadPool, pluginsService.filterPlugins(ActionPlugin.class), client, circuitBreakerService, usageService, systemIndices);
             modules.add(actionModule);
 
-            final RestController restController = actionModule.getRestController();
+            final RestController restController = actionModule.getRestController();// rest controller
             final NetworkModule networkModule = new NetworkModule(settings, false, pluginsService.filterPlugins(NetworkPlugin.class),
                 threadPool, bigArrays, pageCacheRecycler, circuitBreakerService, namedWriteableRegistry, xContentRegistry,
                 networkService, restController, clusterService.getClusterSettings());
@@ -587,7 +587,7 @@ public class Node implements Closeable {
             final ResponseCollectorService responseCollectorService = new ResponseCollectorService(clusterService);
             final SearchTransportService searchTransportService =  new SearchTransportService(transportService,
                 SearchExecutionStatsCollector.makeWrapper(responseCollectorService));
-            final HttpServerTransport httpServerTransport = newHttpTransport(networkModule);
+            final HttpServerTransport httpServerTransport = newHttpTransport(networkModule);//httpserver 服务
             final IndexingPressure indexingLimits = new IndexingPressure(settings);
 
             final RecoverySettings recoverySettings = new RecoverySettings(settings, settingsModule.getClusterSettings());
@@ -635,7 +635,7 @@ public class Node implements Closeable {
                 new PersistentTasksClusterService(settings, registry, clusterService, threadPool);
             resourcesToClose.add(persistentTasksClusterService);
             final PersistentTasksService persistentTasksService = new PersistentTasksService(clusterService, threadPool, client);
-
+//modules中添加绑定上面创建的所有的service实例，供后面的容器获取实例
             modules.add(b -> {
                     b.bind(Node.class).toInstance(this);
                     b.bind(NodeService.class).toInstance(nodeService);
@@ -717,7 +717,7 @@ public class Node implements Closeable {
             resourcesToClose.addAll(pluginLifecycleComponents);
             resourcesToClose.add(injector.getInstance(PeerRecoverySourceService.class));
             this.pluginLifecycleComponents = Collections.unmodifiableList(pluginLifecycleComponents);
-            client.initialize(injector.getInstance(new Key<Map<ActionType, TransportAction>>() {}),//actions 对应关系在这里初始化
+            client.initialize(injector.getInstance(new Key<Map<ActionType, TransportAction>>() {}),
                     () -> clusterService.localNode().getId(), transportService.getRemoteClusterService(),
                     namedWriteableRegistry);
             logger.debug("initializing HTTP handlers ...");

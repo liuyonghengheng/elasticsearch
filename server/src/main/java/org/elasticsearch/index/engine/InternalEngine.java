@@ -940,14 +940,14 @@ public class InternalEngine extends Engine {
                             advanceMaxSeqNoOfUpdatesOrDeletesOnPrimary(index.seqNo());
                         }
                     } else {
-                        markSeqNoAsSeen(index.seqNo());
+                        markSeqNoAsSeen(index.seqNo());// 这里也会对next seq no 进行+1操作
                     }
 
                     assert index.seqNo() >= 0 : "ops should have an assigned seq no.; origin: " + index.origin();
 
                     if (plan.indexIntoLucene || plan.addStaleOpToLucene) {
                         indexResult = indexIntoLucene(index, plan);//写入lucene
-                    } else {
+                    } else { //如果不需要写入lucene的话，可以通过plan 设置策略
                         indexResult = new IndexResult(
                             plan.versionForIndexing, index.primaryTerm(), index.seqNo(), plan.currentNotFoundOrDeleted);
                     }
@@ -955,7 +955,7 @@ public class InternalEngine extends Engine {
                 if (index.origin().isFromTranslog() == false) {//如果doc操作本来就是来自translog，则不需要再次写入translog了
                     final Translog.Location location;//写入translog
                     if (indexResult.getResultType() == Result.Type.SUCCESS) {
-                        location = translog.add(new Translog.Index(index, indexResult));
+                        location = translog.add(new Translog.Index(index, indexResult));//
                     } else if (indexResult.getSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO) {
                         // if we have document failure, record it as a no-op in the translog and Lucene with the generated seq_no
                         final NoOp noOp = new NoOp(indexResult.getSeqNo(), index.primaryTerm(), index.origin(),
@@ -1107,7 +1107,7 @@ public class InternalEngine extends Engine {
         /* Update the document's sequence number and primary term; the sequence number here is derived here from either the sequence
          * number service if this is on the primary, or the existing document's sequence number if this is on the replica. The
          * primary term here has already been set, see IndexShard#prepareIndex where the Engine$Index operation is created.
-         *///更新文档的sequence number和primary term；这里的序列号是从序列号服务派生出来的（如果它在主文档上），或者是从现有文档的序列号派生出来的，如果它在副本上。此处的主要术语已经设置，请参阅创建Engine$Index操作的IndexShard#prepareIndex。
+         *///更新文档的sequence number和primary term；这里的序列号是从序列号服务派生出来的（如果它在主分片上），或者是从现有文档的序列号派生出来的，如果它在副本分片上。此处的主要术语已经设置，请参阅创建Engine$Index操作的IndexShard#prepareIndex。
         index.parsedDoc().updateSeqID(index.seqNo(), index.primaryTerm());
         index.parsedDoc().version().setLongValue(plan.versionForIndexing);
         try {

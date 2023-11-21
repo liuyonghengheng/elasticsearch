@@ -610,7 +610,7 @@ public class ActionModule extends AbstractModule {
         actions.register(DeletePipelineAction.INSTANCE, DeletePipelineTransportAction.class);
         actions.register(SimulatePipelineAction.INSTANCE, SimulatePipelineTransportAction.class);
 
-        actionPlugins.stream().flatMap(p -> p.getActions().stream()).forEach(actions::register);
+        actionPlugins.stream().flatMap(p -> p.getActions().stream()).forEach(actions::register);//插件
 
         // Persistent tasks:
         actions.register(StartPersistentTaskAction.INSTANCE, StartPersistentTaskAction.TransportAction.class);
@@ -823,7 +823,7 @@ public class ActionModule extends AbstractModule {
                 bind(action.getTransportAction()).asEagerSingleton();
                 transportActionsBinder.addBinding(action.getAction()).to(action.getTransportAction()).asEagerSingleton();
                 for (Class<?> supportAction : action.getSupportTransportActions()) {
-                    bind(supportAction).asEagerSingleton();
+                    bind(supportAction).asEagerSingleton();//这里绑定了supportaction，并且是直接根当前类直接绑定，并不是多态
                 }
             }
         }

@@ -488,7 +488,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                             IndexRequest indexRequest = (IndexRequest) docWriteRequest;
                             final IndexMetadata indexMetadata = metadata.index(concreteIndex);
                             MappingMetadata mappingMd = indexMetadata.mappingOrDefault();
-                            Version indexCreated = indexMetadata.getCreationVersion();
+                            Version indexCreated = indexMetadata.getCreationVersion();// 软件版本
                             indexRequest.resolveRouting(metadata);
                             indexRequest.process(indexCreated, mappingMd, concreteIndex.getName());
                             break;
@@ -516,7 +516,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
             }
 
             // first, go over all the requests and create a ShardId -> Operations mapping
-            Map<ShardId, List<BulkItemRequest>> requestsByShard = new HashMap<>();
+            Map<ShardId, List<BulkItemRequest>> requestsByShard = new HashMap<>();// 把请求按照shard分组
             for (int i = 0; i < bulkRequest.requests.size(); i++) {
                 DocWriteRequest<?> request = bulkRequest.requests.get(i);
                 if (request == null) {

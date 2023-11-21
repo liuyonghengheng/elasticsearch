@@ -45,7 +45,7 @@ public interface HttpServerTransport extends LifecycleComponent, ReportingServic
         /**
          * Dispatches the {@link RestRequest} to the relevant request handler or responds to the given rest channel directly if
          * the request can't be handled by any request handler.
-         *
+         * 将｛@link RestRequest｝调度到相关的请求处理程序，或者如果任何请求处理程序都无法处理请求，则直接响应给定的rest通道。
          * @param request       the request to dispatch
          * @param channel       the response channel of this request
          * @param threadContext the thread context
