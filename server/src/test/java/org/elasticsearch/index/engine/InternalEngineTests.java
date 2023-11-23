@@ -6421,24 +6421,4 @@ public class InternalEngineTests extends EngineTestCase {
             IndexWriterMaxDocsChanger.restoreMaxDocs();
         }
     }
-
-    public void testWriteTransLogOnlyOnReplica() throws IOException {
-        // 1. 设置 index 物理复制配置
-        // 2. 设置 index 软删除配置
-        IOUtils.close(engine, store);
-        final boolean softDeletesEnabled = true;
-        final IndexSettings indexSettings = IndexSettingsModule.newIndexSettings("test",
-            Settings.builder().put(defaultSettings.getSettings())
-                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), softDeletesEnabled)
-                .put("index.replica.data.sync.type", "physical-copy").build());
-        try (Store store = createStore();
-             InternalEngine engine = createEngine(config(indexSettings, store, createTempDir(), NoMergePolicy.INSTANCE, null))) {
-            engine.close();
-            expectThrows(AlreadyClosedException.class, () -> engine.delete(replicaDeleteForDoc("test", 42, 7, System.nanoTime())));
-        }
-        // 3. 构造一条数据
-        // 4. 写入
-        // 5. 检查
-
-    }
 }
