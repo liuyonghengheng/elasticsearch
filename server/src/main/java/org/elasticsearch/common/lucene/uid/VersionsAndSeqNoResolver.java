@@ -46,7 +46,7 @@ public final class VersionsAndSeqNoResolver {
     };
 
     private static PerThreadIDVersionAndSeqNoLookup[] getLookupState(IndexReader reader, String uidField) throws IOException {
-        // We cache on the top level
+        // We cache on the top level //缓存，但是生命周期会很短不会超过refresh周期时间，但是确实会比直接从segment中读取会更有性价比
         // This means cache entries have a shorter lifetime, maybe as low as 1s with the
         // default refresh interval and a steady indexing rate, but on the other hand it
         // proved to be cheaper than having to perform a CHM and a TL get for every segment.
@@ -131,9 +131,9 @@ public final class VersionsAndSeqNoResolver {
      */
     public static DocIdAndVersion loadDocIdAndVersion(IndexReader reader, Term term, boolean loadSeqNo) throws IOException {
         PerThreadIDVersionAndSeqNoLookup[] lookups = getLookupState(reader, term.field());
-        List<LeafReaderContext> leaves = reader.leaves();
+        List<LeafReaderContext> leaves = reader.leaves();// leaves 都是针对segment的lucene reader
         // iterate backwards to optimize for the frequently updated documents
-        // which are likely to be in the last segments
+        // which are likely to be in the last segments// 从最近的segement 往后，因为version 越大对应的segments越新
         for (int i = leaves.size() - 1; i >= 0; i--) {
             final LeafReaderContext leaf = leaves.get(i);
             PerThreadIDVersionAndSeqNoLookup lookup = lookups[leaf.ord];

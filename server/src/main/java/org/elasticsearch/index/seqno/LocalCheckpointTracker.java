@@ -104,7 +104,7 @@ public class LocalCheckpointTracker {
 
     /**
      * Marks the provided sequence number as processed and updates the processed checkpoint if possible.
-     *
+     * 将seqno标记为已经处理的，并且如果可能的话更新已经处理的checkpoint
      * @param seqNo the sequence number to mark as processed
      */
     public synchronized void markSeqNoAsProcessed(final long seqNo) {
@@ -124,14 +124,14 @@ public class LocalCheckpointTracker {
         assert Thread.holdsLock(this);
         // make sure we track highest seen sequence number
         advanceMaxSeqNo(seqNo);
-        if (seqNo <= checkPoint.get()) {
+        if (seqNo <= checkPoint.get()) {// recovery 的时候可能会出现这种情况，因为可能会重放一个已经被执行过的操作。
             // this is possible during recovery where we might replay an operation that was also replicated
             return;
         }
         final CountedBitSet bitSet = getBitSetForSeqNo(bitSetMap, seqNo);
         final int offset = seqNoToBitSetOffset(seqNo);
         bitSet.set(offset);
-        if (seqNo == checkPoint.get() + 1) {
+        if (seqNo == checkPoint.get() + 1) {//如果已经比checkPoint大了，则可以更新checkpoint了
             updateCheckpoint(checkPoint, bitSetMap);
         }
     }
@@ -210,7 +210,7 @@ public class LocalCheckpointTracker {
         }
     }
 
-    /**
+    /** 将检查点移动到最后一个seqno。此方法假定处理当前检查点后面的seqno。
      * Moves the checkpoint to the last consecutively processed sequence number. This method assumes that the sequence number
      * following the current checkpoint is processed.
      */

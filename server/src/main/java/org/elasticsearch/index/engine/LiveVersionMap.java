@@ -33,7 +33,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
-/** Maps _uid value to its version information. */
+/** Maps _uid value to its version information. 映射doc uid 和其当前的版本 */
 final class LiveVersionMap implements ReferenceManager.RefreshListener, Accountable {
 
     private final KeyedLock<BytesRef> keyedLock = new KeyedLock<>();
@@ -237,7 +237,7 @@ final class LiveVersionMap implements ReferenceManager.RefreshListener, Accounta
     private final AtomicLong ramBytesUsedTombstones = new AtomicLong();
 
     @Override
-    public void beforeRefresh() throws IOException {
+    public void beforeRefresh() throws IOException { //实现RefreshListener 接口
         // Start sending all updates after this point to the new
         // map.  While reopen is running, any lookup will first
         // try this new map, then fallback to old, then to the
@@ -249,7 +249,7 @@ final class LiveVersionMap implements ReferenceManager.RefreshListener, Accounta
     }
 
     @Override
-    public void afterRefresh(boolean didRefresh) throws IOException {
+    public void afterRefresh(boolean didRefresh) throws IOException { //刷新完把老的删除，因为这时候已经可以在segment中查询到了
         // We can now drop old because these operations are now visible via the newly opened searcher.  Even if didRefresh is false, which
         // means Lucene did not actually open a new reader because it detected no changes, it's possible old has some entries in it, which
         // is fine: it means they were actually already included in the previously opened reader, so we can still safely drop them in that
@@ -463,12 +463,12 @@ final class LiveVersionMap implements ReferenceManager.RefreshListener, Accounta
         return tombstones;
     }
 
-    /**
+    /** 获取给定uId的可释放锁。所有*UnderLock方法都要求调用者持有此锁，否则此version map的可见性保证将被破坏。
      * Acquires a releaseable lock for the given uId. All *UnderLock methods require
      * this lock to be hold by the caller otherwise the visibility guarantees of this version
      * map are broken. We assert on this lock to be hold when calling these methods.
-     * @see KeyedLock
-     */
+     * @see KeyedLock  //当调用这些方法时，我们断言这个锁是保持的 请参见KeyedLock
+     */ // 写入/更新/删除 相关都需要 获取到这个锁，除了时序相关的索引（只有写入，id唯一）
     Releasable acquireLock(BytesRef uid) {
         return keyedLock.acquire(uid);
     }
