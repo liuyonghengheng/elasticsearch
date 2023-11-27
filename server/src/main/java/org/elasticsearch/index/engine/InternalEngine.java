@@ -977,7 +977,7 @@ public class InternalEngine extends Engine {
                     assert index.origin().isFromTranslog() || indexResult.getSeqNo() == SequenceNumbers.UNASSIGNED_SEQ_NO;
                     localCheckpointTracker.markSeqNoAsPersisted(indexResult.getSeqNo());
                 }
-                indexResult.setTook(System.nanoTime() - index.startTime());
+                indexResult.setTook(System.nanoTime() - index.startTime());//took时间在这里计算，
                 indexResult.freeze();
                 return indexResult;
             } finally {
