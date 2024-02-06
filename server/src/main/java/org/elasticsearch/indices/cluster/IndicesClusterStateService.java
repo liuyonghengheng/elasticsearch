@@ -27,6 +27,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateApplier;
+import org.elasticsearch.cluster.SnapshotsInProgress;
 import org.elasticsearch.cluster.action.index.NodeMappingRefreshAction;
 import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
@@ -68,6 +69,8 @@ import org.elasticsearch.indices.recovery.PeerRecoverySourceService;
 import org.elasticsearch.indices.recovery.PeerRecoveryTargetService;
 import org.elasticsearch.indices.recovery.RecoveryFailedException;
 import org.elasticsearch.indices.recovery.RecoveryState;
+import org.elasticsearch.indices.segmentscopy.SegmentsCopySourceService;
+import org.elasticsearch.indices.segmentscopy.SegmentsCopyTargetService;
 import org.elasticsearch.repositories.RepositoriesService;
 import org.elasticsearch.search.SearchService;
 import org.elasticsearch.snapshots.SnapshotShardsService;
@@ -120,6 +123,10 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
     private final Consumer<ShardId> globalCheckpointSyncer;
     private final RetentionLeaseSyncer retentionLeaseSyncer;
 
+    private final SegmentsCopySourceService segmentsCopySourceService;
+
+    private final SegmentsCopyTargetService segmentsCopyTargetService;
+
     @Inject
     public IndicesClusterStateService(
             final Settings settings,
@@ -136,7 +143,9 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
             final SnapshotShardsService snapshotShardsService,
             final PrimaryReplicaSyncer primaryReplicaSyncer,
             final GlobalCheckpointSyncAction globalCheckpointSyncAction,
-            final RetentionLeaseSyncer retentionLeaseSyncer) {
+            final RetentionLeaseSyncer retentionLeaseSyncer,
+            final SegmentsCopySourceService segmentsCopySourceService,
+            final SegmentsCopyTargetService segmentsCopyTargetService) {
         this(
                 settings,
                 indicesService,
@@ -152,7 +161,9 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
                 snapshotShardsService,
                 primaryReplicaSyncer,
                 globalCheckpointSyncAction::updateGlobalCheckpointForShard,
-                retentionLeaseSyncer);
+                retentionLeaseSyncer,
+                segmentsCopySourceService,
+                segmentsCopyTargetService);
     }
 
     // for tests
@@ -171,7 +182,9 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
             final SnapshotShardsService snapshotShardsService,
             final PrimaryReplicaSyncer primaryReplicaSyncer,
             final Consumer<ShardId> globalCheckpointSyncer,
-            final RetentionLeaseSyncer retentionLeaseSyncer) {
+            final RetentionLeaseSyncer retentionLeaseSyncer,
+            final SegmentsCopySourceService segmentsCopySourceService,
+            final SegmentsCopyTargetService segmentsCopyTargetService) {
         this.settings = settings;
         this.buildInIndexListener =
                 Arrays.asList(
@@ -191,6 +204,8 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
         this.globalCheckpointSyncer = globalCheckpointSyncer;
         this.retentionLeaseSyncer = Objects.requireNonNull(retentionLeaseSyncer);
         this.sendRefreshMapping = settings.getAsBoolean("indices.cluster.send_refresh_mapping", true);
+        this.segmentsCopySourceService = segmentsCopySourceService;
+        this.segmentsCopyTargetService = segmentsCopyTargetService;
     }
 
     @Override
@@ -618,8 +633,23 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
             primaryTerm = indexMetadata.primaryTerm(shard.shardId().id());
             final Set<String> inSyncIds = indexMetadata.inSyncAllocationIds(shard.shardId().id());
             final IndexShardRoutingTable indexShardRoutingTable = routingTable.shardRoutingTable(shardRouting.shardId());
+            boolean isNotStarted = shard.state() != IndexShardState.STARTED;
             shard.updateShardState(shardRouting, primaryTerm, primaryReplicaSyncer::resync, clusterState.version(),
                 inSyncIds, indexShardRoutingTable);
+            if(isNotStarted && shard.state() == IndexShardState.STARTED
+                && "segment".equals(indexMetadata.getSettings().get("index.datasycn.type"))){
+                if(shard instanceof IndexShard){
+                    if(((IndexShard) shard).isRelocatedPrimary()){
+//                        if(((IndexShard)shard).initTargetShardCopyState()){
+//                            segmentsCopySourceService.addSourceShardCopyState(shard.shardId(),
+//                                ((IndexShard)shard).getSourceShardCopyState());
+//                        }
+                        segmentsCopySourceService.addNewShardId(shard.shardId());
+                    }else{
+//                        ((IndexShard)shard).initTargetShardCopyState();
+                    }
+                }
+            }
         } catch (Exception e) {
             failAndRemoveShard(shardRouting, true, "failed updating shard routing entry", e, clusterState);
             return;

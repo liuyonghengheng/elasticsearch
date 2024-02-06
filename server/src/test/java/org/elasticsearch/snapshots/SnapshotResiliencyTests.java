@@ -154,7 +154,6 @@ import org.elasticsearch.env.TestEnvironment;
 import org.elasticsearch.gateway.MetaStateService;
 import org.elasticsearch.gateway.TransportNodesListGatewayStartedShards;
 import org.elasticsearch.index.Index;
-import org.elasticsearch.index.IndexingPressure;
 import org.elasticsearch.index.analysis.AnalysisRegistry;
 import org.elasticsearch.index.seqno.GlobalCheckpointSyncAction;
 import org.elasticsearch.index.seqno.RetentionLeaseSyncer;
@@ -171,6 +170,8 @@ import org.elasticsearch.indices.mapper.MapperRegistry;
 import org.elasticsearch.indices.recovery.PeerRecoverySourceService;
 import org.elasticsearch.indices.recovery.PeerRecoveryTargetService;
 import org.elasticsearch.indices.recovery.RecoverySettings;
+import org.elasticsearch.indices.segmentscopy.SegmentsCopySourceService;
+import org.elasticsearch.indices.segmentscopy.SegmentsCopyTargetService;
 import org.elasticsearch.ingest.IngestService;
 import org.elasticsearch.monitor.StatusInfo;
 import org.elasticsearch.node.ResponseCollectorService;
@@ -1537,6 +1538,8 @@ public class SnapshotResiliencyTests extends ESTestCase {
                 nodeConnectionsService =
                     new NodeConnectionsService(clusterService.getSettings(), threadPool, transportService);
                 final MetadataMappingService metadataMappingService = new MetadataMappingService(clusterService, indicesService);
+                SegmentsCopySourceService segmentsCopySourceService = new SegmentsCopySourceService(indicesService, clusterService, transportService);
+                SegmentsCopyTargetService segmentsCopyTargetService = new SegmentsCopyTargetService(indicesService, clusterService, transportService, indexNameExpressionResolver);
                 indicesClusterStateService = new IndicesClusterStateService(
                     settings,
                     indicesService,
@@ -1570,7 +1573,9 @@ public class SnapshotResiliencyTests extends ESTestCase {
                         threadPool,
                         shardStateAction,
                         actionFilters),
-                    RetentionLeaseSyncer.EMPTY);
+                    RetentionLeaseSyncer.EMPTY,
+                    segmentsCopySourceService,
+                    segmentsCopyTargetService);
             Map<ActionType, TransportAction> actions = new HashMap<>();
                 final ShardLimitValidator shardLimitValidator = new ShardLimitValidator(settings, clusterService);
                 final MetadataCreateIndexService metadataCreateIndexService = new MetadataCreateIndexService(settings, clusterService,

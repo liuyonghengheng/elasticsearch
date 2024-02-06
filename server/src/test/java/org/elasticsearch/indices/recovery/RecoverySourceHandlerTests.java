@@ -23,12 +23,7 @@ import org.apache.lucene.document.Field;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
-import org.apache.lucene.index.CorruptIndexException;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexCommit;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.RandomIndexWriter;
-import org.apache.lucene.index.Term;
+import org.apache.lucene.index.*;
 import org.apache.lucene.store.BaseDirectoryWrapper;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
@@ -168,8 +163,9 @@ public class RecoverySourceHandlerTests extends ESTestCase {
             document.add(newField("field", randomUnicodeOfCodepointLengthBetween(1, 10), TextField.TYPE_STORED));
             writer.addDocument(document);
         }
-        writer.commit();
+        writer.commit(); //writer.flush();
         writer.close();
+//        SegmentInfos infos = ((StandardDirectoryReader) writer.getReader()).getSegmentInfos();
 
         Store.MetadataSnapshot metadata = store.getMetadata(null);
         List<StoreFileMetadata> metas = new ArrayList<>();

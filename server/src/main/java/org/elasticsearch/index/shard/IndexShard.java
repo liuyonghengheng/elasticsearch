@@ -22,19 +22,15 @@ package org.elasticsearch.index.shard;
 import com.carrotsearch.hppc.ObjectLongMap;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.apache.lucene.index.CheckIndex;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.FilterDirectoryReader;
-import org.apache.lucene.index.IndexCommit;
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.SegmentInfos;
-import org.apache.lucene.index.Term;
+import org.apache.lucene.index.*;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.QueryCachingPolicy;
 import org.apache.lucene.search.ReferenceManager;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.UsageTrackingQueryCachingPolicy;
 import org.apache.lucene.store.AlreadyClosedException;
+import org.apache.lucene.store.ByteBuffersDataOutput;
+import org.apache.lucene.store.ByteBuffersIndexOutput;
 import org.apache.lucene.util.SetOnce;
 import org.apache.lucene.util.ThreadInterruptedException;
 import org.elasticsearch.Assertions;
@@ -88,17 +84,8 @@ import org.elasticsearch.index.cache.IndexCache;
 import org.elasticsearch.index.cache.bitset.ShardBitsetFilterCache;
 import org.elasticsearch.index.cache.request.ShardRequestCache;
 import org.elasticsearch.index.codec.CodecService;
-import org.elasticsearch.index.engine.CommitStats;
-import org.elasticsearch.index.engine.Engine;
+import org.elasticsearch.index.engine.*;
 import org.elasticsearch.index.engine.Engine.GetResult;
-import org.elasticsearch.index.engine.EngineConfig;
-import org.elasticsearch.index.engine.EngineException;
-import org.elasticsearch.index.engine.EngineFactory;
-import org.elasticsearch.index.engine.ReadOnlyEngine;
-import org.elasticsearch.index.engine.RefreshFailedEngineException;
-import org.elasticsearch.index.engine.SafeCommitInfo;
-import org.elasticsearch.index.engine.Segment;
-import org.elasticsearch.index.engine.SegmentsStats;
 import org.elasticsearch.index.fielddata.FieldDataStats;
 import org.elasticsearch.index.fielddata.ShardFieldData;
 import org.elasticsearch.index.flush.FlushStats;
@@ -276,6 +263,8 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     private final AtomicReference<Translog.Location> pendingRefreshLocation = new AtomicReference<>();
     private final RefreshPendingLocationListener refreshPendingLocationListener;
     private volatile boolean useRetentionLeasesInPeerRecovery;
+//    // 存储当前shard的信息
+//    private SourceShardCopyState sourceShardCopyState;
 
     public IndexShard(
             final ShardRouting shardRouting,
@@ -2577,7 +2566,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
      * NOTE: returns null if engine is not yet started (e.g. recovery phase 1, copying over index files, is still running), or if engine is
      * closed.
      */
-    protected Engine getEngineOrNull() {
+    public Engine getEngineOrNull() {
         return this.currentEngineReference.get();
     }
 
@@ -3281,7 +3270,13 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                 if (logger.isTraceEnabled()) {
                     logger.trace("refresh with source [schedule]");
                 }
-                return getEngine().maybeRefresh("schedule");
+//                return getEngine().maybeRefresh("schedule");
+                boolean r = getEngine().maybeRefresh("schedule");
+                // 在这里执行
+//                if(sourceShardCopyState != null && r){
+//                // TODO: 作为一种选择方案
+//                }
+                return r;
             }
         }
         final Engine engine = getEngine();
@@ -3565,4 +3560,21 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     RetentionLeaseSyncer getRetentionLeaseSyncer() {
         return retentionLeaseSyncer;
     }
+//
+//    public SourceShardCopyState getSourceShardCopyState(){
+//        return this.sourceShardCopyState;
+//    }
+//
+//    public boolean initSourceShardCopyState() {
+//        if(!this.isRelocatedPrimary() || this.state != IndexShardState.STARTED){
+//            logger.error("Shard: " + this.shardId + " state: " + this.state + " so cannot init ShardCopyState");
+//            return false;
+//        }
+//        sourceShardCopyState = new SourceShardCopyState(this.shardId);
+//        return true;
+//    }
+//
+//    public boolean initTargetShardCopyState(){
+//        return false;
+//    }
 }

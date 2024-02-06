@@ -46,7 +46,8 @@ public class TransportRequestOptions {
         BULK,
         REG,
         STATE,
-        PING
+        PING,
+        COPY
     }
 
     public static Builder builder() {

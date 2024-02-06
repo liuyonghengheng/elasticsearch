@@ -1,0 +1,457 @@
+@startuml
+abstract class org.elasticsearch.action.support.replication.TransportBroadcastReplicationAction {
+- TransportReplicationAction replicatedBroadcastShardAction
+- ClusterService clusterService
+- IndexNameExpressionResolver indexNameExpressionResolver
+# void doExecute(Task,Request,ActionListener<Response>)
+# void shardExecute(Task,Request,ShardId,ActionListener<ShardResponse>)
+# List<ShardId> shards(Request,ClusterState)
+# {abstract}ShardResponse newShardResponse()
+# {abstract}ShardRequest newShardRequest(Request,ShardId)
+- void finishAndNotifyListener(ActionListener,CopyOnWriteArrayList<ShardResponse>)
+# {abstract}BroadcastResponse newResponse(int,int,int,List<DefaultShardOperationFailedException>)
+}
+abstract class org.elasticsearch.action.support.replication.ReplicatedWriteRequest {
+- RefreshPolicy refreshPolicy
++ R setRefreshPolicy(RefreshPolicy)
++ RefreshPolicy getRefreshPolicy()
++ void writeTo(StreamOutput)
++ void writeThin(StreamOutput)
+}
+class org.elasticsearch.action.support.replication.ReplicationTask {
+- String phase
++ void setPhase(String)
++ String getPhase()
++ Status getStatus()
+}
+class org.elasticsearch.action.support.replication.ReplicationTask$Status {
++ {static} String NAME
+- String phase
++ String getWriteableName()
++ XContentBuilder toXContent(XContentBuilder,Params)
++ void writeTo(StreamOutput)
++ String toString()
++ boolean equals(Object)
++ int hashCode()
+}
+class org.elasticsearch.action.support.replication.BasicReplicationRequest {
++ String toString()
+}
+abstract class org.elasticsearch.action.support.replication.ReplicationRequestBuilder {
++ RequestBuilder setTimeout(TimeValue)
++ RequestBuilder setTimeout(String)
++ RequestBuilder setIndex(String)
++ RequestBuilder setWaitForActiveShards(ActiveShardCount)
++ RequestBuilder setWaitForActiveShards(int)
+}
+class org.elasticsearch.action.support.replication.PendingReplicationActions {
+- Map<String,Set<RetryableAction<?>>> onGoingReplicationActions
+- ShardId shardId
+- ThreadPool threadPool
+- long replicationGroupVersion
++ void addPendingAction(String,RetryableAction<?>)
++ void removeReplicationAction(String,RetryableAction<?>)
++ void accept(ReplicationGroup)
+- boolean isNewerVersion(ReplicationGroup)
+~ void acceptNewTrackedAllocationIds(Set<String>)
++ void close()
+- void cancelActions(ArrayList<Set<RetryableAction<?>>>,String)
+}
+class org.elasticsearch.action.support.replication.ReplicationOperation {
+- Logger logger
+- ThreadPool threadPool
+- Request request
+- String opType
+- AtomicInteger totalShards
+- AtomicInteger pendingActions
+- AtomicInteger successfulShards
+- Primary<Request,ReplicaRequest,PrimaryResultT> primary
+- Replicas<ReplicaRequest> replicasProxy
+- AtomicBoolean finished
+- TimeValue initialRetryBackoffBound
+- TimeValue retryTimeout
+- long primaryTerm
+- ActionListener<PrimaryResultT> resultListener
+- PrimaryResultT primaryResult
+- List<ReplicationResponse.ShardInfo.Failure> shardReplicaFailures
++ void execute()
+- void handlePrimaryResult(PrimaryResultT)
+- void markUnavailableShardsAsStale(ReplicaRequest,ReplicationGroup)
+- void performOnReplicas(ReplicaRequest,long,long,ReplicationGroup,PendingReplicationActions)
+- void performOnReplica(ShardRouting,ReplicaRequest,long,long,PendingReplicationActions)
+- void updateCheckPoints(ShardRouting,LongSupplier,LongSupplier)
+- void onNoLongerPrimary(Exception)
+# String checkActiveShardCount()
+- void decPendingAndFinishIfNeeded()
+- void finish()
+- void finishAsFailed(Exception)
+}
+interface org.elasticsearch.action.support.replication.ReplicationOperation$Primary {
+~ ShardRouting routingEntry()
+~ void failShard(String,Exception)
+~ void perform(RequestT,ActionListener<PrimaryResultT>)
+~ void updateLocalCheckpointForShard(String,long)
+~ void updateGlobalCheckpointForShard(String,long)
+~ long localCheckpoint()
+~ long computedGlobalCheckpoint()
+~ long globalCheckpoint()
+~ long maxSeqNoOfUpdatesOrDeletes()
+~ ReplicationGroup getReplicationGroup()
+~ PendingReplicationActions getPendingReplicationActions()
+}
+interface org.elasticsearch.action.support.replication.ReplicationOperation$Replicas {
+~ void performOn(ShardRouting,RequestT,long,long,long,ActionListener<ReplicaResponse>)
+~ void failShardIfNeeded(ShardRouting,long,String,Exception,ActionListener<Void>)
+~ void markShardCopyAsStaleIfNeeded(ShardId,String,long,ActionListener<Void>)
+}
+interface org.elasticsearch.action.support.replication.ReplicationOperation$ReplicaResponse {
+~ long localCheckpoint()
+~ long globalCheckpoint()
+}
+class org.elasticsearch.action.support.replication.ReplicationOperation$RetryOnPrimaryException {
+}
+interface org.elasticsearch.action.support.replication.ReplicationOperation$PrimaryResult {
+~ RequestT replicaRequest()
+~ void setShardInfo(ReplicationResponse.ShardInfo)
+~ void runPostReplicationActions(ActionListener<Void>)
+}
+abstract class org.elasticsearch.action.support.replication.TransportWriteAction {
+# IndexingPressure indexingPressure
+# SystemIndices systemIndices
+- Function<IndexShard,String> executorFunction
+# String executor(IndexShard)
+# Releasable checkOperationLimits(Request)
+# boolean force(ReplicatedWriteRequest<?>)
+# boolean isSystemShard(ShardId)
+# Releasable checkPrimaryLimits(Request,boolean,boolean)
+# long primaryOperationSize(Request)
+# Releasable checkReplicaLimits(ReplicaRequest)
+# long replicaOperationSize(ReplicaRequest)
+# {static} Location syncOperationResultOrThrow(Engine.Result,Location)
++ {static} Location locationToSync(Location,Location)
+# ReplicationOperation.Replicas<ReplicaRequest> newReplicasProxy()
+# void shardOperationOnPrimary(Request,IndexShard,ActionListener<PrimaryResult<ReplicaRequest,Response>>)
+# {abstract}void dispatchedShardOperationOnPrimary(Request,IndexShard,ActionListener<PrimaryResult<ReplicaRequest,Response>>)
+# void shardOperationOnReplica(ReplicaRequest,IndexShard,ActionListener<ReplicaResult>)
+# {abstract}void dispatchedShardOperationOnReplica(ReplicaRequest,IndexShard,ActionListener<ReplicaResult>)
+# ClusterBlockLevel globalBlockLevel()
++ ClusterBlockLevel indexBlockLevel()
+}
+class org.elasticsearch.action.support.replication.TransportWriteAction$WritePrimaryResult {
++ Location location
++ IndexShard primary
+- Logger logger
++ void runPostReplicationActions(ActionListener<Void>)
+}
+class org.elasticsearch.action.support.replication.TransportWriteAction$WriteReplicaResult {
++ Location location
+- ReplicaRequest request
+- IndexShard replica
+- Logger logger
++ void runPostReplicaActions(ActionListener<Void>)
+}
+interface org.elasticsearch.action.support.replication.TransportWriteAction$RespondingWriteResult {
+~ void onSuccess(boolean)
+~ void onFailure(Exception)
+}
+class org.elasticsearch.action.support.replication.TransportWriteAction$AsyncAfterWriteAction {
+- Location location
+- boolean waitUntilRefresh
+- boolean sync
+- AtomicInteger pendingOps
+- AtomicBoolean refreshed
+- AtomicReference<Exception> syncFailure
+- RespondingWriteResult respond
+- IndexShard indexShard
+- WriteRequest<?> request
+- Logger logger
+- void maybeFinish()
+~ void run()
+}
+class org.elasticsearch.action.support.replication.TransportWriteAction$WriteActionReplicasProxy {
++ void failShardIfNeeded(ShardRouting,long,String,Exception,ActionListener<Void>)
++ void markShardCopyAsStaleIfNeeded(ShardId,String,long,ActionListener<Void>)
+}
+class org.elasticsearch.action.support.replication.ReplicationResponse {
++ {static} ReplicationResponse.ShardInfo.Failure[] EMPTY
+- ShardInfo shardInfo
++ void writeTo(StreamOutput)
++ ShardInfo getShardInfo()
++ void setShardInfo(ShardInfo)
+}
+class org.elasticsearch.action.support.replication.ReplicationResponse$ShardInfo {
+- {static} String TOTAL
+- {static} String SUCCESSFUL
+- {static} String FAILED
+- {static} String FAILURES
+- int total
+- int successful
+- Failure[] failures
++ int getTotal()
++ int getSuccessful()
++ int getFailed()
++ Failure[] getFailures()
++ RestStatus status()
++ void writeTo(StreamOutput)
++ XContentBuilder toXContent(XContentBuilder,Params)
++ {static} ShardInfo fromXContent(XContentParser)
++ String toString()
+}
+class org.elasticsearch.action.support.replication.ReplicationResponse$ShardInfo$Failure {
+- {static} String _INDEX
+- {static} String _SHARD
+- {static} String _NODE
+- {static} String REASON
+- {static} String STATUS
+- {static} String PRIMARY
+- ShardId shardId
+- String nodeId
+- boolean primary
++ ShardId fullShardId()
++ String nodeId()
++ boolean primary()
++ void writeTo(StreamOutput)
++ XContentBuilder toXContent(XContentBuilder,Params)
++ {static} Failure fromXContent(XContentParser)
+}
+abstract class org.elasticsearch.action.support.replication.ReplicationRequest {
++ {static} TimeValue DEFAULT_TIMEOUT
+# ShardId shardId
+# TimeValue timeout
+# String index
+# ActiveShardCount waitForActiveShards
+- long routedBasedOnClusterVersion
++ Request timeout(TimeValue)
++ Request timeout(String)
++ TimeValue timeout()
++ String index()
++ Request index(String)
++ String[] indices()
++ IndicesOptions indicesOptions()
++ ActiveShardCount waitForActiveShards()
++ ShardId shardId()
++ Request waitForActiveShards(ActiveShardCount)
++ Request waitForActiveShards(int)
+# Request routedBasedOnClusterVersion(long)
+~ long routedBasedOnClusterVersion()
++ ActionRequestValidationException validate()
++ void writeTo(StreamOutput)
++ void writeThin(StreamOutput)
++ Task createTask(long,String,String,TaskId,Map<String,String>)
++ {abstract}String toString()
++ String getDescription()
++ void onRetry()
+}
+abstract class org.elasticsearch.action.support.replication.TransportReplicationAction {
++ {static} Setting<TimeValue> REPLICATION_RETRY_TIMEOUT
++ {static} Setting<TimeValue> REPLICATION_INITIAL_RETRY_BACKOFF_BOUND
+# ThreadPool threadPool
+# TransportService transportService
+# ClusterService clusterService
+# ShardStateAction shardStateAction
+# IndicesService indicesService
+# TransportRequestOptions transportOptions
+# String executor
+# boolean forceExecutionOnPrimary
+# String transportReplicaAction
+# String transportPrimaryAction
+- boolean syncGlobalCheckpointAfterOperation
+- TimeValue initialRetryBackoffBound
+- TimeValue retryTimeout
+# void doExecute(Task,Request,ActionListener<Response>)
+- void runReroutePhase(Task,Request,ActionListener<Response>,boolean)
+# ReplicationOperation.Replicas<ReplicaRequest> newReplicasProxy()
+# {abstract}Response newResponseInstance(StreamInput)
+# void resolveRequest(IndexMetadata,Request)
+# {abstract}void shardOperationOnPrimary(Request,IndexShard,ActionListener<PrimaryResult<ReplicaRequest,Response>>)
+# {abstract}void shardOperationOnReplica(ReplicaRequest,IndexShard,ActionListener<ReplicaResult>)
+# ClusterBlockLevel globalBlockLevel()
++ ClusterBlockLevel indexBlockLevel()
+# TransportRequestOptions transportOptions(Settings)
+- ClusterBlockException blockExceptions(ClusterState,String)
+# boolean retryPrimaryException(Throwable)
+~ boolean isRetryableClusterBlockException(Throwable)
+- void handleOperationRequest(Request,TransportChannel,Task)
+# Releasable checkOperationLimits(Request)
+# void handlePrimaryRequest(ConcreteShardRequest<Request>,TransportChannel,Task)
+# Releasable checkPrimaryLimits(Request,boolean,boolean)
+# void adaptResponse(Response,IndexShard)
+# void handleReplicaRequest(ConcreteReplicaRequest<ReplicaRequest>,TransportChannel,Task)
+# Releasable checkReplicaLimits(ReplicaRequest)
+- IndexShard getIndexShard(ShardId)
+# void acquirePrimaryOperationPermit(IndexShard,Request,ActionListener<Releasable>)
+# void acquireReplicaOperationPermit(IndexShard,ReplicaRequest,ActionListener<Releasable>,long,long,long)
+~ {static} void setPhase(ReplicationTask,String)
+}
+class org.elasticsearch.action.support.replication.TransportReplicationAction$AsyncPrimaryAction {
+- ActionListener<Response> onCompletionListener
+- ReplicationTask replicationTask
+- ConcreteShardRequest<Request> primaryRequest
+# void doRun()
+~ void runWithPrimaryShardReference(PrimaryShardReference)
+- void handleException(PrimaryShardReference,Exception)
++ void onFailure(Exception)
+}
+class org.elasticsearch.action.support.replication.TransportReplicationAction$PrimaryResult {
+# ReplicaRequest replicaRequest
++ Response finalResponseIfSuccessful
++ Exception finalFailure
++ ReplicaRequest replicaRequest()
++ void setShardInfo(ReplicationResponse.ShardInfo)
++ void runPostReplicationActions(ActionListener<Void>)
+}
+class org.elasticsearch.action.support.replication.TransportReplicationAction$ReplicaResult {
+~ Exception finalFailure
++ void runPostReplicaActions(ActionListener<Void>)
+}
+class org.elasticsearch.action.support.replication.TransportReplicationAction$RetryOnReplicaException {
+}
+class org.elasticsearch.action.support.replication.TransportReplicationAction$AsyncReplicaAction {
+- ActionListener<ReplicaResponse> onCompletionListener
+- IndexShard replica
+- ReplicationTask task
+- ClusterStateObserver observer
+- ConcreteReplicaRequest<ReplicaRequest> replicaRequest
++ void onResponse(Releasable)
++ void onFailure(Exception)
+# void responseWithFailure(Exception)
+# void doRun()
+}
+class org.elasticsearch.action.support.replication.TransportReplicationAction$ReroutePhase {
+- ActionListener<Response> listener
+- Request request
+- boolean initiatedByNodeClient
+- ReplicationTask task
+- ClusterStateObserver observer
+- AtomicBoolean finished
++ void onFailure(Exception)
+# void doRun()
+- void performLocalAction(ClusterState,ShardRouting,DiscoveryNode,IndexMetadata)
+- void performRemoteAction(ClusterState,ShardRouting,DiscoveryNode)
+- void performAction(DiscoveryNode,String,boolean,TransportRequest)
+~ void retry(Exception)
+~ void finishAsFailed(Exception)
+~ void finishWithUnexpectedFailure(Exception)
+~ void finishOnSuccess(Response)
+~ void retryBecauseUnavailable(ShardId,String)
+}
+class org.elasticsearch.action.support.replication.TransportReplicationAction$PrimaryShardReference {
+# IndexShard indexShard
+- Releasable operationLock
++ void close()
++ ShardRouting routingEntry()
++ boolean isRelocated()
++ void failShard(String,Exception)
++ void perform(Request,ActionListener<PrimaryResult<ReplicaRequest,Response>>)
++ void updateLocalCheckpointForShard(String,long)
++ void updateGlobalCheckpointForShard(String,long)
++ long localCheckpoint()
++ long globalCheckpoint()
++ long computedGlobalCheckpoint()
++ long maxSeqNoOfUpdatesOrDeletes()
++ ReplicationGroup getReplicationGroup()
++ PendingReplicationActions getPendingReplicationActions()
+}
+class org.elasticsearch.action.support.replication.TransportReplicationAction$ReplicaResponse {
+- long localCheckpoint
+- long globalCheckpoint
++ void writeTo(StreamOutput)
++ long localCheckpoint()
++ long globalCheckpoint()
++ boolean equals(Object)
++ int hashCode()
+}
+class org.elasticsearch.action.support.replication.TransportReplicationAction$ReplicasProxy {
++ void performOn(ShardRouting,ReplicaRequest,long,long,long,ActionListener<ReplicationOperation.ReplicaResponse>)
++ void failShardIfNeeded(ShardRouting,long,String,Exception,ActionListener<Void>)
++ void markShardCopyAsStaleIfNeeded(ShardId,String,long,ActionListener<Void>)
+}
+class org.elasticsearch.action.support.replication.TransportReplicationAction$ConcreteShardRequest {
+- String targetAllocationID
+- long primaryTerm
+- R request
+- boolean sentFromLocalReroute
+- boolean localRerouteInitiatedByNodeClient
++ void setParentTask(String,long)
++ void setParentTask(TaskId)
++ TaskId getParentTask()
++ Task createTask(long,String,String,TaskId,Map<String,String>)
++ String getDescription()
++ void writeTo(StreamOutput)
++ boolean sentFromLocalReroute()
++ boolean localRerouteInitiatedByNodeClient()
++ R getRequest()
++ String getTargetAllocationID()
++ long getPrimaryTerm()
++ String toString()
+}
+class org.elasticsearch.action.support.replication.TransportReplicationAction$ConcreteReplicaRequest {
+- long globalCheckpoint
+- long maxSeqNoOfUpdatesOrDeletes
++ void writeTo(StreamOutput)
++ long getGlobalCheckpoint()
++ long getMaxSeqNoOfUpdatesOrDeletes()
++ String toString()
+}
+
+
+org.elasticsearch.action.support.HandledTransportAction <|-- org.elasticsearch.action.support.replication.TransportBroadcastReplicationAction
+org.elasticsearch.action.support.WriteRequest <|.. org.elasticsearch.action.support.replication.ReplicatedWriteRequest
+org.elasticsearch.action.support.replication.ReplicationRequest <|-- org.elasticsearch.action.support.replication.ReplicatedWriteRequest
+org.elasticsearch.tasks.Task <|-- org.elasticsearch.action.support.replication.ReplicationTask
+org.elasticsearch.action.support.replication.ReplicationTask +.. org.elasticsearch.action.support.replication.ReplicationTask$Status
+org.elasticsearch.action.support.replication.Status <|.. org.elasticsearch.action.support.replication.ReplicationTask$Status
+org.elasticsearch.action.support.replication.ReplicationRequest <|-- org.elasticsearch.action.support.replication.BasicReplicationRequest
+org.elasticsearch.action.ActionRequestBuilder <|-- org.elasticsearch.action.support.replication.ReplicationRequestBuilder
+java.util.function.Consumer <|.. org.elasticsearch.action.support.replication.PendingReplicationActions
+org.elasticsearch.common.lease.Releasable <|.. org.elasticsearch.action.support.replication.PendingReplicationActions
+org.elasticsearch.action.support.replication.ReplicationOperation +.. org.elasticsearch.action.support.replication.ReplicationOperation$Primary
+org.elasticsearch.action.support.replication.ReplicationOperation +.. org.elasticsearch.action.support.replication.ReplicationOperation$Replicas
+org.elasticsearch.action.support.replication.ReplicationOperation +.. org.elasticsearch.action.support.replication.ReplicationOperation$ReplicaResponse
+org.elasticsearch.action.support.replication.ReplicationOperation +.. org.elasticsearch.action.support.replication.ReplicationOperation$RetryOnPrimaryException
+org.elasticsearch.action.support.replication.ElasticsearchException <|-- org.elasticsearch.action.support.replication.ReplicationOperation$RetryOnPrimaryException
+org.elasticsearch.action.support.replication.ReplicationOperation +.. org.elasticsearch.action.support.replication.ReplicationOperation$PrimaryResult
+org.elasticsearch.action.support.replication.TransportReplicationAction <|-- org.elasticsearch.action.support.replication.TransportWriteAction
+org.elasticsearch.action.support.replication.TransportWriteAction +.. org.elasticsearch.action.support.replication.TransportWriteAction$WritePrimaryResult
+org.elasticsearch.action.support.replication.PrimaryResult <|-- org.elasticsearch.action.support.replication.TransportWriteAction$WritePrimaryResult
+org.elasticsearch.action.support.replication.TransportWriteAction +.. org.elasticsearch.action.support.replication.TransportWriteAction$WriteReplicaResult
+org.elasticsearch.action.support.replication.ReplicaResult <|-- org.elasticsearch.action.support.replication.TransportWriteAction$WriteReplicaResult
+org.elasticsearch.action.support.replication.TransportWriteAction +.. org.elasticsearch.action.support.replication.TransportWriteAction$RespondingWriteResult
+org.elasticsearch.action.support.replication.TransportWriteAction +.. org.elasticsearch.action.support.replication.TransportWriteAction$AsyncAfterWriteAction
+org.elasticsearch.action.support.replication.TransportWriteAction +.. org.elasticsearch.action.support.replication.TransportWriteAction$WriteActionReplicasProxy
+org.elasticsearch.action.support.replication.ReplicasProxy <|-- org.elasticsearch.action.support.replication.TransportWriteAction$WriteActionReplicasProxy
+org.elasticsearch.action.ActionResponse <|-- org.elasticsearch.action.support.replication.ReplicationResponse
+org.elasticsearch.action.support.replication.ReplicationResponse +.. org.elasticsearch.action.support.replication.ReplicationResponse$ShardInfo
+org.elasticsearch.action.support.replication.Writeable <|.. org.elasticsearch.action.support.replication.ReplicationResponse$ShardInfo
+org.elasticsearch.action.support.replication.ToXContentObject <|.. org.elasticsearch.action.support.replication.ReplicationResponse$ShardInfo
+org.elasticsearch.action.support.replication.ReplicationResponse$ShardInfo +.. org.elasticsearch.action.support.replication.ReplicationResponse$ShardInfo$Failure
+org.elasticsearch.action.support.replication.ToXContentObject <|.. org.elasticsearch.action.support.replication.ReplicationResponse$ShardInfo$Failure
+org.elasticsearch.action.support.replication.ShardOperationFailedException <|-- org.elasticsearch.action.support.replication.ReplicationResponse$ShardInfo$Failure
+org.elasticsearch.action.IndicesRequest <|.. org.elasticsearch.action.support.replication.ReplicationRequest
+org.elasticsearch.action.ActionRequest <|-- org.elasticsearch.action.support.replication.ReplicationRequest
+org.elasticsearch.action.support.TransportAction <|-- org.elasticsearch.action.support.replication.TransportReplicationAction
+org.elasticsearch.action.support.replication.TransportReplicationAction +.. org.elasticsearch.action.support.replication.TransportReplicationAction$AsyncPrimaryAction
+org.elasticsearch.action.support.replication.AbstractRunnable <|-- org.elasticsearch.action.support.replication.TransportReplicationAction$AsyncPrimaryAction
+org.elasticsearch.action.support.replication.TransportReplicationAction +.. org.elasticsearch.action.support.replication.TransportReplicationAction$PrimaryResult
+org.elasticsearch.action.support.replication.PrimaryResult <|.. org.elasticsearch.action.support.replication.TransportReplicationAction$PrimaryResult
+org.elasticsearch.action.support.replication.TransportReplicationAction +.. org.elasticsearch.action.support.replication.TransportReplicationAction$ReplicaResult
+org.elasticsearch.action.support.replication.TransportReplicationAction +.. org.elasticsearch.action.support.replication.TransportReplicationAction$RetryOnReplicaException
+org.elasticsearch.action.support.replication.ElasticsearchException <|-- org.elasticsearch.action.support.replication.TransportReplicationAction$RetryOnReplicaException
+org.elasticsearch.action.support.replication.TransportReplicationAction +.. org.elasticsearch.action.support.replication.TransportReplicationAction$AsyncReplicaAction
+org.elasticsearch.action.support.replication.ActionListener <|.. org.elasticsearch.action.support.replication.TransportReplicationAction$AsyncReplicaAction
+org.elasticsearch.action.support.replication.AbstractRunnable <|-- org.elasticsearch.action.support.replication.TransportReplicationAction$AsyncReplicaAction
+org.elasticsearch.action.support.replication.TransportReplicationAction +.. org.elasticsearch.action.support.replication.TransportReplicationAction$ReroutePhase
+org.elasticsearch.action.support.replication.AbstractRunnable <|-- org.elasticsearch.action.support.replication.TransportReplicationAction$ReroutePhase
+org.elasticsearch.action.support.replication.TransportReplicationAction +.. org.elasticsearch.action.support.replication.TransportReplicationAction$PrimaryShardReference
+org.elasticsearch.action.support.replication.Releasable <|.. org.elasticsearch.action.support.replication.TransportReplicationAction$PrimaryShardReference
+org.elasticsearch.action.support.replication.Primary <|.. org.elasticsearch.action.support.replication.TransportReplicationAction$PrimaryShardReference
+org.elasticsearch.action.support.replication.TransportReplicationAction +.. org.elasticsearch.action.support.replication.TransportReplicationAction$ReplicaResponse
+org.elasticsearch.action.support.replication.ReplicaResponse <|.. org.elasticsearch.action.support.replication.TransportReplicationAction$ReplicaResponse
+org.elasticsearch.action.support.replication.ActionResponse <|-- org.elasticsearch.action.support.replication.TransportReplicationAction$ReplicaResponse
+org.elasticsearch.action.support.replication.TransportReplicationAction +.. org.elasticsearch.action.support.replication.TransportReplicationAction$ReplicasProxy
+org.elasticsearch.action.support.replication.Replicas <|.. org.elasticsearch.action.support.replication.TransportReplicationAction$ReplicasProxy
+org.elasticsearch.action.support.replication.TransportReplicationAction +.. org.elasticsearch.action.support.replication.TransportReplicationAction$ConcreteShardRequest
+org.elasticsearch.action.support.replication.TransportRequest <|-- org.elasticsearch.action.support.replication.TransportReplicationAction$ConcreteShardRequest
+org.elasticsearch.action.support.replication.TransportReplicationAction +.. org.elasticsearch.action.support.replication.TransportReplicationAction$ConcreteReplicaRequest
+org.elasticsearch.action.support.replication.ConcreteShardRequest <|-- org.elasticsearch.action.support.replication.TransportReplicationAction$ConcreteReplicaRequest
+@enduml
