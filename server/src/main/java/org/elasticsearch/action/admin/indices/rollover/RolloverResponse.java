@@ -76,8 +76,8 @@ public final class RolloverResponse extends ShardsAcknowledgedResponse implement
     private final boolean shardsAcknowledged;
 
     RolloverResponse(StreamInput in) throws IOException {
-        super(in, false, in.getVersion().onOrAfter(Version.V_6_4_0));
-        if (in.getVersion().onOrAfter(Version.V_6_4_0)) {
+        super(in, false, in.getVersion().onOrAfter(Version.V_7_0_0));
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             oldIndex = in.readString();
             newIndex = in.readString();
             int conditionSize = in.readVInt();
@@ -156,7 +156,7 @@ public final class RolloverResponse extends ShardsAcknowledgedResponse implement
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        if (out.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             super.writeTo(out);
             out.writeString(oldIndex);
             out.writeString(newIndex);

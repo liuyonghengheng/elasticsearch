@@ -24,7 +24,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.TestUtil;
+import org.apache.lucene.tests.util.TestUtil;
 import org.elasticsearch.index.fielddata.AbstractSortedSetDocValues;
 import org.elasticsearch.index.fielddata.SortedBinaryDocValues;
 import org.elasticsearch.search.aggregations.LeafBucketCollector;
@@ -58,6 +58,11 @@ public class BinaryRangeAggregatorTests extends ESTestCase {
                 return NO_MORE_ORDS;
             }
             return ords[i++];
+        }
+
+        @Override
+        public int docValueCount() {
+            return ords.length;
         }
 
         @Override

@@ -168,13 +168,13 @@ public class MetadataCreateIndexServiceTests extends ESTestCase {
     }
 
     public void testNumberOfShards() {
-        {
-            final Version versionCreated = VersionUtils.randomVersionBetween(
-                random(),
-                Version.V_6_0_0_alpha1, VersionUtils.getPreviousVersion(Version.V_7_0_0));
-            final Settings.Builder indexSettingsBuilder = Settings.builder().put(SETTING_VERSION_CREATED, versionCreated);
-            assertThat(MetadataCreateIndexService.getNumberOfShards(indexSettingsBuilder), equalTo(5));
-        }
+//        {
+//            final Version versionCreated = VersionUtils.randomVersionBetween(
+//                random(),
+//                Version.V_6_0_0_alpha1, VersionUtils.getPreviousVersion(Version.V_7_0_0));
+//            final Settings.Builder indexSettingsBuilder = Settings.builder().put(SETTING_VERSION_CREATED, versionCreated);
+//            assertThat(MetadataCreateIndexService.getNumberOfShards(indexSettingsBuilder), equalTo(5));
+//        }
         {
             final Version versionCreated = VersionUtils.randomVersionBetween(random(), Version.V_7_0_0, Version.CURRENT);
             final Settings.Builder indexSettingsBuilder = Settings.builder().put(SETTING_VERSION_CREATED, versionCreated);
@@ -514,11 +514,12 @@ public class MetadataCreateIndexServiceTests extends ESTestCase {
         assertEquals(2048, MetadataCreateIndexService.calculateNumRoutingShards(1024, Version.CURRENT));
         assertEquals(4096, MetadataCreateIndexService.calculateNumRoutingShards(2048, Version.CURRENT));
 
-        Version latestV6 = VersionUtils.getPreviousVersion(Version.V_7_0_0);
-        int numShards = randomIntBetween(1, 1000);
-        assertEquals(numShards, MetadataCreateIndexService.calculateNumRoutingShards(numShards, latestV6));
-        assertEquals(numShards, MetadataCreateIndexService.calculateNumRoutingShards(numShards,
-            VersionUtils.randomVersionBetween(random(), VersionUtils.getFirstVersion(), latestV6)));
+        // 不支持 V6
+//        Version latestV6 = VersionUtils.getPreviousVersion(Version.V_7_0_0);
+//        int numShards = randomIntBetween(1, 1000);
+//        assertEquals(numShards, MetadataCreateIndexService.calculateNumRoutingShards(numShards, latestV6));
+//        assertEquals(numShards, MetadataCreateIndexService.calculateNumRoutingShards(numShards,
+//            VersionUtils.randomVersionBetween(random(), VersionUtils.getFirstVersion(), latestV6)));
 
         for (int i = 0; i < 1000; i++) {
             int randomNumShards = randomIntBetween(1, 10000);

@@ -19,7 +19,7 @@
 
 package org.elasticsearch.client.security.hlrc;
 
-import org.apache.lucene.util.LuceneTestCase;
+import org.apache.lucene.tests.util.LuceneTestCase;
 import org.elasticsearch.Version;
 import org.elasticsearch.client.AbstractResponseTestCase;
 import org.elasticsearch.client.security.HasPrivilegesResponse;

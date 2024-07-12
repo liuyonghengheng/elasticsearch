@@ -60,7 +60,7 @@ public class PeerRecoveryRetentionLeaseCreationIT extends ESIntegTestCase {
             .put(IndexMetadata.SETTING_VERSION_CREATED,
                 // simulate a version which supports soft deletes (v6.5.0-and-later) with which this node is compatible
                 VersionUtils.randomVersionBetween(random(),
-                    Version.max(Version.CURRENT.minimumIndexCompatibilityVersion(), Version.V_6_5_0), Version.CURRENT))));
+                    Version.max(Version.CURRENT.minimumIndexCompatibilityVersion(), Version.V_7_0_0), Version.CURRENT))));
         ensureGreen("index");
 
         // Change the node ID so that the persisted retention lease no longer applies.

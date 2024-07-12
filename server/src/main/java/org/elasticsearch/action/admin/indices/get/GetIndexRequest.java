@@ -77,7 +77,7 @@ public class GetIndexRequest extends ClusterInfoRequest<GetIndexRequest> {
         super(in);
         features = in.readArray(i -> Feature.fromId(i.readByte()), Feature[]::new);
         humanReadable = in.readBoolean();
-        if (in.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             includeDefaults = in.readBoolean();
         }
     }
@@ -143,7 +143,7 @@ public class GetIndexRequest extends ClusterInfoRequest<GetIndexRequest> {
         super.writeTo(out);
         out.writeArray((o, f) -> o.writeByte(f.id), features);
         out.writeBoolean(humanReadable);
-        if (out.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeBoolean(includeDefaults);
         }
     }

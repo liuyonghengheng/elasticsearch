@@ -24,7 +24,8 @@ esplugin {
 }
 
 dependencies {
-  api "org.apache.lucene:lucene-analyzers-smartcn:${versions.lucene}"
+//  api "org.apache.lucene:lucene-analyzers-smartcn:${versions.lucene}"
+  api "org.apache.lucene:lucene-analyzers-smartcn:8.11.3"
 }
 
 restResources {

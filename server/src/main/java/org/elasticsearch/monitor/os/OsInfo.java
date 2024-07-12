@@ -60,7 +60,7 @@ public class OsInfo implements ReportingService.Info {
         this.availableProcessors = in.readInt();
         this.allocatedProcessors = in.readInt();
         this.name = in.readOptionalString();
-        if (in.getVersion().onOrAfter(Version.V_6_6_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             this.prettyName = in.readOptionalString();
         } else {
             this.prettyName = null;
@@ -75,7 +75,7 @@ public class OsInfo implements ReportingService.Info {
         out.writeInt(availableProcessors);
         out.writeInt(allocatedProcessors);
         out.writeOptionalString(name);
-        if (out.getVersion().onOrAfter(Version.V_6_6_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeOptionalString(prettyName);
         }
         out.writeOptionalString(arch);

@@ -32,11 +32,11 @@ public class LegacyTypeFieldMapperTests extends ESSingleNodeTestCase {
     }
 
     public void testDocValuesMultipleTypes() throws Exception {
-        TypeFieldMapperTests.testDocValues(index -> {
-            final Settings settings = Settings.builder().put(IndexMetadata.SETTING_INDEX_VERSION_CREATED.getKey(), Version.V_6_0_0).build();
-            return this.createIndex(index, settings);
-        });
-        assertWarnings("[types removal] Using the _type field in queries and aggregations is deprecated, prefer to use a field instead.");
+//        TypeFieldMapperTests.testDocValues(index -> {
+//            final Settings settings = Settings.builder().put(IndexMetadata.SETTING_INDEX_VERSION_CREATED.getKey(), Version.V_6_0_0).build();
+//            return this.createIndex(index, settings);
+//        });
+//        assertWarnings("[types removal] Using the _type field in queries and aggregations is deprecated, prefer to use a field instead.");
     }
 
 }

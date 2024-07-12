@@ -155,7 +155,7 @@ public abstract class DocWriteResponse extends ReplicationResponse implements Wr
         type = in.readString();
         id = in.readString();
         version = in.readZLong();
-        if (in.getVersion().onOrAfter(Version.V_6_0_0_alpha1)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             seqNo = in.readZLong();
             primaryTerm = in.readVLong();
         } else {
@@ -304,7 +304,7 @@ public abstract class DocWriteResponse extends ReplicationResponse implements Wr
         out.writeString(type);
         out.writeString(id);
         out.writeZLong(version);
-        if (out.getVersion().onOrAfter(Version.V_6_0_0_alpha1)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeZLong(seqNo);
             out.writeVLong(primaryTerm);
         }

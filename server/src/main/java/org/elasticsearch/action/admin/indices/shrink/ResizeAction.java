@@ -26,7 +26,9 @@ public class ResizeAction extends ActionType<ResizeResponse> {
 
     public static final ResizeAction INSTANCE = new ResizeAction();
     public static final String NAME = "indices:admin/resize";
-    public static final Version COMPATIBILITY_VERSION = Version.V_6_1_0; // TODO remove this once it's backported
+//    public static final Version COMPATIBILITY_VERSION = Version.V_6_1_0; // TODO remove this once it's backported
+    // TODO:liuyongheng 不再支持7.0以前的版本，后续相关的判断逻辑可以删除
+    public static final Version COMPATIBILITY_VERSION = Version.V_7_0_0;
 
     private ResizeAction() {
         super(NAME, ResizeResponse::new);

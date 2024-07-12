@@ -78,6 +78,11 @@ public class IncludeExcludeTests extends ESTestCase {
             }
 
             @Override
+            public int docValueCount() {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
             public BytesRef lookupOrd(long ord) {
                 assertEquals(0, ord);
                 return new BytesRef("foo");

@@ -19,7 +19,7 @@
 
 package org.elasticsearch.search.profile.query;
 
-import org.apache.lucene.util.English;
+import org.apache.lucene.tests.util.English;
 import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.action.search.MultiSearchResponse;
 import org.elasticsearch.action.search.SearchRequestBuilder;
@@ -111,7 +111,7 @@ public class QueryProfilerIT extends ESIntegTestCase {
      * to make sure the profiling doesn't interfere with the hits being returned
      */
     public void testProfileMatchesRegular() throws Exception {
-        createIndex("test", Settings.builder() 
+        createIndex("test", Settings.builder()
                 .put("index.number_of_shards", 1)
                 .put("index.number_of_replicas", 0).build());
         ensureGreen();

@@ -33,7 +33,7 @@ import org.apache.lucene.search.IndexOrDocValuesQuery;
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.FutureArrays;
+import java.util.Arrays;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.geo.ShapeRelation;
 import org.elasticsearch.common.network.InetAddresses;
@@ -160,7 +160,7 @@ public enum RangeType {
                 BiFunction<InetAddress, InetAddress, Query> querySupplier) {
             byte[] lowerBytes = InetAddressPoint.encode((InetAddress) lower);
             byte[] upperBytes = InetAddressPoint.encode((InetAddress) upper);
-            if (FutureArrays.compareUnsigned(lowerBytes, 0, lowerBytes.length, upperBytes, 0, upperBytes.length) > 0) {
+            if (Arrays.compareUnsigned(lowerBytes, 0, lowerBytes.length, upperBytes, 0, upperBytes.length) > 0) {
                 throw new IllegalArgumentException(
                         "Range query `from` value (" + lower + ") is greater than `to` value (" + upper + ")");
             }
@@ -168,7 +168,7 @@ public enum RangeType {
             InetAddress correctedTo = includeUpper ? (InetAddress) upper : nextDown(upper);;
             lowerBytes = InetAddressPoint.encode(correctedFrom);
             upperBytes = InetAddressPoint.encode(correctedTo);
-            if (FutureArrays.compareUnsigned(lowerBytes, 0, lowerBytes.length, upperBytes, 0, upperBytes.length) > 0) {
+            if (Arrays.compareUnsigned(lowerBytes, 0, lowerBytes.length, upperBytes, 0, upperBytes.length) > 0) {
                 return new MatchNoDocsQuery("float range didn't intersect anything");
             } else {
                 return querySupplier.apply(correctedFrom, correctedTo);

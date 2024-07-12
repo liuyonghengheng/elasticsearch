@@ -24,7 +24,7 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.document.DoublePoint;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FloatPoint;
-import org.apache.lucene.document.HalfFloatPoint;
+import org.apache.lucene.sandbox.document.HalfFloatPoint;
 import org.apache.lucene.document.InetAddressPoint;
 import org.apache.lucene.document.IntPoint;
 import org.apache.lucene.document.LongPoint;
@@ -47,33 +47,13 @@ import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.index.memory.MemoryIndex;
 import org.apache.lucene.queries.BlendedTermQuery;
 import org.apache.lucene.queries.CommonTermsQuery;
+import org.apache.lucene.search.*;
 import org.apache.lucene.search.BooleanClause.Occur;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.CoveringQuery;
-import org.apache.lucene.search.DisjunctionMaxQuery;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.Explanation;
-import org.apache.lucene.search.FilteredDocIdSetIterator;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.PhraseQuery;
-import org.apache.lucene.search.PrefixQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.TermInSetQuery;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.Weight;
-import org.apache.lucene.search.WildcardQuery;
-import org.apache.lucene.search.spans.SpanNearQuery;
-import org.apache.lucene.search.spans.SpanNotQuery;
-import org.apache.lucene.search.spans.SpanOrQuery;
-import org.apache.lucene.search.spans.SpanTermQuery;
+import org.apache.lucene.sandbox.search.CoveringQuery;
+import org.apache.lucene.queries.spans.SpanNearQuery;
+import org.apache.lucene.queries.spans.SpanNotQuery;
+import org.apache.lucene.queries.spans.SpanOrQuery;
+import org.apache.lucene.queries.spans.SpanTermQuery;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.BytesRef;
@@ -599,7 +579,9 @@ public class CandidateQueryTests extends ESSingleNodeTestCase {
         IndexSearcher shardSearcher = newSearcher(directoryReader);
         shardSearcher.setQueryCache(null);
 
-        Version v = Version.V_6_1_0;
+        // TODO:liuyongheng 这里看一下会不会有影响
+//        Version v = Version.V_6_1_0;
+        Version v = Version.V_7_10_2;
         MemoryIndex memoryIndex = MemoryIndex.fromDocument(Collections.singleton(new IntPoint("int_field", 3)), new WhitespaceAnalyzer());
         IndexSearcher percolateSearcher = memoryIndex.createSearcher();
         Query query = fieldType.percolateQuery("_name", queryStore, Collections.singletonList(new BytesArray("{}")),
@@ -1158,6 +1140,11 @@ public class CandidateQueryTests extends ESSingleNodeTestCase {
         }
 
         @Override
+        public void visit(QueryVisitor visitor) {
+            visitor.visitLeaf(this);
+        }
+
+        @Override
         public String toString(String field) {
             return "custom{" + field + "}";
         }
@@ -1188,8 +1175,8 @@ public class CandidateQueryTests extends ESSingleNodeTestCase {
             final IndexSearcher percolatorIndexSearcher = memoryIndex.createSearcher();
             return new Weight(this) {
 
-                @Override
-                public void extractTerms(Set<Term> terms) {}
+//                @Override
+//                public void extractTerms(Set<Term> terms) {}
 
                 @Override
                 public Explanation explain(LeafReaderContext context, int doc) throws IOException {
@@ -1262,6 +1249,11 @@ public class CandidateQueryTests extends ESSingleNodeTestCase {
                     return false; // doesn't matter
                 }
             };
+        }
+
+        @Override
+        public void visit(QueryVisitor visitor) {
+            visitor.visitLeaf(this);
         }
 
         @Override

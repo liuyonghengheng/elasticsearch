@@ -49,7 +49,7 @@ supported systems but is subject to change.
 [[simplefs]]`simplefs`::
 
 The Simple FS type is a straightforward implementation of file system
-storage (maps to Lucene `SimpleFsDirectory`) using a random access file.
+storage (maps to Lucene `NIOFSDirectory`) using a random access file.
 This implementation has poor concurrent performance (multiple threads
 will bottleneck) and disables some optimizations for heap memory usage.
 

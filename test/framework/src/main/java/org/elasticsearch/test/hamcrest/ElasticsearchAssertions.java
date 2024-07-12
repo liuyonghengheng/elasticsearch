@@ -19,7 +19,6 @@
 package org.elasticsearch.test.hamcrest;
 
 import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.DisjunctionMaxQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TotalHits;
 import org.elasticsearch.ElasticsearchException;
@@ -49,12 +48,7 @@ import org.elasticsearch.cluster.metadata.IndexTemplateMetadata;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.unit.TimeValue;
-import org.elasticsearch.common.xcontent.DeprecationHandler;
-import org.elasticsearch.common.xcontent.NamedXContentRegistry;
-import org.elasticsearch.common.xcontent.ToXContent;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentParser;
-import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.common.xcontent.*;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.suggest.Suggest;
@@ -66,36 +60,18 @@ import org.hamcrest.core.CombinableMatcher;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
-import static org.apache.lucene.util.LuceneTestCase.expectThrows;
-import static org.apache.lucene.util.LuceneTestCase.expectThrowsAnyOf;
+import static org.apache.lucene.tests.util.LuceneTestCase.expectThrows;
+import static org.apache.lucene.tests.util.LuceneTestCase.expectThrowsAnyOf;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.hasKey;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.hamcrest.Matchers.*;
+import static org.junit.Assert.*;
 
 public class ElasticsearchAssertions {
 
@@ -517,13 +493,14 @@ public class ElasticsearchAssertions {
         return subqueryType.cast(q.clauses().get(i).getQuery());
     }
 
-    public static <T extends Query> T assertDisjunctionSubQuery(Query query, Class<T> subqueryType, int i) {
-        assertThat(query, instanceOf(DisjunctionMaxQuery.class));
-        DisjunctionMaxQuery q = (DisjunctionMaxQuery) query;
-        assertThat(q.getDisjuncts().size(), greaterThan(i));
-        assertThat(q.getDisjuncts().get(i), instanceOf(subqueryType));
-        return subqueryType.cast(q.getDisjuncts().get(i));
-    }
+    // TODO:liuyongheng 这里确定一下删掉是不是有影响，es新版本是删除了的
+//    public static <T extends Query> T assertDisjunctionSubQuery(Query query, Class<T> subqueryType, int i) {
+//        assertThat(query, instanceOf(DisjunctionMaxQuery.class));
+//        DisjunctionMaxQuery q = (DisjunctionMaxQuery) query;
+//        assertThat(q.getDisjuncts().size(), greaterThan(i));
+//        assertThat(q.getDisjuncts().get(i), instanceOf(subqueryType));
+//        return subqueryType.cast(q.getDisjuncts().get(i));
+//    }
 
     /**
      * Run the request from a given builder and check that it throws an exception of the right type
@@ -577,7 +554,7 @@ public class ElasticsearchAssertions {
      * Run future.actionGet() and check that it throws an exception of the right type, optionally checking the exception's rest status
      *
      * @param exceptionClass expected exception class
-     * @param status         {@link org.elasticsearch.rest.RestStatus} to check for. Can be null to disable the check
+     * @param status         {@link RestStatus} to check for. Can be null to disable the check
      * @param extraInfo      extra information to add to the failure message. Can be null.
      */
     public static <E extends Throwable> void assertFutureThrows(ActionFuture<?> future, Class<E> exceptionClass,
@@ -654,7 +631,7 @@ public class ElasticsearchAssertions {
 
     /**
      * Asserts that the provided {@link BytesReference}s created through
-     * {@link org.elasticsearch.common.xcontent.ToXContent#toXContent(XContentBuilder, ToXContent.Params)} hold the same content.
+     * {@link ToXContent#toXContent(XContentBuilder, ToXContent.Params)} hold the same content.
      * The comparison is done by parsing both into a map and comparing those two, so that keys ordering doesn't matter.
      * Also binary values (byte[]) are properly compared through arrays comparisons.
      */

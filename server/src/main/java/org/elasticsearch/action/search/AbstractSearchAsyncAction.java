@@ -548,7 +548,7 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
             raisePhaseFailure(new SearchPhaseExecutionException("", "Shard failures", null, failures));
         } else {
             final Version minNodeVersion = clusterState.nodes().getMinNodeVersion();
-            final String scrollId = request.scroll() != null ? TransportSearchHelper.buildScrollId(queryResults, minNodeVersion) : null;
+            final String scrollId = request.scroll() != null ? TransportSearchHelper.buildScrollId(queryResults) : null;
             final String searchContextId;
             if (buildPointInTimeFromSearchResults()) {
                 searchContextId = SearchContextId.encode(queryResults.asList(), aliasFilter, minNodeVersion);

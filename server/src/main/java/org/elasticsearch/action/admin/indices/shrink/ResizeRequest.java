@@ -67,11 +67,7 @@ public class ResizeRequest extends AcknowledgedRequest<ResizeRequest> implements
         } else {
             type = ResizeType.SHRINK; // BWC this used to be shrink only
         }
-        if (in.getVersion().before(Version.V_6_4_0)) {
-            copySettings = null;
-        } else {
-            copySettings = in.readOptionalBoolean();
-        }
+        copySettings = in.readOptionalBoolean();
     }
 
     ResizeRequest() {}
@@ -115,12 +111,7 @@ public class ResizeRequest extends AcknowledgedRequest<ResizeRequest> implements
             }
             out.writeEnum(type);
         }
-        // noinspection StatementWithEmptyBody
-        if (out.getVersion().before(Version.V_6_4_0)) {
-
-        } else {
-            out.writeOptionalBoolean(copySettings);
-        }
+        out.writeOptionalBoolean(copySettings);
     }
 
     @Override

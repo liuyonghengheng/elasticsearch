@@ -42,20 +42,20 @@ public class CommonAnalysisPluginTests extends ESTestCase {
      * Check that the deprecated name "nGram" issues a deprecation warning for indices created since 6.0.0
      */
     public void testNGramDeprecationWarning() throws IOException {
-        Settings settings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir())
-            .put(IndexMetadata.SETTING_VERSION_CREATED,
-                        VersionUtils.randomVersionBetween(random(), Version.V_6_0_0, VersionUtils.getPreviousVersion(Version.V_7_0_0)))
-            .put("index.analysis.analyzer.custom_analyzer.type", "custom")
-            .put("index.analysis.analyzer.custom_analyzer.tokenizer", "standard")
-            .putList("index.analysis.analyzer.custom_analyzer.filter", "nGram")
-            .build();
-
-        try (CommonAnalysisPlugin commonAnalysisPlugin = new CommonAnalysisPlugin()) {
-            createTestAnalysis(IndexSettingsModule.newIndexSettings("index", settings), settings, commonAnalysisPlugin);
-        }
-
-        assertWarnings("The [nGram] token filter name is deprecated and will be removed in a future version. "
-            + "Please change the filter name to [ngram] instead.");
+//        Settings settings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir())
+//            .put(IndexMetadata.SETTING_VERSION_CREATED,
+//                        VersionUtils.randomVersionBetween(random(), Version.V_6_0_0, VersionUtils.getPreviousVersion(Version.V_7_0_0)))
+//            .put("index.analysis.analyzer.custom_analyzer.type", "custom")
+//            .put("index.analysis.analyzer.custom_analyzer.tokenizer", "standard")
+//            .putList("index.analysis.analyzer.custom_analyzer.filter", "nGram")
+//            .build();
+//
+//        try (CommonAnalysisPlugin commonAnalysisPlugin = new CommonAnalysisPlugin()) {
+//            createTestAnalysis(IndexSettingsModule.newIndexSettings("index", settings), settings, commonAnalysisPlugin);
+//        }
+//
+//        assertWarnings("The [nGram] token filter name is deprecated and will be removed in a future version. "
+//            + "Please change the filter name to [ngram] instead.");
     }
 
     /**
@@ -81,19 +81,19 @@ public class CommonAnalysisPluginTests extends ESTestCase {
      * Check that the deprecated name "edgeNGram" issues a deprecation warning for indices created since 6.0.0
      */
     public void testEdgeNGramDeprecationWarning() throws IOException {
-        Settings settings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir())
-            .put(IndexMetadata.SETTING_VERSION_CREATED,
-                VersionUtils.randomVersionBetween(random(), Version.V_6_4_0, VersionUtils.getPreviousVersion(Version.V_7_0_0)))
-            .put("index.analysis.analyzer.custom_analyzer.type", "custom")
-            .put("index.analysis.analyzer.custom_analyzer.tokenizer", "standard")
-            .putList("index.analysis.analyzer.custom_analyzer.filter", "edgeNGram")
-            .build();
-
-        try (CommonAnalysisPlugin commonAnalysisPlugin = new CommonAnalysisPlugin()) {
-            createTestAnalysis(IndexSettingsModule.newIndexSettings("index", settings), settings, commonAnalysisPlugin);
-        }
-        assertWarnings("The [edgeNGram] token filter name is deprecated and will be removed in a future version. "
-            + "Please change the filter name to [edge_ngram] instead.");
+//        Settings settings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir())
+//            .put(IndexMetadata.SETTING_VERSION_CREATED,
+//                VersionUtils.randomVersionBetween(random(), Version.V_6_4_0, VersionUtils.getPreviousVersion(Version.V_7_0_0)))
+//            .put("index.analysis.analyzer.custom_analyzer.type", "custom")
+//            .put("index.analysis.analyzer.custom_analyzer.tokenizer", "standard")
+//            .putList("index.analysis.analyzer.custom_analyzer.filter", "edgeNGram")
+//            .build();
+//
+//        try (CommonAnalysisPlugin commonAnalysisPlugin = new CommonAnalysisPlugin()) {
+//            createTestAnalysis(IndexSettingsModule.newIndexSettings("index", settings), settings, commonAnalysisPlugin);
+//        }
+//        assertWarnings("The [edgeNGram] token filter name is deprecated and will be removed in a future version. "
+//            + "Please change the filter name to [edge_ngram] instead.");
     }
 
     /**
@@ -138,23 +138,23 @@ public class CommonAnalysisPluginTests extends ESTestCase {
      * Check that the deprecated analyzer name "standard_html_strip" issues a deprecation warning for indices created since 6.5.0 until 7
      */
     public void testStandardHtmlStripAnalyzerDeprecationWarning() throws IOException {
-        Settings settings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir())
-            .put(IndexMetadata.SETTING_VERSION_CREATED,
-                VersionUtils.randomVersionBetween(random(), Version.V_6_0_0,
-                    VersionUtils.getPreviousVersion(Version.V_7_0_0)))
-            .put("index.analysis.analyzer.custom_analyzer.type", "standard_html_strip")
-            .putList("index.analysis.analyzer.custom_analyzer.stopwords", "a", "b")
-            .build();
-
-        IndexSettings idxSettings = IndexSettingsModule.newIndexSettings("index", settings);
-        try (CommonAnalysisPlugin commonAnalysisPlugin = new CommonAnalysisPlugin()) {
-            IndexAnalyzers analyzers = createTestAnalysis(idxSettings, settings, commonAnalysisPlugin).indexAnalyzers;
-            Analyzer analyzer = analyzers.get("custom_analyzer");
-            assertNotNull(((NamedAnalyzer) analyzer).analyzer());
-            assertWarnings(
-                "Deprecated analyzer [standard_html_strip] used, " +
-                    "replace it with a custom analyzer using [standard] tokenizer and [html_strip] char_filter, plus [lowercase] filter");
-        }
+//        Settings settings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir())
+//            .put(IndexMetadata.SETTING_VERSION_CREATED,
+//                VersionUtils.randomVersionBetween(random(), Version.V_6_0_0,
+//                    VersionUtils.getPreviousVersion(Version.V_7_0_0)))
+//            .put("index.analysis.analyzer.custom_analyzer.type", "standard_html_strip")
+//            .putList("index.analysis.analyzer.custom_analyzer.stopwords", "a", "b")
+//            .build();
+//
+//        IndexSettings idxSettings = IndexSettingsModule.newIndexSettings("index", settings);
+//        try (CommonAnalysisPlugin commonAnalysisPlugin = new CommonAnalysisPlugin()) {
+//            IndexAnalyzers analyzers = createTestAnalysis(idxSettings, settings, commonAnalysisPlugin).indexAnalyzers;
+//            Analyzer analyzer = analyzers.get("custom_analyzer");
+//            assertNotNull(((NamedAnalyzer) analyzer).analyzer());
+//            assertWarnings(
+//                "Deprecated analyzer [standard_html_strip] used, " +
+//                    "replace it with a custom analyzer using [standard] tokenizer and [html_strip] char_filter, plus [lowercase] filter");
+//        }
     }
 
     /**

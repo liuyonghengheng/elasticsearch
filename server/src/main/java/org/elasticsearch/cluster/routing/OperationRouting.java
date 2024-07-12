@@ -231,7 +231,7 @@ public class OperationRouting {
         }
         // if not, then use it as the index
         int routingHash = Murmur3HashFunction.hash(preference);
-        if (nodes.getMinNodeVersion().onOrAfter(Version.V_6_0_0_alpha1)) {
+        if (nodes.getMinNodeVersion().onOrAfter(Version.V_7_0_0)) {
             // The AllocationService lists shards in a fixed order based on nodes
             // so earlier versions of this class would have a tendency to
             // select the same node across different shardIds.

@@ -42,21 +42,14 @@ public final class ResyncReplicationRequest extends ReplicatedWriteRequest<Resyn
 
     ResyncReplicationRequest(StreamInput in) throws IOException {
         super(in);
-        assert Version.CURRENT.major <= 7;
-        if (in.getVersion().equals(Version.V_6_0_0)) {
-            /*
-             * Resync replication request serialization was broken in 6.0.0 due to the elements of the stream not being prefixed with a
-             * byte indicating the type of the operation.
-             */
-            // TODO: remove this check in 8.0.0 which provides no BWC guarantees with 6.x.
-            throw new IllegalStateException("resync replication request serialization is broken in 6.0.0");
-        }
-        if (in.getVersion().onOrAfter(Version.V_6_4_0)) {
+        // TODO:liuyongheng 后续最小就是7，所以不需要验证，需要确认这么改有没有问题
+//        assert Version.CURRENT.major <= 7;
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             trimAboveSeqNo = in.readZLong();
         } else {
             trimAboveSeqNo = SequenceNumbers.UNASSIGNED_SEQ_NO;
         }
-        if (in.getVersion().onOrAfter(Version.V_6_5_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             maxSeenAutoIdTimestampOnPrimary = in.readZLong();
         } else {
             maxSeenAutoIdTimestampOnPrimary = IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP;
@@ -87,10 +80,10 @@ public final class ResyncReplicationRequest extends ReplicatedWriteRequest<Resyn
     @Override
     public void writeTo(final StreamOutput out) throws IOException {
         super.writeTo(out);
-        if (out.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeZLong(trimAboveSeqNo);
         }
-        if (out.getVersion().onOrAfter(Version.V_6_5_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeZLong(maxSeenAutoIdTimestampOnPrimary);
         }
         out.writeArray(Translog.Operation::writeOperation, operations);

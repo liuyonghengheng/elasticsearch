@@ -28,7 +28,7 @@ import org.apache.lucene.search.CollectionStatistics;
 import org.apache.lucene.search.CollectionTerminatedException;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.CollectorManager;
-import org.apache.lucene.search.ConjunctionDISI;
+import org.apache.lucene.search.ConjunctionUtils;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.IndexSearcher;
@@ -247,10 +247,10 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
     private Weight wrapWeight(Weight weight) {
         if (cancellable.isEnabled()) {
             return new Weight(weight.getQuery()) {
-                @Override
-                public void extractTerms(Set<Term> terms) {
-                    throw new UnsupportedOperationException();
-                }
+//                @Override
+//                public void extractTerms(Set<Term> terms) {
+//                    throw new UnsupportedOperationException();
+//                }
 
                 @Override
                 public Explanation explain(LeafReaderContext context, int doc) throws IOException {
@@ -299,9 +299,9 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
     static void intersectScorerAndBitSet(Scorer scorer, BitSet acceptDocs,
                                          LeafCollector collector, Runnable checkCancelled) throws IOException {
         collector.setScorer(scorer);
-        // ConjunctionDISI uses the DocIdSetIterator#cost() to order the iterators, so if roleBits has the lowest cardinality it should
+        // ConjunctionUtils uses the DocIdSetIterator#cost() to order the iterators, so if roleBits has the lowest cardinality it should
         // be used first:
-        DocIdSetIterator iterator = ConjunctionDISI.intersectIterators(Arrays.asList(new BitSetIterator(acceptDocs,
+        DocIdSetIterator iterator = ConjunctionUtils.intersectIterators(Arrays.asList(new BitSetIterator(acceptDocs,
             acceptDocs.approximateCardinality()), scorer.iterator()));
         int seen = 0;
         checkCancelled.run();

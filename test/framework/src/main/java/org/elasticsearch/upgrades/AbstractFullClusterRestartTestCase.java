@@ -40,8 +40,9 @@ public abstract class AbstractFullClusterRestartTestCase extends ESRestTestCase 
 
     @Before
     public void init() throws IOException {
-        assertThat("we don't need this branch if we aren't compatible with 6.0",
-                Version.CURRENT.minimumIndexCompatibilityVersion().onOrBefore(Version.V_6_0_0), equalTo(true));
+        // TODO:liuyongheng 这个类可以删除
+//        assertThat("we don't need this branch if we aren't compatible with 6.0",
+//                Version.CURRENT.minimumIndexCompatibilityVersion().onOrBefore(Version.V_6_0_0), equalTo(true));
         if (isRunningAgainstOldCluster() && getOldClusterVersion().before(Version.V_7_0_0)) {
             XContentBuilder template = jsonBuilder();
             template.startObject();

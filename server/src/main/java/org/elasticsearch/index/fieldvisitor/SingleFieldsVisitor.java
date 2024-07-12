@@ -71,8 +71,10 @@ public final class SingleFieldsVisitor extends StoredFieldVisitor {
     }
 
     @Override
-    public void stringField(FieldInfo fieldInfo, byte[] bytes) {
-        addValue(new String(bytes, StandardCharsets.UTF_8));
+    public void stringField(FieldInfo fieldInfo, String value) {
+        // TODO:liuyongheng 确定直接使用value 字符串，前后字符编码要一致
+//        addValue(new String(bytes, StandardCharsets.UTF_8));
+        addValue(value);
     }
 
     @Override

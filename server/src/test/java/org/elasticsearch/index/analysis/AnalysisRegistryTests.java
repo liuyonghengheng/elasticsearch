@@ -21,7 +21,7 @@ package org.elasticsearch.index.analysis;
 
 import com.carrotsearch.randomizedtesting.generators.RandomPicks;
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.MockTokenFilter;
+import org.apache.lucene.tests.analysis.MockTokenFilter;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.Tokenizer;
 import org.apache.lucene.analysis.en.EnglishAnalyzer;
@@ -177,7 +177,7 @@ public class AnalysisRegistryTests extends ESTestCase {
 
 
     public void testOverrideDefaultIndexAnalyzerIsUnsupported() {
-        Version version = VersionUtils.randomVersionBetween(random(), Version.V_6_0_0_alpha1, Version.CURRENT);
+        Version version = VersionUtils.randomVersionBetween(random(), Version.V_7_0_0, Version.CURRENT);
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, version).build();
         AnalyzerProvider<?> defaultIndex = new PreBuiltAnalyzerProvider("default_index", AnalyzerScope.INDEX, new EnglishAnalyzer());
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class,

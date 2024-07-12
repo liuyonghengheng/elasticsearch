@@ -47,6 +47,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
 
+import org.apache.commons.lang3.ArrayUtils;
 import static org.elasticsearch.common.xcontent.ObjectParser.fromList;
 
 /**
@@ -97,7 +98,7 @@ public class HighlightBuilder extends AbstractHighlighterBuilder<HighlightBuilde
             .highlightFilter(DEFAULT_HIGHLIGHT_FILTER).requireFieldMatch(DEFAULT_REQUIRE_FIELD_MATCH)
             .forceSource(DEFAULT_FORCE_SOURCE).fragmentCharSize(DEFAULT_FRAGMENT_CHAR_SIZE)
             .numberOfFragments(DEFAULT_NUMBER_OF_FRAGMENTS).encoder(DEFAULT_ENCODER)
-            .boundaryMaxScan(SimpleBoundaryScanner.DEFAULT_MAX_SCAN).boundaryChars(SimpleBoundaryScanner.DEFAULT_BOUNDARY_CHARS)
+            .boundaryMaxScan(SimpleBoundaryScanner.DEFAULT_MAX_SCAN).boundaryChars(ArrayUtils.toObject(SimpleBoundaryScanner.DEFAULT_BOUNDARY_CHARS))
             .boundaryScannerLocale(Locale.ROOT).noMatchSize(DEFAULT_NO_MATCH_SIZE).phraseLimit(DEFAULT_PHRASE_LIMIT).build();
 
     private final List<Field> fields;

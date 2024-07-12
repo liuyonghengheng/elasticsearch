@@ -248,7 +248,9 @@ public class ExpressionScriptEngine implements ScriptEngine {
         for (String variable : expr.variables) {
             try {
                 if (variable.equals("_score")) {
-                    bindings.add(new SortField("_score", SortField.Type.SCORE));
+                    // TODO:liuyongheng 这里改类型会不会有影响
+                    bindings.add("_score", DoubleValuesSource.SCORES);
+//                    bindings.add(new SortField("_score", SortField.Type.SCORE));
                     needsScores = true;
                 } else if (vars != null && vars.containsKey(variable)) {
                     bindFromParams(vars, bindings, variable);
@@ -299,7 +301,9 @@ public class ExpressionScriptEngine implements ScriptEngine {
         for (String variable : expr.variables) {
             try {
                 if (variable.equals("_score")) {
-                    bindings.add(new SortField("_score", SortField.Type.SCORE));
+                    // TODO:liuyongheng 这里改类型会不会有影响
+                    bindings.add("_score", DoubleValuesSource.SCORES);
+//                    bindings.add(new SortField("_score", SortField.Type.SCORE));
                     needsScores = true;
                 } else if (variable.equals("_value")) {
                     specialValue = new ReplaceableConstDoubleValueSource();
@@ -371,7 +375,9 @@ public class ExpressionScriptEngine implements ScriptEngine {
         for (String variable : expr.variables) {
             try {
                 if (variable.equals("_score")) {
-                    bindings.add(new SortField("_score", SortField.Type.SCORE));
+                    // TODO:liuyongheng 这里改类型会不会有影响
+                    bindings.add("_score", DoubleValuesSource.SCORES);
+//                    bindings.add(new SortField("_score", SortField.Type.SCORE));
                     needsScores = true;
                 } else if (variable.equals("_value")) {
                     specialValue = new ReplaceableConstDoubleValueSource();

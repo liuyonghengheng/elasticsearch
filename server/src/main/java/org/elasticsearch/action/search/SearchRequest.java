@@ -204,10 +204,10 @@ public class SearchRequest extends ActionRequest implements IndicesRequest.Repla
         } else {
             preFilterShardSize = in.readVInt();
         }
-        if (in.getVersion().onOrAfter(Version.V_6_3_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             allowPartialSearchResults = in.readOptionalBoolean();
         }
-        if (in.getVersion().onOrAfter(Version.V_6_7_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             localClusterAlias = in.readOptionalString();
             if (localClusterAlias != null) {
                 absoluteStartMillis = in.readVLong();
@@ -245,10 +245,10 @@ public class SearchRequest extends ActionRequest implements IndicesRequest.Repla
         } else {
             out.writeVInt(preFilterShardSize == null ? DEFAULT_BATCHED_REDUCE_SIZE : preFilterShardSize);
         }
-        if (out.getVersion().onOrAfter(Version.V_6_3_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeOptionalBoolean(allowPartialSearchResults);
         }
-        if (out.getVersion().onOrAfter(Version.V_6_7_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeOptionalString(localClusterAlias);
             if (localClusterAlias != null) {
                 out.writeVLong(absoluteStartMillis);

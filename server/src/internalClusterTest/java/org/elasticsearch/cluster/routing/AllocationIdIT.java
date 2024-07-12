@@ -19,7 +19,7 @@
 
 package org.elasticsearch.cluster.routing;
 
-import org.apache.lucene.store.SimpleFSDirectory;
+import org.apache.lucene.store.NIOFSDirectory;
 import org.elasticsearch.action.admin.cluster.allocation.ClusterAllocationExplanation;
 import org.elasticsearch.action.admin.indices.stats.ShardStats;
 import org.elasticsearch.action.index.IndexRequestBuilder;
@@ -136,7 +136,7 @@ public class AllocationIdIT extends ESIntegTestCase {
             assertThat(shardRouting.unassignedInfo().getReason(), equalTo(UnassignedInfo.Reason.ALLOCATION_FAILED));
         });
 
-        try(Store store = new Store(shardId, indexSettings, new SimpleFSDirectory(indexPath), new DummyShardLock(shardId))) {
+        try(Store store = new Store(shardId, indexSettings, new NIOFSDirectory(indexPath), new DummyShardLock(shardId))) {
             store.removeCorruptionMarker();
         }
 
@@ -219,7 +219,7 @@ public class AllocationIdIT extends ESIntegTestCase {
     }
 
     private void putFakeCorruptionMarker(IndexSettings indexSettings, ShardId shardId, Path indexPath) throws IOException {
-        try(Store store = new Store(shardId, indexSettings, new SimpleFSDirectory(indexPath), new DummyShardLock(shardId))) {
+        try(Store store = new Store(shardId, indexSettings, new NIOFSDirectory(indexPath), new DummyShardLock(shardId))) {
             store.markStoreCorrupted(new IOException("fake ioexception"));
         }
     }

@@ -24,7 +24,7 @@ import com.fasterxml.jackson.core.exc.InputCoercionException;
 import org.apache.lucene.document.DoublePoint;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FloatPoint;
-import org.apache.lucene.document.HalfFloatPoint;
+import org.apache.lucene.sandbox.document.HalfFloatPoint;
 import org.apache.lucene.document.IntPoint;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.SortedNumericDocValuesField;

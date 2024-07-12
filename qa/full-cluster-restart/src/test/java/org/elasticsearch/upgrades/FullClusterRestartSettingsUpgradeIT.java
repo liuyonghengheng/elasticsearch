@@ -42,62 +42,62 @@ import static org.hamcrest.Matchers.equalTo;
 
 public class FullClusterRestartSettingsUpgradeIT extends AbstractFullClusterRestartTestCase {
 
-    public void testRemoteClusterSettingsUpgraded() throws IOException {
-        assumeTrue("skip_unavailable did not exist until 6.1.0", getOldClusterVersion().onOrAfter(Version.V_6_1_0));
-        assumeTrue("settings automatically upgraded since 6.5.0", getOldClusterVersion().before(Version.V_6_5_0));
-        if (isRunningAgainstOldCluster()) {
-            final Request putSettingsRequest = new Request("PUT", "/_cluster/settings");
-            try (XContentBuilder builder = jsonBuilder()) {
-                builder.startObject();
-                {
-                    builder.startObject("persistent");
-                    {
-                        builder.field("search.remote.foo.skip_unavailable", true);
-                        builder.field("search.remote.foo.seeds", Collections.singletonList("localhost:9200"));
-                    }
-                    builder.endObject();
-                }
-                builder.endObject();
-                putSettingsRequest.setJsonEntity(Strings.toString(builder));
-            }
-            client().performRequest(putSettingsRequest);
-
-            final Request getSettingsRequest = new Request("GET", "/_cluster/settings");
-            final Response response = client().performRequest(getSettingsRequest);
-            try (XContentParser parser = createParser(JsonXContent.jsonXContent, response.getEntity().getContent())) {
-                final ClusterGetSettingsResponse clusterGetSettingsResponse = ClusterGetSettingsResponse.fromXContent(parser);
-                final Settings settings = clusterGetSettingsResponse.getPersistentSettings();
-
-                assertTrue(SEARCH_REMOTE_CLUSTER_SKIP_UNAVAILABLE.getConcreteSettingForNamespace("foo").exists(settings));
-                assertTrue(SEARCH_REMOTE_CLUSTER_SKIP_UNAVAILABLE.getConcreteSettingForNamespace("foo").get(settings));
-                assertTrue(SEARCH_REMOTE_CLUSTERS_SEEDS.getConcreteSettingForNamespace("foo").exists(settings));
-                assertThat(
-                        SEARCH_REMOTE_CLUSTERS_SEEDS.getConcreteSettingForNamespace("foo").get(settings),
-                        equalTo(Collections.singletonList("localhost:9200")));
-            }
-
-            assertSettingDeprecationsAndWarnings(new Setting<?>[]{
-                    SEARCH_REMOTE_CLUSTER_SKIP_UNAVAILABLE.getConcreteSettingForNamespace("foo"),
-                    SEARCH_REMOTE_CLUSTERS_SEEDS.getConcreteSettingForNamespace("foo")});
-        } else {
-            final Request getSettingsRequest = new Request("GET", "/_cluster/settings");
-            final Response getSettingsResponse = client().performRequest(getSettingsRequest);
-            try (XContentParser parser = createParser(JsonXContent.jsonXContent, getSettingsResponse.getEntity().getContent())) {
-                final ClusterGetSettingsResponse clusterGetSettingsResponse = ClusterGetSettingsResponse.fromXContent(parser);
-                final Settings settings = clusterGetSettingsResponse.getPersistentSettings();
-
-                assertFalse(SEARCH_REMOTE_CLUSTER_SKIP_UNAVAILABLE.getConcreteSettingForNamespace("foo").exists(settings));
-                assertTrue(
-                        settings.toString(),
-                        RemoteClusterService.REMOTE_CLUSTER_SKIP_UNAVAILABLE.getConcreteSettingForNamespace("foo").exists(settings));
-                assertTrue(RemoteClusterService.REMOTE_CLUSTER_SKIP_UNAVAILABLE.getConcreteSettingForNamespace("foo").get(settings));
-                assertFalse(SEARCH_REMOTE_CLUSTERS_SEEDS.getConcreteSettingForNamespace("foo").exists(settings));
-                assertTrue(SniffConnectionStrategy.REMOTE_CLUSTER_SEEDS.getConcreteSettingForNamespace("foo").exists(settings));
-                assertThat(
-                        SniffConnectionStrategy.REMOTE_CLUSTER_SEEDS.getConcreteSettingForNamespace("foo").get(settings),
-                        equalTo(Collections.singletonList("localhost:9200")));
-            }
-        }
-    }
+//    public void testRemoteClusterSettingsUpgraded() throws IOException {
+//        assumeTrue("skip_unavailable did not exist until 6.1.0", getOldClusterVersion().onOrAfter(Version.V_6_1_0));
+//        assumeTrue("settings automatically upgraded since 6.5.0", getOldClusterVersion().before(Version.V_6_5_0));
+//        if (isRunningAgainstOldCluster()) {
+//            final Request putSettingsRequest = new Request("PUT", "/_cluster/settings");
+//            try (XContentBuilder builder = jsonBuilder()) {
+//                builder.startObject();
+//                {
+//                    builder.startObject("persistent");
+//                    {
+//                        builder.field("search.remote.foo.skip_unavailable", true);
+//                        builder.field("search.remote.foo.seeds", Collections.singletonList("localhost:9200"));
+//                    }
+//                    builder.endObject();
+//                }
+//                builder.endObject();
+//                putSettingsRequest.setJsonEntity(Strings.toString(builder));
+//            }
+//            client().performRequest(putSettingsRequest);
+//
+//            final Request getSettingsRequest = new Request("GET", "/_cluster/settings");
+//            final Response response = client().performRequest(getSettingsRequest);
+//            try (XContentParser parser = createParser(JsonXContent.jsonXContent, response.getEntity().getContent())) {
+//                final ClusterGetSettingsResponse clusterGetSettingsResponse = ClusterGetSettingsResponse.fromXContent(parser);
+//                final Settings settings = clusterGetSettingsResponse.getPersistentSettings();
+//
+//                assertTrue(SEARCH_REMOTE_CLUSTER_SKIP_UNAVAILABLE.getConcreteSettingForNamespace("foo").exists(settings));
+//                assertTrue(SEARCH_REMOTE_CLUSTER_SKIP_UNAVAILABLE.getConcreteSettingForNamespace("foo").get(settings));
+//                assertTrue(SEARCH_REMOTE_CLUSTERS_SEEDS.getConcreteSettingForNamespace("foo").exists(settings));
+//                assertThat(
+//                        SEARCH_REMOTE_CLUSTERS_SEEDS.getConcreteSettingForNamespace("foo").get(settings),
+//                        equalTo(Collections.singletonList("localhost:9200")));
+//            }
+//
+//            assertSettingDeprecationsAndWarnings(new Setting<?>[]{
+//                    SEARCH_REMOTE_CLUSTER_SKIP_UNAVAILABLE.getConcreteSettingForNamespace("foo"),
+//                    SEARCH_REMOTE_CLUSTERS_SEEDS.getConcreteSettingForNamespace("foo")});
+//        } else {
+//            final Request getSettingsRequest = new Request("GET", "/_cluster/settings");
+//            final Response getSettingsResponse = client().performRequest(getSettingsRequest);
+//            try (XContentParser parser = createParser(JsonXContent.jsonXContent, getSettingsResponse.getEntity().getContent())) {
+//                final ClusterGetSettingsResponse clusterGetSettingsResponse = ClusterGetSettingsResponse.fromXContent(parser);
+//                final Settings settings = clusterGetSettingsResponse.getPersistentSettings();
+//
+//                assertFalse(SEARCH_REMOTE_CLUSTER_SKIP_UNAVAILABLE.getConcreteSettingForNamespace("foo").exists(settings));
+//                assertTrue(
+//                        settings.toString(),
+//                        RemoteClusterService.REMOTE_CLUSTER_SKIP_UNAVAILABLE.getConcreteSettingForNamespace("foo").exists(settings));
+//                assertTrue(RemoteClusterService.REMOTE_CLUSTER_SKIP_UNAVAILABLE.getConcreteSettingForNamespace("foo").get(settings));
+//                assertFalse(SEARCH_REMOTE_CLUSTERS_SEEDS.getConcreteSettingForNamespace("foo").exists(settings));
+//                assertTrue(SniffConnectionStrategy.REMOTE_CLUSTER_SEEDS.getConcreteSettingForNamespace("foo").exists(settings));
+//                assertThat(
+//                        SniffConnectionStrategy.REMOTE_CLUSTER_SEEDS.getConcreteSettingForNamespace("foo").get(settings),
+//                        equalTo(Collections.singletonList("localhost:9200")));
+//            }
+//        }
+//    }
 
 }

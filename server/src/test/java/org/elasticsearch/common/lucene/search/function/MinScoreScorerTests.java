@@ -27,8 +27,8 @@ import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.TwoPhaseIterator;
 import org.apache.lucene.search.Weight;
-import org.apache.lucene.util.LuceneTestCase;
-import org.apache.lucene.util.TestUtil;
+import org.apache.lucene.tests.util.LuceneTestCase;
+import org.apache.lucene.tests.util.TestUtil;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -70,10 +70,10 @@ public class MinScoreScorerTests extends LuceneTestCase {
 
     private static Weight fakeWeight() {
         return new Weight(new MatchAllDocsQuery()) {
-            @Override
-            public void extractTerms(Set<Term> terms) {
-
-            }
+//            @Override
+//            public void extractTerms(Set<Term> terms) {
+//
+//            }
 
             @Override
             public Explanation explain(LeafReaderContext context, int doc) throws IOException {

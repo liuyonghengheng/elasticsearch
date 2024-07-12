@@ -101,21 +101,23 @@ public class JoinTaskExecutorTests extends ESTestCase {
             });
         }
 
-        if (minNodeVersion.before(Version.V_6_0_0)) {
-            Version tooHigh = incompatibleFutureVersion(minNodeVersion);
-            expectThrows(IllegalStateException.class, () -> {
-                if (randomBoolean()) {
-                    JoinTaskExecutor.ensureNodesCompatibility(tooHigh, nodes);
-                } else {
-                    JoinTaskExecutor.ensureNodesCompatibility(tooHigh, minNodeVersion, maxNodeVersion);
-                }
-            });
-        }
+//        if (minNodeVersion.before(Version.V_6_0_0)) {
+//            Version tooHigh = incompatibleFutureVersion(minNodeVersion);
+//            expectThrows(IllegalStateException.class, () -> {
+//                if (randomBoolean()) {
+//                    JoinTaskExecutor.ensureNodesCompatibility(tooHigh, nodes);
+//                } else {
+//                    JoinTaskExecutor.ensureNodesCompatibility(tooHigh, minNodeVersion, maxNodeVersion);
+//                }
+//            });
+//        }
 
-        if (minNodeVersion.onOrAfter(Version.V_7_0_0)) {
-            Version oldMajor = Version.V_6_4_0.minimumCompatibilityVersion();
-            expectThrows(IllegalStateException.class, () -> JoinTaskExecutor.ensureMajorVersionBarrier(oldMajor, minNodeVersion));
-        }
+        // 7版本已经支持
+//        if (minNodeVersion.onOrAfter(Version.V_7_0_0)) {
+////            Version oldMajor = Version.V_6_4_0.minimumCompatibilityVersion();
+//            Version oldMajor = Version.V_7_0_0.minimumCompatibilityVersion();
+//            expectThrows(IllegalStateException.class, () -> JoinTaskExecutor.ensureMajorVersionBarrier(oldMajor, minNodeVersion));
+//        }
 
         final Version minGoodVersion = maxNodeVersion.major == minNodeVersion.major ?
             // we have to stick with the same major

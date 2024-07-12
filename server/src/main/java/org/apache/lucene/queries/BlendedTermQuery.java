@@ -18,29 +18,14 @@
  */
 package org.apache.lucene.queries;
 
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.IndexReaderContext;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermStates;
-import org.apache.lucene.index.TermState;
-import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.index.*;
+import org.apache.lucene.search.*;
 import org.apache.lucene.search.BooleanClause.Occur;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.BoostQuery;
-import org.apache.lucene.search.DisjunctionMaxQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryVisitor;
-import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.InPlaceMergeSorter;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -79,17 +64,21 @@ public abstract class BlendedTermQuery extends Query {
         this.boosts = boosts;
     }
 
+    // TODO:liuyongheng rewrite(IndexReader reader) 不再推荐使用，后面使用
+    //  rewrite(IndexSearcher indexSearcher) 代替
     @Override
     public Query rewrite(IndexReader reader) throws IOException {
         Query rewritten = super.rewrite(reader);
         if (rewritten != this) {
             return rewritten;
         }
-        IndexReaderContext context = reader.getContext();
+//        IndexReaderContext context = reader.getContext();
+        // TODO:liuyongheng 看一下这里每次生成searcher是否有影响
+        IndexSearcher searcher = new IndexSearcher(reader);
         TermStates[] ctx = new TermStates[terms.length];
         int[] docFreqs = new int[ctx.length];
         for (int i = 0; i < terms.length; i++) {
-            ctx[i] = TermStates.build(context, terms[i], true);
+            ctx[i] = TermStates.build(searcher, terms[i], true);
             docFreqs[i] = ctx[i].docFreq();
         }
 
@@ -256,7 +245,7 @@ public abstract class BlendedTermQuery extends Query {
                 return;
             }
         }
-        visitor.getSubVisitor(BooleanClause.Occur.SHOULD, this).consumeTerms(this, terms);
+        visitor.getSubVisitor(Occur.SHOULD, this).consumeTerms(this, terms);
     }
 
     private class TermAndBoost implements Comparable<TermAndBoost> {
@@ -356,9 +345,9 @@ public abstract class BlendedTermQuery extends Query {
                     if ((maxTermFrequency >= 1f && docFreqs[i] > maxTermFrequency)
                             || (docFreqs[i] > (int) Math.ceil(maxTermFrequency
                             * maxDoc))) {
-                        highBuilder.add(query, BooleanClause.Occur.SHOULD);
+                        highBuilder.add(query, Occur.SHOULD);
                     } else {
-                        lowBuilder.add(query, BooleanClause.Occur.SHOULD);
+                        lowBuilder.add(query, Occur.SHOULD);
                     }
                 }
                 BooleanQuery high = highBuilder.build();
@@ -373,8 +362,8 @@ public abstract class BlendedTermQuery extends Query {
                     return low;
                 } else {
                     return new BooleanQuery.Builder()
-                        .add(high, BooleanClause.Occur.SHOULD)
-                        .add(low, BooleanClause.Occur.MUST)
+                        .add(high, Occur.SHOULD)
+                        .add(low, Occur.MUST)
                         .build();
                 }
             }

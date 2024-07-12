@@ -113,10 +113,10 @@ public final class ProfileWeight extends Weight {
         return subQueryWeight.explain(context, doc);
     }
 
-    @Override
-    public void extractTerms(Set<Term> set) {
-        subQueryWeight.extractTerms(set);
-    }
+//    @Override
+//    public void extractTerms(Set<Term> set) {
+//        subQueryWeight.extractTerms(set);
+//    }
 
     @Override
     public boolean isCacheable(LeafReaderContext ctx) {

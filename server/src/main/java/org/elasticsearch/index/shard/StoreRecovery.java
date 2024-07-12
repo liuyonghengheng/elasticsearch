@@ -25,6 +25,7 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.index.SegmentInfos;
+import org.apache.lucene.misc.store.HardlinkCopyDirectoryWrapper;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FilterDirectory;
@@ -124,8 +125,9 @@ final class StoreRecovery {
             Sort indexSort = indexShard.getIndexSort();
             final boolean hasNested = indexShard.mapperService().hasNested();
             final boolean isSplit = sourceMetadata.getNumberOfShards() < indexShard.indexSettings().getNumberOfShards();
-            assert isSplit == false || sourceMetadata.getCreationVersion().onOrAfter(Version.V_6_0_0_alpha1) : "for split we require a " +
-                "single type but the index is created before 6.0.0";
+            // 一定大于6版本
+//            assert isSplit == false || sourceMetadata.getCreationVersion().onOrAfter(Version.V_7_0_0) : "for split we require a " +
+//                "single type but the index is created before 6.0.0";
             ActionListener.completeWith(recoveryListener(indexShard, listener), () -> {
                 logger.debug("starting recovery from local shards {}", shards);
                 try {
@@ -158,7 +160,8 @@ final class StoreRecovery {
         assert sources.length > 0;
         final int luceneIndexCreatedVersionMajor = Lucene.readSegmentInfos(sources[0]).getIndexCreatedVersionMajor();
 
-        final Directory hardLinkOrCopyTarget = new org.apache.lucene.store.HardlinkCopyDirectoryWrapper(target);
+//        final Directory hardLinkOrCopyTarget = new org.apache.lucene.store.HardlinkCopyDirectoryWrapper(target);
+        final Directory hardLinkOrCopyTarget =  new HardlinkCopyDirectoryWrapper(target);
 
         IndexWriterConfig iwc = new IndexWriterConfig(null)
             .setSoftDeletesField(Lucene.SOFT_DELETES_FIELD)

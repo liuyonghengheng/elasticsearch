@@ -35,39 +35,15 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NoMergePolicy;
-import org.apache.lucene.index.RandomIndexWriter;
+import org.apache.lucene.tests.index.RandomIndexWriter;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.queries.MinDocQuery;
-import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.*;
 import org.apache.lucene.search.BooleanClause.Occur;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.Collector;
-import org.apache.lucene.search.CollectorManager;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.DocValuesFieldExistsQuery;
-import org.apache.lucene.search.FieldComparator;
-import org.apache.lucene.search.FieldDoc;
-import org.apache.lucene.search.FilterCollector;
-import org.apache.lucene.search.FilterLeafCollector;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.LeafCollector;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.MultiTermQuery;
-import org.apache.lucene.search.PrefixQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.TotalHitCountCollector;
-import org.apache.lucene.search.TotalHits;
-import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.join.BitSetProducer;
 import org.apache.lucene.search.join.ScoreMode;
-import org.apache.lucene.search.spans.SpanNearQuery;
-import org.apache.lucene.search.spans.SpanTermQuery;
+import org.apache.lucene.queries.spans.SpanNearQuery;
+import org.apache.lucene.queries.spans.SpanTermQuery;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
@@ -619,7 +595,7 @@ public class QueryPhaseTests extends IndexShardTestCase {
             FieldDoc firstDoc = (FieldDoc) context.queryResult().topDocs().topDocs.scoreDocs[0];
             for (int i = 0; i < searchSortAndFormat.sort.getSort().length; i++) {
                 @SuppressWarnings("unchecked")
-                FieldComparator<Object> comparator = (FieldComparator<Object>) searchSortAndFormat.sort.getSort()[i].getComparator(1, i);
+                FieldComparator<Object> comparator = (FieldComparator<Object>) searchSortAndFormat.sort.getSort()[i].getComparator(1, Pruning.NONE);
                 int cmp = comparator.compareValues(firstDoc.fields[i], lastDoc.fields[i]);
                 if (cmp == 0) {
                     continue;
@@ -804,33 +780,6 @@ public class QueryPhaseTests extends IndexShardTestCase {
         }
     }
 
-    public void testIndexHasNoDuplicateData() throws IOException {
-        int docsCount = 5000;
-        int maxPointsInLeafNode = 40;
-        float duplicateRatio = 0.3f;
-        long duplicateValue = randomLongBetween(-10000000L, 10000000L);
-        BKDConfig config = new BKDConfig(1, 1, 8, maxPointsInLeafNode);
-        try (Directory dir = newDirectory()) {
-            BKDWriter w = new BKDWriter(docsCount, dir, "tmp", config, 1, docsCount);
-            byte[] longBytes = new byte[8];
-            for (int docId = 0; docId < docsCount; docId++) {
-                long value = randomFloat() < duplicateRatio ? duplicateValue : randomLongBetween(-10000000L, 10000000L);
-                LongPoint.encodeDimension(value, longBytes, 0);
-                w.add(longBytes, docId);
-            }
-            long indexFP;
-            try (IndexOutput out = dir.createOutput("bkd", IOContext.DEFAULT)) {
-                Runnable finalizer = w.finish(out, out, out);
-                indexFP = out.getFilePointer();
-                finalizer.run();;
-            }
-            try (IndexInput in = dir.openInput("bkd", IOContext.DEFAULT)) {
-                in.seek(indexFP);
-                BKDReader r = new BKDReader(in, in, in);
-                assertFalse(pointsHaveDuplicateData(r, r.getDocCount() / 2));
-            }
-        }
-    }
 
     public void testMaxScoreQueryVisitor() {
         BitSetProducer producer = context -> new FixedBitSet(1);

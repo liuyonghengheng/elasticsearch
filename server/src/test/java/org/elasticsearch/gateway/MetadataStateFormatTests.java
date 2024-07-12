@@ -24,9 +24,9 @@ import org.apache.lucene.store.ChecksumIndexInput;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
-import org.apache.lucene.store.MockDirectoryWrapper;
-import org.apache.lucene.store.SimpleFSDirectory;
-import org.apache.lucene.util.LuceneTestCase;
+import org.apache.lucene.tests.store.MockDirectoryWrapper;
+import org.apache.lucene.store.NIOFSDirectory;
+import org.apache.lucene.tests.util.LuceneTestCase;
 import org.elasticsearch.cluster.ClusterModule;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
@@ -180,7 +180,7 @@ public class MetadataStateFormatTests extends ESTestCase {
     }
 
     public static void corruptFile(Path fileToCorrupt, Logger logger) throws IOException {
-        try (SimpleFSDirectory dir = new SimpleFSDirectory(fileToCorrupt.getParent())) {
+        try (NIOFSDirectory dir = new NIOFSDirectory(fileToCorrupt.getParent())) {
             long checksumBeforeCorruption;
             try (IndexInput input = dir.openInput(fileToCorrupt.getFileName().toString(), IOContext.DEFAULT)) {
                 checksumBeforeCorruption = CodecUtil.retrieveChecksum(input);
@@ -232,7 +232,7 @@ public class MetadataStateFormatTests extends ESTestCase {
 
     private static void ensureOnlyOneStateFile(Path[] paths) throws IOException {
         for (Path path : paths) {
-            try (Directory dir = new SimpleFSDirectory(path.resolve(MetadataStateFormat.STATE_DIR_NAME))) {
+            try (Directory dir = new NIOFSDirectory(path.resolve(MetadataStateFormat.STATE_DIR_NAME))) {
                 assertThat(dir.listAll().length, equalTo(1));
             }
         }

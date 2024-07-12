@@ -20,7 +20,7 @@
 package org.apache.lucene.queries;
 
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.MockAnalyzer;
+import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.DirectoryReader;
@@ -29,12 +29,12 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryUtils;
+import org.apache.lucene.tests.search.QueryUtils;
 import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.spans.SpanNearQuery;
-import org.apache.lucene.search.spans.SpanOrQuery;
-import org.apache.lucene.search.spans.SpanQuery;
-import org.apache.lucene.search.spans.SpanTermQuery;
+import org.apache.lucene.queries.spans.SpanNearQuery;
+import org.apache.lucene.queries.spans.SpanOrQuery;
+import org.apache.lucene.queries.spans.SpanQuery;
+import org.apache.lucene.queries.spans.SpanTermQuery;
 import org.apache.lucene.store.Directory;
 import org.elasticsearch.test.ESTestCase;
 
@@ -44,7 +44,7 @@ public class SpanMatchNoDocsQueryTests extends ESTestCase {
     public void testSimple() throws Exception {
         SpanMatchNoDocsQuery query = new SpanMatchNoDocsQuery("field", "a good reason");
         assertEquals(query.toString(), "SpanMatchNoDocsQuery(\"a good reason\")");
-        Query rewrite = query.rewrite(null);
+        Query rewrite = query.rewrite((IndexSearcher) null);
         assertTrue(rewrite instanceof SpanMatchNoDocsQuery);
         assertEquals(rewrite.toString(), "SpanMatchNoDocsQuery(\"a good reason\")");
     }

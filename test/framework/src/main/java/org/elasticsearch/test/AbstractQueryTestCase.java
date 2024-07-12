@@ -25,7 +25,7 @@ import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.spans.SpanBoostQuery;
+//import org.apache.lucene.queries.spans.SpanBoostQuery;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.support.PlainActionFuture;
@@ -504,10 +504,10 @@ public abstract class AbstractQueryTestCase<QB extends AbstractQueryBuilder<QB>>
         }
         if (query != null) {
             if (queryBuilder.boost() != AbstractQueryBuilder.DEFAULT_BOOST) {
-                assertThat(query, either(instanceOf(BoostQuery.class)).or(instanceOf(SpanBoostQuery.class))
+                assertThat(query, either(instanceOf(BoostQuery.class)).or(instanceOf(BoostQuery.class))
                         .or(instanceOf(MatchNoDocsQuery.class)));
-                if (query instanceof SpanBoostQuery) {
-                    SpanBoostQuery spanBoostQuery = (SpanBoostQuery) query;
+                if (query instanceof BoostQuery) {
+                    BoostQuery spanBoostQuery = (BoostQuery) query;
                     assertThat(spanBoostQuery.getBoost(), equalTo(queryBuilder.boost()));
                     query = spanBoostQuery.getQuery();
                 } else if (query instanceof BoostQuery) {

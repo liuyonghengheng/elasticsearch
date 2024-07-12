@@ -25,7 +25,7 @@ import com.carrotsearch.randomizedtesting.generators.RandomStrings;
 import org.apache.lucene.index.SortedNumericDocValues;
 import org.apache.lucene.index.SortedSetDocValues;
 import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.TestUtil;
+import org.apache.lucene.tests.util.TestUtil;
 import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.index.fielddata.AbstractSortedNumericDocValues;
 import org.elasticsearch.index.fielddata.AbstractSortedSetDocValues;
@@ -142,6 +142,11 @@ public class MissingValuesTests extends ESTestCase {
                     return NO_MORE_ORDS;
                 }
             }
+
+            @Override
+            public int docValueCount() {
+                return ords[doc].length;
+            }
         };
 
         final BytesRef existingMissing = RandomPicks.randomFrom(random(), values);
@@ -233,6 +238,11 @@ public class MissingValuesTests extends ESTestCase {
 
             @Override
             public long nextOrd() throws IOException {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public int docValueCount() {
                 throw new UnsupportedOperationException();
             }
 

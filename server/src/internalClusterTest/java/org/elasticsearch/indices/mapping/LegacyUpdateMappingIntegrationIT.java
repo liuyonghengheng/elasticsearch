@@ -61,7 +61,8 @@ public class LegacyUpdateMappingIntegrationIT extends ESIntegTestCase {
                     .admin()
                     .indices()
                     .prepareCreate("test")
-                    .setSettings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.V_6_3_0).build())
+//                    .setSettings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.V_6_3_0).build())
+                    .setSettings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.V_7_0_0).build())
                     .addMapping(MapperService.DEFAULT_MAPPING, defaultMapping)
                     .get();
         }

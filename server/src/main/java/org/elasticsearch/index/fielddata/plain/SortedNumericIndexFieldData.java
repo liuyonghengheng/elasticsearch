@@ -19,7 +19,7 @@
 
 package org.elasticsearch.index.fielddata.plain;
 
-import org.apache.lucene.document.HalfFloatPoint;
+import org.apache.lucene.sandbox.document.HalfFloatPoint;
 import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.LeafReader;

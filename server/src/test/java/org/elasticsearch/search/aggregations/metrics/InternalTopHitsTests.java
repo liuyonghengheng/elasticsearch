@@ -20,13 +20,7 @@
 package org.elasticsearch.search.aggregations.metrics;
 
 import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.search.FieldComparator;
-import org.apache.lucene.search.FieldDoc;
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.TopFieldDocs;
-import org.apache.lucene.search.TotalHits;
+import org.apache.lucene.search.*;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
@@ -240,7 +234,7 @@ public class InternalTopHitsTests extends InternalAggregationTestCase<InternalTo
         if (sortedByFields) {
             dataNodeComparator = sortFieldsComparator(((TopFieldDocs) inputs.get(0).getTopDocs().topDocs).fields);
         } else {
-            dataNodeComparator = scoreComparator(); 
+            dataNodeComparator = scoreComparator();
         }
         Comparator<ScoreDoc> reducedComparator = dataNodeComparator.thenComparing(s -> s.shardIndex);
         SearchHits actualHits = reduced.getHits();
@@ -327,7 +321,7 @@ public class InternalTopHitsTests extends InternalAggregationTestCase<InternalTo
         FieldComparator[] comparators = new FieldComparator[sortFields.length];
         for (int i = 0; i < sortFields.length; i++) {
             // Values passed to getComparator shouldn't matter
-            comparators[i] = sortFields[i].getComparator(0, 0);
+            comparators[i] = sortFields[i].getComparator(0, Pruning.NONE);
         }
         return (lhs, rhs) -> {
             FieldDoc l = (FieldDoc) lhs;

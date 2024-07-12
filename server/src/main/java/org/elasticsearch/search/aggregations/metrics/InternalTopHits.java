@@ -18,11 +18,7 @@
  */
 package org.elasticsearch.search.aggregations.metrics;
 
-import org.apache.lucene.search.FieldDoc;
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.TopFieldDocs;
+import org.apache.lucene.search.*;
 import org.apache.lucene.search.TotalHits.Relation;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -48,7 +44,7 @@ public class InternalTopHits extends InternalAggregation implements TopHits {
     private SearchHits searchHits;
 
     public InternalTopHits(String name, int from, int size, TopDocsAndMaxScore topDocs, SearchHits searchHits,
-            Map<String, Object> metadata) {
+                           Map<String, Object> metadata) {
         super(name, metadata);
         this.from = from;
         this.size = size;
@@ -123,7 +119,7 @@ public class InternalTopHits extends InternalAggregation implements TopHits {
                 shardDocs[i] = topHitsAgg.topDocs.topDocs;
                 shardHits[i] = topHitsAgg.searchHits;
             }
-            reducedTopDocs = TopDocs.merge(sort, from, size, (TopFieldDocs[]) shardDocs, true);
+            reducedTopDocs = TopDocs.merge(sort, from, size, (TopFieldDocs[]) shardDocs);
         } else {
             shardDocs = new TopDocs[aggregations.size()];
             for (int i = 0; i < shardDocs.length; i++) {
@@ -131,7 +127,7 @@ public class InternalTopHits extends InternalAggregation implements TopHits {
                 shardDocs[i] = topHitsAgg.topDocs.topDocs;
                 shardHits[i] = topHitsAgg.searchHits;
             }
-            reducedTopDocs = TopDocs.merge(from, size, shardDocs, true);
+            reducedTopDocs = TopDocs.merge(from, size, shardDocs);
         }
 
         float maxScore = Float.NaN;

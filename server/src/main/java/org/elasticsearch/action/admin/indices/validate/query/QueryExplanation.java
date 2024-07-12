@@ -81,7 +81,7 @@ public class QueryExplanation implements Writeable, ToXContentFragment {
     private String error;
 
     public QueryExplanation(StreamInput in) throws IOException {
-        if (in.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             index = in.readOptionalString();
         } else {
             index = in.readString();
@@ -123,7 +123,7 @@ public class QueryExplanation implements Writeable, ToXContentFragment {
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        if (out.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeOptionalString(index);
         } else {
             out.writeString(index);

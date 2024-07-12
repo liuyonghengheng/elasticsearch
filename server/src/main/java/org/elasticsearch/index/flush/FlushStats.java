@@ -42,7 +42,7 @@ public class FlushStats implements Writeable, ToXContentFragment {
     public FlushStats(StreamInput in) throws IOException {
         total = in.readVLong();
         totalTimeInMillis = in.readVLong();
-        if (in.getVersion().onOrAfter(Version.V_6_3_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             periodic = in.readVLong();
         }
     }
@@ -122,7 +122,7 @@ public class FlushStats implements Writeable, ToXContentFragment {
     public void writeTo(StreamOutput out) throws IOException {
         out.writeVLong(total);
         out.writeVLong(totalTimeInMillis);
-        if (out.getVersion().onOrAfter(Version.V_6_3_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeVLong(periodic);
         }
     }

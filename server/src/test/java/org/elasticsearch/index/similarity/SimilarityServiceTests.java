@@ -23,7 +23,7 @@ import org.apache.lucene.search.CollectionStatistics;
 import org.apache.lucene.search.TermStatistics;
 import org.apache.lucene.search.similarities.BooleanSimilarity;
 import org.apache.lucene.search.similarities.Similarity;
-import org.apache.lucene.search.similarity.LegacyBM25Similarity;
+import org.apache.lucene.similarity.LegacyBM25Similarity;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.IndexSettings;

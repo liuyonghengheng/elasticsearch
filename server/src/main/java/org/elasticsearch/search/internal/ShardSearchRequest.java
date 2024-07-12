@@ -197,12 +197,12 @@ public class ShardSearchRequest extends TransportRequest implements IndicesReque
         clusterAlias = in.readOptionalString();
         if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             allowPartialSearchResults = in.readBoolean();
-        } else if (in.getVersion().onOrAfter(Version.V_6_3_0)) {
+        } else if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             allowPartialSearchResults = in.readOptionalBoolean();
         } else {
             allowPartialSearchResults = false;
         }
-        if (in.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             indexRoutings = in.readStringArray();
             preference = in.readOptionalString();
         } else {
@@ -274,11 +274,11 @@ public class ShardSearchRequest extends TransportRequest implements IndicesReque
         out.writeOptionalString(clusterAlias);
         if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeBoolean(allowPartialSearchResults);
-        } else if (out.getVersion().onOrAfter(Version.V_6_3_0)) {
+        } else if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeOptionalBoolean(allowPartialSearchResults);
         }
         if (asKey == false) {
-            if (out.getVersion().onOrAfter(Version.V_6_4_0)) {
+            if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
                 out.writeStringArray(indexRoutings);
                 out.writeOptionalString(preference);
             }

@@ -20,7 +20,7 @@ package org.apache.lucene.queries;
 
 import org.apache.lucene.document.BinaryDocValuesField;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.search.BaseRangeFieldQueryTestCase;
+import org.apache.lucene.tests.search.BaseRangeFieldQueryTestCase;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.index.mapper.RangeFieldMapper;

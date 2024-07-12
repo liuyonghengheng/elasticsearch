@@ -20,8 +20,8 @@
 package org.elasticsearch.index.mapper;
 
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.MockLowerCaseFilter;
-import org.apache.lucene.analysis.MockTokenizer;
+import org.apache.lucene.tests.analysis.MockLowerCaseFilter;
+import org.apache.lucene.tests.analysis.MockTokenizer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.core.LowerCaseFilter;
 import org.apache.lucene.analysis.core.WhitespaceTokenizer;
@@ -56,7 +56,7 @@ import java.util.Map;
 
 import static java.util.Collections.singletonList;
 import static java.util.Collections.singletonMap;
-import static org.apache.lucene.analysis.BaseTokenStreamTestCase.assertTokenStreamContents;
+import static org.apache.lucene.tests.analysis.BaseTokenStreamTestCase.assertTokenStreamContents;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;

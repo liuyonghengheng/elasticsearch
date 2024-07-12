@@ -26,24 +26,12 @@ import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.RandomIndexWriter;
+import org.apache.lucene.search.*;
+import org.apache.lucene.tests.index.RandomIndexWriter;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.search.Explanation;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.LRUQueryCache;
-import org.apache.lucene.search.LeafCollector;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryCachingPolicy;
-import org.apache.lucene.search.RandomApproximationQuery;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.ScorerSupplier;
-import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TotalHitCountCollector;
-import org.apache.lucene.search.Weight;
+import org.apache.lucene.tests.search.RandomApproximationQuery;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.util.TestUtil;
+import org.apache.lucene.tests.util.TestUtil;
 import org.elasticsearch.core.internal.io.IOUtils;
 import org.elasticsearch.search.internal.ContextIndexSearcher;
 import org.elasticsearch.search.profile.ProfileResult;
@@ -227,10 +215,10 @@ public class QueryProfilerTests extends ESTestCase {
         @Override
         public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
             return new Weight(this) {
-                @Override
-                public void extractTerms(Set<Term> terms) {
-                    throw new UnsupportedOperationException();
-                }
+//                @Override
+//                public void extractTerms(Set<Term> terms) {
+//                    throw new UnsupportedOperationException();
+//                }
 
                 @Override
                 public Explanation explain(LeafReaderContext context, int doc) throws IOException {
@@ -263,6 +251,11 @@ public class QueryProfilerTests extends ESTestCase {
                     return true;
                 }
             };
+        }
+
+        // TODO:liuyongheng 看一下要不要实现
+        @Override
+        public void visit(QueryVisitor queryVisitor) {
         }
     }
 

@@ -24,7 +24,8 @@ esplugin {
 }
 
 dependencies {
-  api "org.apache.lucene:lucene-analyzers-stempel:${versions.lucene}"
+//  api "org.apache.lucene:lucene-analyzers-stempel:${versions.lucene}"
+  api "org.apache.lucene:lucene-analyzers-stempel:8.11.3"
 }
 
 restResources {

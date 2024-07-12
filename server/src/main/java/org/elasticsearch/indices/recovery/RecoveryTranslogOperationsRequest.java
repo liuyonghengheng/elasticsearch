@@ -106,18 +106,18 @@ public class RecoveryTranslogOperationsRequest extends RecoveryTransportRequest 
         shardId = new ShardId(in);
         operations = Translog.readOperations(in, "recovery");
         totalTranslogOps = in.readVInt();
-        if (in.getVersion().onOrAfter(Version.V_6_5_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             maxSeenAutoIdTimestampOnPrimary = in.readZLong();
         } else {
             maxSeenAutoIdTimestampOnPrimary = IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP;
         }
-        if (in.getVersion().onOrAfter(Version.V_6_5_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             maxSeqNoOfUpdatesOrDeletesOnPrimary = in.readZLong();
         } else {
             // UNASSIGNED_SEQ_NO means uninitialized and replica won't enable optimization using seq_no
             maxSeqNoOfUpdatesOrDeletesOnPrimary = SequenceNumbers.UNASSIGNED_SEQ_NO;
         }
-        if (in.getVersion().onOrAfter(Version.V_6_7_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             retentionLeases = new RetentionLeases(in);
         } else {
             retentionLeases = RetentionLeases.EMPTY;
@@ -136,13 +136,13 @@ public class RecoveryTranslogOperationsRequest extends RecoveryTransportRequest 
         shardId.writeTo(out);
         Translog.writeOperations(out, operations);
         out.writeVInt(totalTranslogOps);
-        if (out.getVersion().onOrAfter(Version.V_6_5_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeZLong(maxSeenAutoIdTimestampOnPrimary);
         }
-        if (out.getVersion().onOrAfter(Version.V_6_5_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeZLong(maxSeqNoOfUpdatesOrDeletesOnPrimary);
         }
-        if (out.getVersion().onOrAfter(Version.V_6_7_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             retentionLeases.writeTo(out);
         }
         if (out.getVersion().onOrAfter(Version.V_7_2_0)) {

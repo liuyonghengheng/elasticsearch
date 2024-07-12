@@ -19,7 +19,7 @@
 package org.elasticsearch.watcher;
 
 import org.elasticsearch.core.internal.io.IOUtils;
-import org.apache.lucene.util.LuceneTestCase;
+import org.apache.lucene.tests.util.LuceneTestCase;
 import org.elasticsearch.test.ESTestCase;
 
 import java.io.BufferedWriter;

@@ -19,15 +19,11 @@
 
 package org.elasticsearch.common.settings;
 
+import org.apache.lucene.backward_codecs.store.EndiannessReverserUtil;
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.index.IndexFormatTooNewException;
 import org.apache.lucene.index.IndexFormatTooOldException;
-import org.apache.lucene.store.BufferedChecksumIndexInput;
-import org.apache.lucene.store.ChecksumIndexInput;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.IndexInput;
-import org.apache.lucene.store.IndexOutput;
-import org.apache.lucene.store.SimpleFSDirectory;
+import org.apache.lucene.store.*;
 import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.cli.ExitCodes;
 import org.elasticsearch.cli.UserException;
@@ -165,6 +161,9 @@ public class KeyStoreWrapper implements SecureSettings {
     private final SetOnce<Map<String, Entry>> entries = new SetOnce<>();
     private volatile boolean closed;
 
+    /** The version where lucene directory API changed from BE to LE. */
+    public static final int LE_VERSION = 5;
+
     private KeyStoreWrapper(int formatVersion, boolean hasPassword, byte[] dataBytes) {
         this.formatVersion = formatVersion;
         this.hasPassword = hasPassword;
@@ -216,7 +215,7 @@ public class KeyStoreWrapper implements SecureSettings {
             return null;
         }
 
-        SimpleFSDirectory directory = new SimpleFSDirectory(configDir);
+        NIOFSDirectory directory = new NIOFSDirectory(configDir);
         try (IndexInput indexInput = directory.openInput(KEYSTORE_FILENAME, IOContext.READONCE)) {
             ChecksumIndexInput input = new BufferedChecksumIndexInput(indexInput);
             final int formatVersion;
@@ -340,18 +339,14 @@ public class KeyStoreWrapper implements SecureSettings {
         final byte[] salt;
         final byte[] iv;
         final byte[] encryptedBytes;
-        try (ByteArrayInputStream bytesStream = new ByteArrayInputStream(dataBytes);
-             DataInputStream input = new DataInputStream(bytesStream)) {
-            int saltLen = input.readInt();
-            salt = new byte[saltLen];
-            input.readFully(salt);
-            int ivLen = input.readInt();
-            iv = new byte[ivLen];
-            input.readFully(iv);
-            int encryptedLen = input.readInt();
-            encryptedBytes = new byte[encryptedLen];
-            input.readFully(encryptedBytes);
-            if (input.read() != -1) {
+        try {
+            final ByteArrayDataInput input = new ByteArrayDataInput(dataBytes);
+//            final DataInput maybeWrappedInput = formatVersion < LE_VERSION ? EndiannessReverserUtil.wrapDataInput(input) : input;
+//            final DataInput maybeWrappedInput = input;
+            salt = readByteArray(input);
+            iv = readByteArray(input);
+            encryptedBytes = readByteArray(input);
+            if (input.eof() == false) {
                 throw new SecurityException("Keystore has been corrupted or tampered with");
             }
         } catch (EOFException e) {
@@ -384,6 +379,13 @@ public class KeyStoreWrapper implements SecureSettings {
             }
             throw new SecurityException("Keystore has been corrupted or tampered with", e);
         }
+    }
+    // TODO:liuyongheng copy from other, note
+    private static byte[] readByteArray(DataInput input) throws IOException {
+        final int len = input.readInt();
+        final byte[] b = new byte[len];
+        input.readBytes(b, 0, len);
+        return b;
     }
 
     /** Encrypt the keystore entries and return the encrypted data. */
@@ -482,7 +484,7 @@ public class KeyStoreWrapper implements SecureSettings {
     public synchronized void save(Path configDir, char[] password) throws Exception {
         ensureOpen();
 
-        SimpleFSDirectory directory = new SimpleFSDirectory(configDir);
+        NIOFSDirectory directory = new NIOFSDirectory(configDir);
         // write to tmp file first, then overwrite
         String tmpFile = KEYSTORE_FILENAME + ".tmp";
         try (IndexOutput output = directory.createOutput(tmpFile, IOContext.DEFAULT)) {

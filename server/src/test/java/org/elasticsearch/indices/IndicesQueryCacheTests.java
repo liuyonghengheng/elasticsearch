@@ -24,18 +24,7 @@ import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.search.ConstantScoreScorer;
-import org.apache.lucene.search.ConstantScoreWeight;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.Explanation;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryCachingPolicy;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.ScorerSupplier;
-import org.apache.lucene.search.Weight;
+import org.apache.lucene.search.*;
 import org.apache.lucene.store.Directory;
 import org.elasticsearch.core.internal.io.IOUtils;
 import org.elasticsearch.common.lucene.index.ElasticsearchDirectoryReader;
@@ -86,6 +75,11 @@ public class IndicesQueryCacheTests extends ESTestCase {
                     return true;
                 }
             };
+        }
+
+        @Override
+        public void visit(QueryVisitor visitor) {
+            visitor.visitLeaf(this);
         }
 
     }
@@ -361,10 +355,10 @@ public class IndicesQueryCacheTests extends ESTestCase {
             this.weight = weight;
         }
 
-        @Override
-        public void extractTerms(Set<Term> terms) {
-            weight.extractTerms(terms);
-        }
+//        @Override
+//        public void extractTerms(Set<Term> terms) {
+//            weight.extractTerms(terms);
+//        }
 
         @Override
         public Explanation explain(LeafReaderContext context, int doc) throws IOException {

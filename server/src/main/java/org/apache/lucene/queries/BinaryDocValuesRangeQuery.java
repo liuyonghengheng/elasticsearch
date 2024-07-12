@@ -22,14 +22,7 @@ package org.apache.lucene.queries;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.ConstantScoreScorer;
-import org.apache.lucene.search.ConstantScoreWeight;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.TwoPhaseIterator;
-import org.apache.lucene.search.Weight;
+import org.apache.lucene.search.*;
 import org.apache.lucene.store.ByteArrayDataInput;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.index.mapper.RangeType;
@@ -117,6 +110,13 @@ public final class BinaryDocValuesRangeQuery extends Query {
                 return DocValues.isCacheable(ctx, fieldName);
             }
         };
+    }
+
+    @Override
+    public void visit(QueryVisitor visitor) {
+        if (visitor.acceptField(fieldName)) {
+            visitor.visitLeaf(this);
+        }
     }
 
     @Override

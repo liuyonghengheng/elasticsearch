@@ -37,7 +37,7 @@ public class ChineseAnalyzerProvider extends AbstractIndexAnalyzerProvider<Stand
         super(indexSettings, name, settings);
         // old index: best effort
         analyzer = new StandardAnalyzer(EnglishAnalyzer.ENGLISH_STOP_WORDS_SET);
-        analyzer.setVersion(version);
+        //analyzer.setVersion(version);
 
     }
 

@@ -21,7 +21,7 @@ package org.elasticsearch.search.suggest;
 import com.carrotsearch.randomizedtesting.generators.RandomStrings;
 import org.apache.lucene.analysis.TokenStreamToAutomaton;
 import org.apache.lucene.search.suggest.document.ContextSuggestField;
-import org.apache.lucene.util.LuceneTestCase.SuppressCodecs;
+import org.apache.lucene.tests.util.LuceneTestCase.SuppressCodecs;
 import org.elasticsearch.action.admin.indices.forcemerge.ForceMergeResponse;
 import org.elasticsearch.action.admin.indices.segments.IndexShardSegments;
 import org.elasticsearch.action.admin.indices.segments.ShardSegments;

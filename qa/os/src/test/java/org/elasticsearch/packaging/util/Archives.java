@@ -211,10 +211,10 @@ public class Archives {
             "elasticsearch-setup-passwords",
             "elasticsearch-sql-cli",
             "elasticsearch-syskeygen",
-            "elasticsearch-users",
-            "x-pack-env",
-            "x-pack-security-env",
-            "x-pack-watcher-env"
+            "elasticsearch-users"
+//            "x-pack-env",
+//            "x-pack-security-env",
+//            "x-pack-watcher-env"
         ).forEach(executable -> {
 
             assertThat(es.bin(executable), file(File, owner, owner, p755));

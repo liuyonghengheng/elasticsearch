@@ -48,7 +48,7 @@ public class RoundingDuelTests extends ESTestCase  {
             oldNextRoundingValueWorks = false;
         }
         BytesStreamOutput output = new BytesStreamOutput();
-        output.setVersion(VersionUtils.getPreviousVersion(Version.V_7_0_0));
+        output.setVersion(VersionUtils.getPreviousVersion(Version.V_7_8_0));
         rounding.writeTo(output);
 
         Rounding roundingJoda = Rounding.Streams.read(output.bytes().streamInput());

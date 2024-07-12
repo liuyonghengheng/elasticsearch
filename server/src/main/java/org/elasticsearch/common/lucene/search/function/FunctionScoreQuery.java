@@ -259,10 +259,10 @@ public class FunctionScoreQuery extends Query {
             this.needsScores = needsScores;
         }
 
-        @Override
-        public void extractTerms(Set<Term> terms) {
-            subQueryWeight.extractTerms(terms);
-        }
+//        @Override
+//        public void extractTerms(Set<Term> terms) {
+//            subQueryWeight.extractTerms(terms);
+//        }
 
         private FunctionFactorScorer functionScorer(LeafReaderContext context) throws IOException {
             Scorer subQueryScorer = subQueryWeight.scorer(context);

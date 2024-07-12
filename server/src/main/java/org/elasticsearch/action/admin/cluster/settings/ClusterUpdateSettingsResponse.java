@@ -56,8 +56,8 @@ public class ClusterUpdateSettingsResponse extends AcknowledgedResponse {
     final Settings persistentSettings;
 
     ClusterUpdateSettingsResponse(StreamInput in) throws IOException {
-        super(in, in.getVersion().onOrAfter(Version.V_6_4_0));
-        if (in.getVersion().onOrAfter(Version.V_6_4_0)) {
+        super(in, in.getVersion().onOrAfter(Version.V_7_0_0));
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             transientSettings = Settings.readSettingsFromStream(in);
             persistentSettings = Settings.readSettingsFromStream(in);
         } else {
@@ -83,7 +83,7 @@ public class ClusterUpdateSettingsResponse extends AcknowledgedResponse {
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        if (out.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             super.writeTo(out);
             Settings.writeSettingsToStream(transientSettings, out);
             Settings.writeSettingsToStream(persistentSettings, out);

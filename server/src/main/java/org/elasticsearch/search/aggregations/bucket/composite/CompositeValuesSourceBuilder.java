@@ -63,7 +63,7 @@ public abstract class CompositeValuesSourceBuilder<AB extends CompositeValuesSou
         if (in.readBoolean()) {
             this.userValueTypeHint = ValueType.readFromStream(in);
         }
-        if (in.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             this.missingBucket = in.readBoolean();
         } else {
             this.missingBucket = false;
@@ -73,7 +73,7 @@ public abstract class CompositeValuesSourceBuilder<AB extends CompositeValuesSou
             in.readGenericValue();
         }
         this.order = SortOrder.readFromStream(in);
-        if (in.getVersion().onOrAfter(Version.V_6_3_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             this.format = in.readOptionalString();
         } else {
             this.format = null;
@@ -94,7 +94,7 @@ public abstract class CompositeValuesSourceBuilder<AB extends CompositeValuesSou
         if (hasValueType) {
             userValueTypeHint.writeTo(out);
         }
-        if (out.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeBoolean(missingBucket);
         }
         if (out.getVersion().before(Version.V_7_0_0)) {
@@ -102,7 +102,7 @@ public abstract class CompositeValuesSourceBuilder<AB extends CompositeValuesSou
             out.writeGenericValue(null);
         }
         order.writeTo(out);
-        if (out.getVersion().onOrAfter(Version.V_6_3_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeOptionalString(format);
         }
         innerWriteTo(out);

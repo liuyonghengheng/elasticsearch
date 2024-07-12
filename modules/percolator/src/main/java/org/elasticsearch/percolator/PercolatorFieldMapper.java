@@ -33,7 +33,7 @@ import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.CoveringQuery;
+import org.apache.lucene.sandbox.search.CoveringQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.LongValuesSource;
 import org.apache.lucene.search.MatchNoDocsQuery;
@@ -273,7 +273,7 @@ public class PercolatorFieldMapper extends ParametrizedFieldMapper {
             }
 
             BooleanQuery.Builder candidateQuery = new BooleanQuery.Builder();
-            if (canUseMinimumShouldMatchField && indexVersion.onOrAfter(Version.V_6_1_0)) {
+            if (canUseMinimumShouldMatchField && indexVersion.onOrAfter(Version.V_7_0_0)) {
                 LongValuesSource valuesSource = LongValuesSource.fromIntField(minimumShouldMatchField.name());
                 for (BytesRef extractedTerm : extractedTerms) {
                     subQueries.add(new TermQuery(new Term(queryTermsField.name(), extractedTerm)));
@@ -380,7 +380,7 @@ public class PercolatorFieldMapper extends ParametrizedFieldMapper {
 
     static void createQueryBuilderField(Version indexVersion, BinaryFieldMapper qbField,
                                         QueryBuilder queryBuilder, ParseContext context) throws IOException {
-        if (indexVersion.onOrAfter(Version.V_6_0_0_beta2)) {
+        if (indexVersion.onOrAfter(Version.V_7_0_0)) {
             try (ByteArrayOutputStream stream = new ByteArrayOutputStream()) {
                 try (OutputStreamStreamOutput out  = new OutputStreamStreamOutput(stream)) {
                     out.setVersion(indexVersion);
@@ -444,7 +444,7 @@ public class PercolatorFieldMapper extends ParametrizedFieldMapper {
         }
 
         createFieldNamesField(context);
-        if (indexVersionCreated.onOrAfter(Version.V_6_1_0)) {
+        if (indexVersionCreated.onOrAfter(Version.V_7_0_0)) {
             doc.add(new NumericDocValuesField(minimumShouldMatchFieldMapper.name(), result.minimumShouldMatch));
         }
     }

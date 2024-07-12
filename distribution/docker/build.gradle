@@ -155,15 +155,15 @@ def createAndSetWritable(Object... locations) {
   }
 }
 
-tasks.register("copyKeystore", Sync) {
-  from project(':x-pack:plugin:core')
-    .file('src/test/resources/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.jks')
-  into "${buildDir}/certs"
-  doLast {
-    file("${buildDir}/certs").setReadable(true, false)
-    file("${buildDir}/certs/testnode.jks").setReadable(true, false)
-  }
-}
+//tasks.register("copyKeystore", Sync) {
+//  from project(':x-pack:plugin:core')
+//    .file('src/test/resources/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.jks')
+//  into "${buildDir}/certs"
+//  doLast {
+//    file("${buildDir}/certs").setReadable(true, false)
+//    file("${buildDir}/certs/testnode.jks").setReadable(true, false)
+//  }
+//}
 
 elasticsearch_distributions {
   Architecture.values().each { eachArchitecture ->
@@ -199,10 +199,10 @@ tasks.named("preProcessFixture").configure {
   }
 }
 
-tasks.named("processTestResources").configure {
-  from project(':x-pack:plugin:core')
-    .file('src/test/resources/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.jks')
-}
+//tasks.named("processTestResources").configure {
+//  from project(':x-pack:plugin:core')
+//    .file('src/test/resources/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.jks')
+//}
 
 tasks.register("integTest", Test) {
   outputs.doNotCacheIf('Build cache is disabled for Docker tests') { true }

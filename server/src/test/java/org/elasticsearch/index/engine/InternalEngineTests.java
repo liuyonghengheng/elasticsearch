@@ -37,7 +37,7 @@ import org.apache.lucene.index.IndexCommit;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.IndexWriterMaxDocsChanger;
+//import org.apache.lucene.index.IndexWriterMaxDocsChanger;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.LeafReaderContext;
@@ -65,7 +65,7 @@ import org.apache.lucene.search.TotalHitCountCollector;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.Lock;
-import org.apache.lucene.store.MockDirectoryWrapper;
+import org.apache.lucene.tests.store.MockDirectoryWrapper;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.FixedBitSet;
@@ -6363,7 +6363,7 @@ public class InternalEngineTests extends EngineTestCase {
         engine.close();
         final boolean softDeleteEnabled = engine.config().getIndexSettings().isSoftDeleteEnabled();
         int maxDocs = randomIntBetween(1, 100);
-        IndexWriterMaxDocsChanger.setMaxDocs(maxDocs);
+        setIndexWriterMaxDocs(maxDocs);
         try {
             engine = new InternalTestEngine(engine.config(), maxDocs, LocalCheckpointTracker::new);
             int numDocs = between(maxDocs + 1, maxDocs * 2);
@@ -6396,7 +6396,7 @@ public class InternalEngineTests extends EngineTestCase {
                 assertFalse(engine.isClosed.get());
             }
         } finally {
-            IndexWriterMaxDocsChanger.restoreMaxDocs();
+            restoreIndexWriterMaxDocs();
         }
     }
 
@@ -6405,7 +6405,7 @@ public class InternalEngineTests extends EngineTestCase {
             engine.config().getIndexSettings().isSoftDeleteEnabled());
         engine.close();
         int maxDocs = randomIntBetween(1, 100);
-        IndexWriterMaxDocsChanger.setMaxDocs(maxDocs);
+        setIndexWriterMaxDocs(maxDocs);
         try {
             engine = new InternalTestEngine(engine.config(), maxDocs, LocalCheckpointTracker::new);
             int numDocs = between(maxDocs + 1, maxDocs * 2);
@@ -6418,7 +6418,7 @@ public class InternalEngineTests extends EngineTestCase {
             assertThat(error.getMessage(), containsString("number of documents in the index cannot exceed " + maxDocs));
             assertTrue(engine.isClosed.get());
         } finally {
-            IndexWriterMaxDocsChanger.restoreMaxDocs();
+            restoreIndexWriterMaxDocs();
         }
     }
 }

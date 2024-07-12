@@ -22,18 +22,8 @@ package org.elasticsearch.percolator;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.Explanation;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.ScorerSupplier;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.TwoPhaseIterator;
-import org.apache.lucene.search.Weight;
+import org.apache.lucene.search.*;
 import org.apache.lucene.search.BooleanClause.Occur;
-import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.Bits;
 import org.elasticsearch.common.CheckedFunction;
@@ -82,13 +72,18 @@ final class PercolateQuery extends Query implements Accountable {
     }
 
     @Override
+    public void visit(QueryVisitor visitor) {
+        visitor.visitLeaf(this);
+    }
+
+    @Override
     public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
         final Weight verifiedMatchesWeight = verifiedMatchesQuery.createWeight(searcher, ScoreMode.COMPLETE_NO_SCORES, boost);
         final Weight candidateMatchesWeight = candidateMatchesQuery.createWeight(searcher, ScoreMode.COMPLETE_NO_SCORES, boost);
         return new Weight(this) {
-            @Override
-            public void extractTerms(Set<Term> set) {
-            }
+//            @Override
+//            public void extractTerms(Set<Term> set) {
+//            }
 
             @Override
             public Explanation explain(LeafReaderContext leafReaderContext, int docId) throws IOException {

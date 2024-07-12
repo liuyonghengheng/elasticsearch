@@ -173,7 +173,7 @@ public class SimpleQueryStringBuilder extends AbstractQueryBuilder<SimpleQuerySt
         settings.analyzeWildcard(in.readBoolean());
         minimumShouldMatch = in.readOptionalString();
         settings.quoteFieldSuffix(in.readOptionalString());
-        if (in.getVersion().onOrAfter(Version.V_6_1_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             settings.autoGenerateSynonymsPhraseQuery(in.readBoolean());
             settings.fuzzyPrefixLength(in.readVInt());
             settings.fuzzyMaxExpansions(in.readVInt());
@@ -197,7 +197,7 @@ public class SimpleQueryStringBuilder extends AbstractQueryBuilder<SimpleQuerySt
         out.writeBoolean(settings.analyzeWildcard());
         out.writeOptionalString(minimumShouldMatch);
         out.writeOptionalString(settings.quoteFieldSuffix());
-        if (out.getVersion().onOrAfter(Version.V_6_1_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeBoolean(settings.autoGenerateSynonymsPhraseQuery());
             out.writeVInt(settings.fuzzyPrefixLength());
             out.writeVInt(settings.fuzzyMaxExpansions());

@@ -141,7 +141,7 @@ public class TopHitsAggregationBuilder extends AbstractAggregationBuilder<TopHit
         }
         trackScores = in.readBoolean();
         version = in.readBoolean();
-        if (in.getVersion().onOrAfter(Version.V_6_7_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             seqNoAndPrimaryTerm = in.readBoolean();
         }
 
@@ -177,7 +177,7 @@ public class TopHitsAggregationBuilder extends AbstractAggregationBuilder<TopHit
         }
         out.writeBoolean(trackScores);
         out.writeBoolean(version);
-        if (out.getVersion().onOrAfter(Version.V_6_7_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeBoolean(seqNoAndPrimaryTerm);
         }
 

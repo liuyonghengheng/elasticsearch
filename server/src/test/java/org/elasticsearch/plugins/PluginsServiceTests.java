@@ -21,7 +21,7 @@ package org.elasticsearch.plugins;
 
 import org.apache.logging.log4j.Level;
 import org.apache.lucene.util.Constants;
-import org.apache.lucene.util.LuceneTestCase;
+import org.apache.lucene.tests.util.LuceneTestCase;
 import org.elasticsearch.Version;
 import org.elasticsearch.bootstrap.JarHell;
 import org.elasticsearch.common.collect.Tuple;
@@ -615,7 +615,8 @@ public class PluginsServiceTests extends ESTestCase {
     }
 
     public void testIncompatibleElasticsearchVersion() throws Exception {
-        PluginInfo info = new PluginInfo("my_plugin", "desc", "1.0", Version.V_6_0_0,
+//        PluginInfo info = new PluginInfo("my_plugin", "desc", "1.0", Version.V_6_0_0,
+        PluginInfo info = new PluginInfo("my_plugin", "desc", "1.0", Version.V_7_0_0,
             "1.8", "FakePlugin", Collections.emptyList(), false);
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> PluginsService.verifyCompatibility(info));
         assertThat(e.getMessage(), containsString("was built for Elasticsearch version 6.0.0"));

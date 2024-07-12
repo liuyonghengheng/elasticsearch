@@ -21,8 +21,8 @@ package org.elasticsearch.search.aggregations.bucket.sampler;
 
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NumericDocValues;
-import org.apache.lucene.search.DiversifiedTopDocsCollector;
-import org.apache.lucene.search.DiversifiedTopDocsCollector.ScoreDocKey;
+import org.apache.lucene.misc.search.DiversifiedTopDocsCollector;
+import org.apache.lucene.misc.search.DiversifiedTopDocsCollector.ScoreDocKey;
 import org.apache.lucene.search.TopDocsCollector;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.ElasticsearchException;

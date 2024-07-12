@@ -35,8 +35,8 @@ import org.apache.lucene.search.QueryVisitor;
 import org.apache.lucene.search.SynonymQuery;
 import org.apache.lucene.search.TermInSetQuery;
 import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.spans.SpanOrQuery;
-import org.apache.lucene.search.spans.SpanTermQuery;
+import org.apache.lucene.queries.spans.SpanOrQuery;
+import org.apache.lucene.queries.spans.SpanTermQuery;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.NumericUtils;
 import org.apache.lucene.util.automaton.ByteRunAutomaton;
@@ -209,14 +209,6 @@ final class QueryAnalyzer {
             boolean verified = isVerified(query);
             Set<QueryExtraction> qe = Arrays.stream(terms).map(QueryExtraction::new).collect(Collectors.toSet());
             if (qe.size() > 0) {
-                if (version.before(Version.V_6_1_0) && conjunction) {
-                    Optional<QueryExtraction> longest = qe.stream()
-                        .filter(q -> q.term != null)
-                        .max(Comparator.comparingInt(q -> q.term.bytes().length));
-                    if (longest.isPresent()) {
-                        qe = Collections.singleton(longest.get());
-                    }
-                }
                 this.terms.add(new Result(verified, qe, conjunction ? qe.size() : 1));
             }
         }
@@ -277,7 +269,7 @@ final class QueryAnalyzer {
         if (conjunctionsWithUnknowns.size() == 1) {
             return conjunctionsWithUnknowns.get(0);
         }
-        if (version.onOrAfter(Version.V_6_1_0)) {
+        if (version.onOrAfter(Version.V_7_0_0)) {
             for (Result subResult : conjunctions) {
                 if (subResult.isMatchNoDocs()) {
                     return subResult;
@@ -369,11 +361,7 @@ final class QueryAnalyzer {
         // Keep track of the msm for each clause:
         List<Integer> clauses = new ArrayList<>(disjunctions.size());
         boolean verified;
-        if (version.before(Version.V_6_1_0)) {
-            verified = requiredShouldClauses <= 1;
-        } else {
-            verified = true;
-        }
+        verified = true;
         int numMatchAllClauses = 0;
         boolean hasRangeExtractions = false;
 
@@ -420,7 +408,7 @@ final class QueryAnalyzer {
         boolean matchAllDocs = numMatchAllClauses > 0 && numMatchAllClauses >= requiredShouldClauses;
 
         int msm = 0;
-        if (version.onOrAfter(Version.V_6_1_0) &&
+        if (version.onOrAfter(Version.V_7_0_0) &&
             // Having ranges would mean we need to juggle with the msm and that complicates this logic a lot,
             // so for now lets not do it.
             hasRangeExtractions == false) {

@@ -39,9 +39,9 @@ import org.apache.lucene.search.PhraseQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.SynonymQuery;
 import org.apache.lucene.search.WildcardQuery;
-import org.apache.lucene.search.spans.SpanNearQuery;
-import org.apache.lucene.search.spans.SpanOrQuery;
-import org.apache.lucene.search.spans.SpanQuery;
+import org.apache.lucene.queries.spans.SpanNearQuery;
+import org.apache.lucene.queries.spans.SpanOrQuery;
+import org.apache.lucene.queries.spans.SpanQuery;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.automaton.RegExp;
 import org.elasticsearch.common.lucene.search.Queries;
@@ -603,11 +603,13 @@ public class QueryStringQueryParser extends XQueryParser {
                 }
             } else if (isLastPos == false) {
                 // build a synonym query for terms in the same position.
-                Term[] terms = new Term[plist.size()];
-                for (int i = 0; i < plist.size(); i++) {
-                    terms[i] = new Term(field, plist.get(i));
+                // build a synonym query for terms in the same position.
+                SynonymQuery.Builder sb = new SynonymQuery.Builder(field);
+                for (String bytesRef : plist) {
+                    sb.addTerm(new Term(field, bytesRef));
+
                 }
-                posQuery = new SynonymQuery(terms);
+                posQuery = sb.build();
             } else {
                 List<BooleanClause> innerClauses = new ArrayList<>();
                 for (String token : plist) {
@@ -733,7 +735,10 @@ public class QueryStringQueryParser extends XQueryParser {
                 setAnalyzer(forceAnalyzer);
                 return super.getRegexpQuery(field, termStr);
             }
-            return currentFieldType.regexpQuery(termStr, RegExp.ALL, 0, getMaxDeterminizedStates(),
+//            return currentFieldType.regexpQuery(termStr, RegExp.ALL, 0, getMaxDeterminizedStates(),
+//                getMultiTermRewriteMethod(), context);
+            // TODO:liuyongheng 这里确认一下两个函数的区别，会不会造成影响, 新版本已经没有getMaxDeterminizedStates()
+            return currentFieldType.regexpQuery(termStr, RegExp.ALL, 0, getDeterminizeWorkLimit(),
                 getMultiTermRewriteMethod(), context);
         } catch (RuntimeException e) {
             if (lenient) {

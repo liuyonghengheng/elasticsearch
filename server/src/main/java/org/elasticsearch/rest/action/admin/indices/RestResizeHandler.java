@@ -57,7 +57,8 @@ public abstract class RestResizeHandler extends BaseRestHandler {
         final ResizeRequest resizeRequest = new ResizeRequest(request.param("target"), request.param("index"));
         resizeRequest.setResizeType(getResizeType());
         // copy_settings should be removed in Elasticsearch 8.0.0; cf. https://github.com/elastic/elasticsearch/issues/28347
-        assert Version.CURRENT.major < 8;
+        // TODO:liuyongheng 这里先删除，后续可参考高版本
+//        assert Version.CURRENT.major < 8;
         final String rawCopySettings = request.param("copy_settings");
         final Boolean copySettings;
         if (rawCopySettings == null) {

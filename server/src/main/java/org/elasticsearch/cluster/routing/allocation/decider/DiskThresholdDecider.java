@@ -88,7 +88,8 @@ public class DiskThresholdDecider extends AllocationDecider {
 
     public DiskThresholdDecider(Settings settings, ClusterSettings clusterSettings) {
         this.diskThresholdSettings = new DiskThresholdSettings(settings, clusterSettings);
-        assert Version.CURRENT.major < 9 : "remove enable_for_single_data_node in 9";
+        // TODO:liuyongheng 这里先删除，后续可参考高版本
+//        assert Version.CURRENT.major < 9 : "remove enable_for_single_data_node in 9";
         this.enableForSingleDataNode = ENABLE_FOR_SINGLE_DATA_NODE.get(settings);
     }
 

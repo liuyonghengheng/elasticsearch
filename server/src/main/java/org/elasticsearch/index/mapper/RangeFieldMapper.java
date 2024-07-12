@@ -19,6 +19,8 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.lucene.document.InvertableType;
+import org.apache.lucene.document.StoredValue;
 import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;

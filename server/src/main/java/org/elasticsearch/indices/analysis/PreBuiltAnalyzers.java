@@ -25,7 +25,7 @@ import org.apache.lucene.analysis.core.SimpleAnalyzer;
 import org.apache.lucene.analysis.core.StopAnalyzer;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.analysis.en.EnglishAnalyzer;
-import org.apache.lucene.analysis.standard.ClassicAnalyzer;
+import org.apache.lucene.analysis.classic.ClassicAnalyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.elasticsearch.Version;
 import org.elasticsearch.indices.analysis.PreBuiltCacheFactory.CachingStrategy;
@@ -38,7 +38,7 @@ public enum PreBuiltAnalyzers {
         @Override
         protected Analyzer create(Version version) {
             final Analyzer a = new StandardAnalyzer(CharArraySet.EMPTY_SET);
-            a.setVersion(version.luceneVersion);
+//            a.setVersion(version.luceneVersion);
             return a;
         }
     },
@@ -63,7 +63,7 @@ public enum PreBuiltAnalyzers {
         @Override
         protected Analyzer create(Version version) {
             Analyzer a = new StopAnalyzer(EnglishAnalyzer.ENGLISH_STOP_WORDS_SET);
-            a.setVersion(version.luceneVersion);
+//            a.setVersion(version.luceneVersion);
             return a;
         }
     },
@@ -72,7 +72,7 @@ public enum PreBuiltAnalyzers {
         @Override
         protected Analyzer create(Version version) {
             Analyzer a = new WhitespaceAnalyzer();
-            a.setVersion(version.luceneVersion);
+//            a.setVersion(version.luceneVersion);
             return a;
         }
     },
@@ -81,7 +81,7 @@ public enum PreBuiltAnalyzers {
         @Override
         protected Analyzer create(Version version) {
             Analyzer a = new SimpleAnalyzer();
-            a.setVersion(version.luceneVersion);
+//            a.setVersion(version.luceneVersion);
             return a;
         }
     },
@@ -90,7 +90,7 @@ public enum PreBuiltAnalyzers {
         @Override
         protected Analyzer create(Version version) {
             Analyzer a = new ClassicAnalyzer();
-            a.setVersion(version.luceneVersion);
+//            a.setVersion(version.luceneVersion);
             return a;
         }
     };

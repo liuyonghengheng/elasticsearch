@@ -19,7 +19,7 @@
 
 package org.elasticsearch.index.reindex;
 
-import org.apache.lucene.util.LuceneTestCase;
+import org.apache.lucene.tests.util.LuceneTestCase;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.Randomness;
@@ -42,7 +42,7 @@ import java.util.stream.IntStream;
 
 import static java.lang.Math.abs;
 import static java.util.stream.Collectors.toList;
-import static org.apache.lucene.util.TestUtil.randomSimpleString;
+import static org.apache.lucene.tests.util.TestUtil.randomSimpleString;
 import static org.hamcrest.Matchers.equalTo;
 
 public class BulkByScrollTaskStatusTests extends AbstractXContentTestCase<BulkByScrollTask.Status> {

@@ -21,7 +21,7 @@ package org.elasticsearch.index.store.smbsimplefs;
 
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.LockFactory;
-import org.apache.lucene.store.SimpleFSDirectory;
+import org.apache.lucene.store.NIOFSDirectory;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.store.FsDirectoryFactory;
 import org.elasticsearch.index.store.SmbDirectoryWrapper;
@@ -33,6 +33,6 @@ public final class SmbSimpleFsDirectoryFactory extends FsDirectoryFactory {
 
     @Override
     protected Directory newFSDirectory(Path location, LockFactory lockFactory, IndexSettings indexSettings) throws IOException {
-        return new SmbDirectoryWrapper(new SimpleFSDirectory(location, lockFactory));
+        return new SmbDirectoryWrapper(new NIOFSDirectory(location, lockFactory));
     }
 }

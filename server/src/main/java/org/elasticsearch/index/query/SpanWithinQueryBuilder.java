@@ -20,8 +20,8 @@
 package org.elasticsearch.index.query;
 
 import org.apache.lucene.search.Query;
-import org.apache.lucene.search.spans.SpanQuery;
-import org.apache.lucene.search.spans.SpanWithinQuery;
+import org.apache.lucene.queries.spans.SpanQuery;
+import org.apache.lucene.queries.spans.SpanWithinQuery;
 import org.elasticsearch.common.ParseField;
 import org.elasticsearch.common.ParsingException;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -35,7 +35,7 @@ import java.util.Objects;
 import static org.elasticsearch.index.query.SpanQueryBuilder.SpanQueryBuilderUtil.checkNoBoost;
 
 /**
- * Builder for {@link org.apache.lucene.search.spans.SpanWithinQuery}.
+ * Builder for {@link org.apache.lucene.queries.spans.SpanWithinQuery}.
  */
 public class SpanWithinQueryBuilder extends AbstractQueryBuilder<SpanWithinQueryBuilder> implements SpanQueryBuilder {
     public static final String NAME = "span_within";

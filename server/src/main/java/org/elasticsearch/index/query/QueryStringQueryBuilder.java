@@ -59,7 +59,7 @@ public class QueryStringQueryBuilder extends AbstractQueryBuilder<QueryStringQue
 
     public static final String NAME = "query_string";
 
-    public static final int DEFAULT_MAX_DETERMINED_STATES = Operations.DEFAULT_MAX_DETERMINIZED_STATES;
+    public static final int DEFAULT_MAX_DETERMINED_STATES = Operations.DEFAULT_DETERMINIZE_WORK_LIMIT;
     public static final boolean DEFAULT_ENABLE_POSITION_INCREMENTS = true;
     public static final boolean DEFAULT_ESCAPE = false;
     public static final int DEFAULT_FUZZY_PREFIX_LENGTH = FuzzyQuery.defaultPrefixLength;
@@ -195,7 +195,7 @@ public class QueryStringQueryBuilder extends AbstractQueryBuilder<QueryStringQue
         timeZone = in.readOptionalZoneId();
         escape = in.readBoolean();
         maxDeterminizedStates = in.readVInt();
-        if (in.getVersion().onOrAfter(Version.V_6_1_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             autoGenerateSynonymsPhraseQuery = in.readBoolean();
             fuzzyTranspositions = in.readBoolean();
         }
@@ -230,7 +230,7 @@ public class QueryStringQueryBuilder extends AbstractQueryBuilder<QueryStringQue
         out.writeOptionalZoneId(timeZone);
         out.writeBoolean(this.escape);
         out.writeVInt(this.maxDeterminizedStates);
-        if (out.getVersion().onOrAfter(Version.V_6_1_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeBoolean(autoGenerateSynonymsPhraseQuery);
             out.writeBoolean(fuzzyTranspositions);
         }
@@ -903,7 +903,8 @@ public class QueryStringQueryBuilder extends AbstractQueryBuilder<QueryStringQue
         queryParser.setFuzzyRewriteMethod(QueryParsers.parseRewriteMethod(this.fuzzyRewrite, LoggingDeprecationHandler.INSTANCE));
         queryParser.setMultiTermRewriteMethod(QueryParsers.parseRewriteMethod(this.rewrite, LoggingDeprecationHandler.INSTANCE));
         queryParser.setTimeZone(timeZone);
-        queryParser.setMaxDeterminizedStates(maxDeterminizedStates);
+//        queryParser.setMaxDeterminizedStates(maxDeterminizedStates);
+        queryParser.setDeterminizeWorkLimit(maxDeterminizedStates);
         queryParser.setAutoGenerateMultiTermSynonymsPhraseQuery(autoGenerateSynonymsPhraseQuery);
         queryParser.setFuzzyTranspositions(fuzzyTranspositions);
 

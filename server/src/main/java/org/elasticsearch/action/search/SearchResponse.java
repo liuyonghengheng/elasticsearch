@@ -92,7 +92,7 @@ public class SearchResponse extends ActionResponse implements StatusToXContentOb
                 shardFailures[i] = readShardSearchFailure(in);
             }
         }
-        if (in.getVersion().onOrAfter(Version.V_6_1_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             clusters = new Clusters(in);
         } else {
             clusters = Clusters.EMPTY;
@@ -408,7 +408,7 @@ public class SearchResponse extends ActionResponse implements StatusToXContentOb
         for (ShardSearchFailure shardSearchFailure : shardFailures) {
             shardSearchFailure.writeTo(out);
         }
-        if (out.getVersion().onOrAfter(Version.V_6_1_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             clusters.writeTo(out);
         }
         out.writeOptionalString(scrollId);

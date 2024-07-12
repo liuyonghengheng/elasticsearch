@@ -21,25 +21,8 @@ package org.elasticsearch.index.engine;
 
 import org.apache.lucene.codecs.DocValuesProducer;
 import org.apache.lucene.codecs.StoredFieldsReader;
-import org.apache.lucene.index.BinaryDocValues;
-import org.apache.lucene.index.CodecReader;
-import org.apache.lucene.index.FieldInfo;
-import org.apache.lucene.index.FilterCodecReader;
-import org.apache.lucene.index.FilterNumericDocValues;
-import org.apache.lucene.index.MergePolicy;
-import org.apache.lucene.index.NumericDocValues;
-import org.apache.lucene.index.OneMergeWrappingMergePolicy;
-import org.apache.lucene.index.SortedDocValues;
-import org.apache.lucene.index.SortedNumericDocValues;
-import org.apache.lucene.index.SortedSetDocValues;
-import org.apache.lucene.index.StoredFieldVisitor;
-import org.apache.lucene.search.ConjunctionDISI;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.Weight;
+import org.apache.lucene.index.*;
+import org.apache.lucene.search.*;
 import org.apache.lucene.util.BitSet;
 import org.apache.lucene.util.BitSetIterator;
 
@@ -106,7 +89,7 @@ final class RecoverySourcePruneMergePolicy extends OneMergeWrappingMergePolicy {
                             // we can't return null here lucenes DocIdMerger expects an instance
                             intersection = DocIdSetIterator.empty();
                         } else {
-                            intersection = ConjunctionDISI.intersectIterators(Arrays.asList(numeric,
+                            intersection = ConjunctionUtils.intersectIterators(Arrays.asList(numeric,
                                 new BitSetIterator(recoverySourceToKeep, recoverySourceToKeep.length())));
                         }
                         return new FilterNumericDocValues(numeric) {
@@ -190,10 +173,10 @@ final class RecoverySourcePruneMergePolicy extends OneMergeWrappingMergePolicy {
                 in.close();
             }
 
-            @Override
-            public long ramBytesUsed() {
-                return in.ramBytesUsed();
-            }
+//            @Override
+//            public long ramBytesUsed() {
+//                return in.ramBytesUsed();
+//            }
         }
 
         private abstract static class FilterStoredFieldsReader extends StoredFieldsReader {
@@ -204,10 +187,10 @@ final class RecoverySourcePruneMergePolicy extends OneMergeWrappingMergePolicy {
                 this.in = fieldsReader;
             }
 
-            @Override
-            public long ramBytesUsed() {
-                return in.ramBytesUsed();
-            }
+//            @Override
+//            public long ramBytesUsed() {
+//                return in.ramBytesUsed();
+//            }
 
             @Override
             public void close() throws IOException {
@@ -215,8 +198,8 @@ final class RecoverySourcePruneMergePolicy extends OneMergeWrappingMergePolicy {
             }
 
             @Override
-            public void visitDocument(int docID, StoredFieldVisitor visitor) throws IOException {
-                in.visitDocument(docID, visitor);
+            public void document(int docID, StoredFieldVisitor visitor) throws IOException {
+                in.document(docID, visitor);
             }
 
             @Override
@@ -240,22 +223,24 @@ final class RecoverySourcePruneMergePolicy extends OneMergeWrappingMergePolicy {
             }
 
             @Override
-            public void visitDocument(int docID, StoredFieldVisitor visitor) throws IOException {
+            public void document(int docID, StoredFieldVisitor visitor) throws IOException {
                 if (recoverySourceToKeep != null && recoverySourceToKeep.get(docID)) {
-                    super.visitDocument(docID, visitor);
+                    super.document(docID, visitor);
                 } else {
-                    super.visitDocument(docID, new FilterStoredFieldVisitor(visitor) {
+                    super.document(docID, new FilterStoredFieldVisitor(visitor) {
                         @Override
                         public Status needsField(FieldInfo fieldInfo) throws IOException {
                             if (recoverySourceField.equals(fieldInfo.name)) {
                                 return Status.NO;
                             }
+//                            if (pruneIdField && IdFieldMapper.NAME.equals(fieldInfo.name)) {
+//                                return Status.NO;
+//                            }
                             return super.needsField(fieldInfo);
                         }
                     });
                 }
             }
-
             @Override
             public StoredFieldsReader getMergeInstance() {
                 return new RecoverySourcePruningStoredFieldsReader(in.getMergeInstance(), recoverySourceToKeep, recoverySourceField);
@@ -281,7 +266,7 @@ final class RecoverySourcePruneMergePolicy extends OneMergeWrappingMergePolicy {
             }
 
             @Override
-            public void stringField(FieldInfo fieldInfo, byte[] value) throws IOException {
+            public void stringField(FieldInfo fieldInfo, String value) throws IOException {
                 visitor.stringField(fieldInfo, value);
             }
 

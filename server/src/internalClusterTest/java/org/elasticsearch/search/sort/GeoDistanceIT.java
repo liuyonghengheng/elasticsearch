@@ -55,7 +55,7 @@ public class GeoDistanceIT extends ESIntegTestCase {
     }
 
     public void testDistanceSortingMVFields() throws Exception {
-        Version version = VersionUtils.randomVersionBetween(random(), Version.V_6_0_0,
+        Version version = VersionUtils.randomVersionBetween(random(), Version.V_7_0_0,
                 Version.CURRENT);
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, version).build();
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder().startObject().startObject("type1").startObject("properties")
@@ -182,7 +182,7 @@ public class GeoDistanceIT extends ESIntegTestCase {
     // Regression bug:
     // https://github.com/elastic/elasticsearch/issues/2851
     public void testDistanceSortingWithMissingGeoPoint() throws Exception {
-        Version version = VersionUtils.randomVersionBetween(random(), Version.V_6_0_0,
+        Version version = VersionUtils.randomVersionBetween(random(), Version.V_7_0_0,
                 Version.CURRENT);
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, version).build();
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder().startObject().startObject("type1").startObject("properties")
@@ -225,7 +225,7 @@ public class GeoDistanceIT extends ESIntegTestCase {
     }
 
     public void testDistanceSortingNestedFields() throws Exception {
-        Version version = VersionUtils.randomVersionBetween(random(), Version.V_6_0_0,
+        Version version = VersionUtils.randomVersionBetween(random(), Version.V_7_0_0,
                 Version.CURRENT);
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, version).build();
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder().startObject().startObject("company").startObject("properties")
@@ -374,7 +374,7 @@ public class GeoDistanceIT extends ESIntegTestCase {
      * Issue 3073
      */
     public void testGeoDistanceFilter() throws IOException {
-        Version version = VersionUtils.randomVersionBetween(random(), Version.V_6_0_0,
+        Version version = VersionUtils.randomVersionBetween(random(), Version.V_7_0_0,
                 Version.CURRENT);
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, version).build();
         double lat = 40.720611;

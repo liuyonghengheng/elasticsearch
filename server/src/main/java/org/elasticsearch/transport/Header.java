@@ -107,7 +107,7 @@ public class Header {
         this.headers = ThreadContext.readHeadersFromStream(input);
 
         if (isRequest()) {
-            if (version.onOrAfter(Version.V_6_3_0)) {
+            if (version.onOrAfter(Version.V_7_0_0)) {
                 final String[] featuresFound = input.readStringArray();
                 if (featuresFound.length == 0) {
                     features = Collections.emptySet();

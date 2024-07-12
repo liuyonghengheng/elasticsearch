@@ -175,7 +175,9 @@ public class ClusterFormationFailureHelper {
 
                 return String.format(Locale.ROOT,
                     "master not discovered yet, this node has not previously joined a bootstrapped (v%d+) cluster, and %s: %s",
-                    Version.V_6_6_0.major + 1, bootstrappingDescription, discoveryStateIgnoringQuorum);
+//                    Version.V_6_6_0.major + 1, bootstrappingDescription, discoveryStateIgnoringQuorum);
+                    // TODO:liuyongheng 这里还要确定一下有没有影响, 原来的 Version.V_6_6_0.major + 1 就是7
+                    Version.V_7_0_0.major, bootstrappingDescription, discoveryStateIgnoringQuorum);
             }
 
             assert clusterState.getLastCommittedConfiguration().isEmpty() == false;

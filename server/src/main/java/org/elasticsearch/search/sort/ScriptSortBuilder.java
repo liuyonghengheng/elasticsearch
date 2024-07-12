@@ -122,7 +122,7 @@ public class ScriptSortBuilder extends SortBuilder<ScriptSortBuilder> {
         sortMode = in.readOptionalWriteable(SortMode::readFromStream);
         nestedPath = in.readOptionalString();
         nestedFilter = in.readOptionalNamedWriteable(QueryBuilder.class);
-        if (in.getVersion().onOrAfter(Version.V_6_1_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             nestedSort = in.readOptionalWriteable(NestedSortBuilder::new);
         }
     }
@@ -135,7 +135,7 @@ public class ScriptSortBuilder extends SortBuilder<ScriptSortBuilder> {
         out.writeOptionalWriteable(sortMode);
         out.writeOptionalString(nestedPath);
         out.writeOptionalNamedWriteable(nestedFilter);
-        if (out.getVersion().onOrAfter(Version.V_6_1_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeOptionalWriteable(nestedSort);
         }
     }
@@ -329,10 +329,6 @@ public class ScriptSortBuilder extends SortBuilder<ScriptSortBuilder> {
 
         final Nested nested;
         if (nestedSort != null) {
-            if (context.indexVersionCreated().before(Version.V_6_5_0) && nestedSort.getMaxChildren() != Integer.MAX_VALUE) {
-                throw new QueryShardException(context,
-                    "max_children is only supported on v6.5.0 or higher");
-            }
             // new nested sorts takes priority
             validateMaxChildrenExistOnlyInTopLevelNestedSort(context, nestedSort);
             nested = resolveNested(context, nestedSort);

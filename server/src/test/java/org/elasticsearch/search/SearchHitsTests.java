@@ -21,7 +21,7 @@ package org.elasticsearch.search;
 
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TotalHits;
-import org.apache.lucene.util.TestUtil;
+import org.apache.lucene.tests.util.TestUtil;
 import org.elasticsearch.action.OriginalIndices;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesReference;

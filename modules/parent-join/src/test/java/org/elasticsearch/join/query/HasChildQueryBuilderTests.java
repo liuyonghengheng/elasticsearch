@@ -21,13 +21,7 @@ package org.elasticsearch.join.query;
 
 import com.carrotsearch.randomizedtesting.generators.RandomPicks;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermInSetQuery;
-import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.*;
 import org.apache.lucene.search.join.ScoreMode;
 import org.apache.lucene.search.similarities.PerFieldSimilarityWrapper;
 import org.apache.lucene.search.similarities.Similarity;
@@ -293,7 +287,7 @@ public class HasChildQueryBuilderTests extends AbstractQueryTestCase<HasChildQue
         assertThat(booleanQuery.clauses().get(0).getOccur(), equalTo(BooleanClause.Occur.MUST));
         assertThat(booleanQuery.clauses().get(0).getQuery(), instanceOf(TermInSetQuery.class));
         TermInSetQuery termsQuery = (TermInSetQuery) booleanQuery.clauses().get(0).getQuery();
-        Query rewrittenTermsQuery = termsQuery.rewrite(null);
+        Query rewrittenTermsQuery = termsQuery.rewrite((IndexSearcher) null);
         assertThat(rewrittenTermsQuery, instanceOf(ConstantScoreQuery.class));
         ConstantScoreQuery constantScoreQuery = (ConstantScoreQuery) rewrittenTermsQuery;
         assertThat(constantScoreQuery.getQuery(), instanceOf(BooleanQuery.class));

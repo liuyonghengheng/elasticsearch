@@ -22,10 +22,7 @@ package org.elasticsearch.search.sort;
 import org.apache.lucene.document.LatLonDocValuesField;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NumericDocValues;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.FieldComparator;
-import org.apache.lucene.search.LeafFieldComparator;
-import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.*;
 import org.apache.lucene.search.comparators.DoubleComparator;
 import org.apache.lucene.util.BitSet;
 import org.elasticsearch.ElasticsearchParseException;
@@ -174,11 +171,11 @@ public class GeoDistanceSortBuilder extends SortBuilder<GeoDistanceSortBuilder> 
         sortMode = in.readOptionalWriteable(SortMode::readFromStream);
         nestedFilter = in.readOptionalNamedWriteable(QueryBuilder.class);
         nestedPath = in.readOptionalString();
-        if (in.getVersion().onOrAfter(Version.V_6_1_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             nestedSort = in.readOptionalWriteable(NestedSortBuilder::new);
         }
         validation = GeoValidationMethod.readFromStream(in);
-        if (in.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             ignoreUnmapped = in.readBoolean();
         }
     }
@@ -193,11 +190,11 @@ public class GeoDistanceSortBuilder extends SortBuilder<GeoDistanceSortBuilder> 
         out.writeOptionalWriteable(sortMode);
         out.writeOptionalNamedWriteable(nestedFilter);
         out.writeOptionalString(nestedPath);
-        if (out.getVersion().onOrAfter(Version.V_6_1_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeOptionalWriteable(nestedSort);
         }
         validation.writeTo(out);
-        if (out.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeBoolean(ignoreUnmapped);
         }
     }
@@ -669,16 +666,12 @@ public class GeoDistanceSortBuilder extends SortBuilder<GeoDistanceSortBuilder> 
         if (nestedSort == null) {
             return resolveNested(context, nestedPath, nestedFilter);
         }
-        if (context.indexVersionCreated().before(Version.V_6_5_0) && nestedSort.getMaxChildren() != Integer.MAX_VALUE) {
-            throw new QueryShardException(context,
-                "max_children is only supported on v6.5.0 or higher");
-        }
         validateMaxChildrenExistOnlyInTopLevelNestedSort(context, nestedSort);
         return resolveNested(context, nestedSort);
     }
 
     private IndexFieldData.XFieldComparatorSource comparatorSource(GeoPoint[] localPoints, MultiValueMode localSortMode,
-            IndexGeoPointFieldData geoIndexFieldData, Nested nested) {
+                                                                   IndexGeoPointFieldData geoIndexFieldData, Nested nested) {
         return new IndexFieldData.XFieldComparatorSource(null, localSortMode, nested) {
             @Override
             public SortField.Type reducedType() {
@@ -695,13 +688,13 @@ public class GeoDistanceSortBuilder extends SortBuilder<GeoDistanceSortBuilder> 
                     final DocIdSetIterator innerDocs = nested.innerDocs(context);
                     final int maxChildren = nested.getNestedSort() != null ? nested.getNestedSort().getMaxChildren() : Integer.MAX_VALUE;
                     return localSortMode.select(distanceValues, Double.POSITIVE_INFINITY, rootDocs, innerDocs,
-                            context.reader().maxDoc(), maxChildren);
+                        context.reader().maxDoc(), maxChildren);
                 }
             }
 
             @Override
-            public FieldComparator<?> newComparator(String fieldname, int numHits, int sortPos, boolean reversed) {
-                return new DoubleComparator(numHits, null, null, reversed, sortPos) {
+            public FieldComparator<?> newComparator(String fieldname, int numHits, Pruning enableSkipping, boolean reversed) {
+                return new DoubleComparator(numHits, null, null, reversed, Pruning.NONE) {
                     @Override
                     public LeafFieldComparator getLeafComparator(LeafReaderContext context) throws IOException {
                         return new DoubleLeafComparator(context) {
@@ -716,7 +709,7 @@ public class GeoDistanceSortBuilder extends SortBuilder<GeoDistanceSortBuilder> 
 
             @Override
             public BucketedSort newBucketedSort(BigArrays bigArrays, SortOrder sortOrder, DocValueFormat format,
-                    int bucketSize, BucketedSort.ExtraData extra) {
+                                                int bucketSize, BucketedSort.ExtraData extra) {
                 return new BucketedSort.ForDoubles(bigArrays, sortOrder, format, bucketSize, extra) {
                     @Override
                     public Leaf forLeaf(LeafReaderContext ctx) throws IOException {

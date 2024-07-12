@@ -21,8 +21,10 @@ package org.elasticsearch.index.codec;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.codecs.Codec;
-import org.apache.lucene.codecs.lucene87.Lucene87Codec;
-import org.apache.lucene.codecs.lucene87.Lucene87StoredFieldsFormat.Mode;
+//import org.apache.lucene.codecs.lucene87.Lucene87Codec;
+//import org.apache.lucene.codecs.lucene87.Lucene87StoredFieldsFormat.Mode;
+import org.apache.lucene.codecs.lucene99.Lucene99Codec;
+import org.apache.lucene.codecs.lucene99.Lucene99Codec.Mode;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.collect.MapBuilder;
 import org.elasticsearch.index.mapper.MapperService;
@@ -47,8 +49,8 @@ public class CodecService {
     public CodecService(@Nullable MapperService mapperService, Logger logger) {
         final MapBuilder<String, Codec> codecs = MapBuilder.<String, Codec>newMapBuilder();
         if (mapperService == null) {
-            codecs.put(DEFAULT_CODEC, new Lucene87Codec());
-            codecs.put(BEST_COMPRESSION_CODEC, new Lucene87Codec(Mode.BEST_COMPRESSION));
+            codecs.put(DEFAULT_CODEC, new Lucene99Codec());
+            codecs.put(BEST_COMPRESSION_CODEC, new Lucene99Codec(Mode.BEST_COMPRESSION));
         } else {
             codecs.put(DEFAULT_CODEC,
                     new PerFieldMappingPostingFormatCodec(Mode.BEST_SPEED, mapperService, logger));

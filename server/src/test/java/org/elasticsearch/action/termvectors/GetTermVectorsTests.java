@@ -18,7 +18,7 @@
  */
 package org.elasticsearch.action.termvectors;
 
-import org.apache.lucene.analysis.MockTokenizer;
+import org.apache.lucene.tests.analysis.MockTokenizer;
 import org.apache.lucene.analysis.TokenFilter;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.payloads.FloatEncoder;

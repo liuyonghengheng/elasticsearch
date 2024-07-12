@@ -19,9 +19,9 @@
 
 package org.elasticsearch.cluster.routing.allocation.decider;
 
-import org.apache.lucene.mockfile.FilterFileStore;
-import org.apache.lucene.mockfile.FilterFileSystemProvider;
-import org.apache.lucene.mockfile.FilterPath;
+import org.apache.lucene.tests.mockfile.FilterFileStore;
+import org.apache.lucene.tests.mockfile.FilterFileSystemProvider;
+import org.apache.lucene.tests.mockfile.FilterPath;
 import org.apache.lucene.util.Constants;
 import org.elasticsearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
 import org.elasticsearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;

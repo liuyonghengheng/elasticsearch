@@ -49,7 +49,7 @@ public class GeoPolygonIT extends ESIntegTestCase {
 
     @Override
     protected void setupSuiteScopeCluster() throws Exception {
-        Version version = VersionUtils.randomVersionBetween(random(), Version.V_6_0_0,
+        Version version = VersionUtils.randomVersionBetween(random(), Version.V_7_0_0,
                 Version.CURRENT);
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, version).build();
 

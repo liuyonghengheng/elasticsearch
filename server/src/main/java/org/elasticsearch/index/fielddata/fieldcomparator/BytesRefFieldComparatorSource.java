@@ -23,10 +23,8 @@ import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.index.SortedSetDocValues;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.FieldComparator;
-import org.apache.lucene.search.Scorable;
-import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.*;
+import org.apache.lucene.search.comparators.TermOrdValComparator;
 import org.apache.lucene.util.BitSet;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.util.BigArrays;
@@ -78,13 +76,13 @@ public class BytesRefFieldComparatorSource extends IndexFieldData.XFieldComparat
     protected void setScorer(Scorable scorer) {}
 
     @Override
-    public FieldComparator<?> newComparator(String fieldname, int numHits, int sortPos, boolean reversed) {
+    public FieldComparator<?> newComparator(String fieldname, int numHits, Pruning enableSkipping, boolean reversed) {
         assert indexFieldData == null || fieldname.equals(indexFieldData.getFieldName());
 
         final boolean sortMissingLast = sortMissingLast(missingValue) ^ reversed;
         final BytesRef missingBytes = (BytesRef) missingObject(missingValue, reversed);
         if (indexFieldData instanceof IndexOrdinalsFieldData) {
-            return new FieldComparator.TermOrdValComparator(numHits, null, sortMissingLast) {
+            return new TermOrdValComparator(numHits, null, sortMissingLast, reversed, Pruning.NONE) {
 
                 @Override
                 protected SortedDocValues getSortedDocValues(LeafReaderContext context, String field) throws IOException {
@@ -95,8 +93,9 @@ public class BytesRefFieldComparatorSource extends IndexFieldData.XFieldComparat
                     } else {
                         final BitSet rootDocs = nested.rootDocs(context);
                         final DocIdSetIterator innerDocs = nested.innerDocs(context);
-                        final int maxChildren = nested.getNestedSort() != null ?
-                            nested.getNestedSort().getMaxChildren() : Integer.MAX_VALUE;
+                        final int maxChildren = nested.getNestedSort() != null
+                            ? nested.getNestedSort().getMaxChildren()
+                            : Integer.MAX_VALUE;
                         selectedValues = sortMode.select(values, rootDocs, innerDocs, maxChildren);
                     }
                     if (sortMissingFirst(missingValue) || sortMissingLast(missingValue)) {
@@ -104,11 +103,6 @@ public class BytesRefFieldComparatorSource extends IndexFieldData.XFieldComparat
                     } else {
                         return new ReplaceMissing(selectedValues, missingBytes);
                     }
-                }
-
-                @Override
-                public void setScorer(Scorable scorer) {
-                    BytesRefFieldComparatorSource.this.setScorer(scorer);
                 }
 
             };

@@ -20,7 +20,7 @@
 package org.elasticsearch.search.geo;
 
 import com.carrotsearch.randomizedtesting.generators.RandomNumbers;
-import org.apache.lucene.geo.GeoTestUtil;
+import org.apache.lucene.tests.geo.GeoTestUtil;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.common.CheckedSupplier;
@@ -55,7 +55,7 @@ import java.io.IOException;
 import java.util.Locale;
 
 import static com.carrotsearch.randomizedtesting.RandomizedTest.assumeTrue;
-import static org.apache.lucene.util.LuceneTestCase.random;
+import static org.apache.lucene.tests.util.LuceneTestCase.random;
 import static org.elasticsearch.action.support.WriteRequest.RefreshPolicy.IMMEDIATE;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 import static org.elasticsearch.index.query.QueryBuilders.geoIntersectionQuery;

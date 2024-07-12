@@ -195,7 +195,8 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
 
     private Node newNode() {
         final Path tempDir = createTempDir();
-        final String nodeName = nodeSettings().get(Node.NODE_NAME_SETTING.getKey(), "node_s_0");
+//        final String nodeName = nodeSettings().get(Node.NODE_NAME_SETTING.getKey(), "node_s_0");
+        final String nodeName = "node_s_0";
 
         Settings settings = Settings.builder()
             .put(ClusterName.CLUSTER_NAME_SETTING.getKey(), InternalTestCluster.clusterName("single-node-cluster", random().nextLong()))

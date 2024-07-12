@@ -693,6 +693,11 @@ public class MultiValueModeTests extends ESTestCase {
             }
 
             @Override
+            public int docValueCount() {
+                return array[doc].length;
+            }
+
+            @Override
             public boolean advanceExact(int docID) {
                 this.doc = docID;
                 i = 0;

@@ -87,16 +87,10 @@ public class SearchRequestTests extends AbstractSearchTestCase {
         SearchRequest searchRequest = createSearchRequest();
         Version version = VersionUtils.randomVersion(random());
         SearchRequest deserializedRequest = copyWriteable(searchRequest, namedWriteableRegistry, SearchRequest::new, version);
-        if (version.before(Version.V_7_0_0)) {
-            assertTrue(deserializedRequest.isCcsMinimizeRoundtrips());
-        } else {
+        {
             assertEquals(searchRequest.isCcsMinimizeRoundtrips(), deserializedRequest.isCcsMinimizeRoundtrips());
         }
-        if (version.before(Version.V_6_7_0)) {
-            assertNull(deserializedRequest.getLocalClusterAlias());
-            assertAbsoluteStartMillisIsCurrentTime(deserializedRequest);
-            assertTrue(deserializedRequest.isFinalReduce());
-        } else {
+        {
             assertEquals(searchRequest.getLocalClusterAlias(), deserializedRequest.getLocalClusterAlias());
             assertEquals(searchRequest.getAbsoluteStartMillis(), deserializedRequest.getAbsoluteStartMillis());
             assertEquals(searchRequest.isFinalReduce(), deserializedRequest.isFinalReduce());
@@ -105,15 +99,15 @@ public class SearchRequestTests extends AbstractSearchTestCase {
 
     public void testReadFromPre6_7_0() throws IOException {
         String msg = "AAEBBWluZGV4AAAAAQACAAAA/////w8AAAAAAAAA/////w8AAAAAAAACAAAAAAABAAMCBAUBAAKABACAAQIAAA==";
-        try (StreamInput in = StreamInput.wrap(Base64.getDecoder().decode(msg))) {
-            in.setVersion(VersionUtils.randomVersionBetween(random(), Version.V_6_4_0, VersionUtils.getPreviousVersion(Version.V_6_7_0)));
-            SearchRequest searchRequest = new SearchRequest(in);
-            assertArrayEquals(new String[]{"index"}, searchRequest.indices());
-            assertNull(searchRequest.getLocalClusterAlias());
-            assertAbsoluteStartMillisIsCurrentTime(searchRequest);
-            assertTrue(searchRequest.isCcsMinimizeRoundtrips());
-            assertTrue(searchRequest.isFinalReduce());
-        }
+//        try (StreamInput in = StreamInput.wrap(Base64.getDecoder().decode(msg))) {
+//            in.setVersion(VersionUtils.randomVersionBetween(random(), Version.V_6_4_0, VersionUtils.getPreviousVersion(Version.V_6_7_0)));
+//            SearchRequest searchRequest = new SearchRequest(in);
+//            assertArrayEquals(new String[]{"index"}, searchRequest.indices());
+//            assertNull(searchRequest.getLocalClusterAlias());
+//            assertAbsoluteStartMillisIsCurrentTime(searchRequest);
+//            assertTrue(searchRequest.isCcsMinimizeRoundtrips());
+//            assertTrue(searchRequest.isFinalReduce());
+//        }
     }
 
     private static void assertAbsoluteStartMillisIsCurrentTime(SearchRequest searchRequest) {

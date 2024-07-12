@@ -21,13 +21,13 @@ package org.elasticsearch.plugins;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.lucene.analysis.util.CharFilterFactory;
-import org.apache.lucene.analysis.util.TokenFilterFactory;
-import org.apache.lucene.analysis.util.TokenizerFactory;
+//import org.elasticsearch.index.analysis.CharFilterFactory;
+//import org.elasticsearch.index.analysis.TokenFilterFactory;
+//import org.elasticsearch.index.analysis.TokenizerFactory;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.DocValuesFormat;
 import org.apache.lucene.codecs.PostingsFormat;
-import org.apache.lucene.util.SPIClassIterator;
+import org.elasticsearch.plugins.spi.SPIClassIterator;
 import org.elasticsearch.Build;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
@@ -679,9 +679,10 @@ public class PluginsService implements ReportingService<PluginsAndModules> {
         DocValuesFormat.reloadDocValuesFormats(loader);
         Codec.reloadCodecs(loader);
         // Analysis:
-        CharFilterFactory.reloadCharFilters(loader);
-        TokenFilterFactory.reloadTokenFilters(loader);
-        TokenizerFactory.reloadTokenizers(loader);
+        // TODO:liuyongheng 这里需要确认一下有没有影响，es最新版本没有这些操作
+//        CharFilterFactory.reloadCharFilters(loader);
+//        TokenFilterFactory.reloadTokenFilters(loader);
+//        TokenizerFactory.reloadTokenizers(loader);
     }
 
     private Class<? extends Plugin> loadPluginClass(String className, ClassLoader loader) {

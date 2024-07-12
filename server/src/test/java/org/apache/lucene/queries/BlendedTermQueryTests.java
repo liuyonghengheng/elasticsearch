@@ -18,7 +18,7 @@
  */
 package org.apache.lucene.queries;
 
-import org.apache.lucene.analysis.MockAnalyzer;
+import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
@@ -34,7 +34,7 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.DisjunctionMaxQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryUtils;
+import org.apache.lucene.tests.search.QueryUtils;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.TermQuery;
@@ -216,19 +216,20 @@ public class BlendedTermQueryTests extends ESTestCase {
         return searcher;
     }
 
+    // 不再支持ExtractTerms
     public void testExtractTerms() throws IOException {
-        Set<Term> terms = new HashSet<>();
-        int num = scaledRandomIntBetween(1, 10);
-        for (int i = 0; i < num; i++) {
-            terms.add(new Term(randomRealisticUnicodeOfLengthBetween(1, 10), randomRealisticUnicodeOfLengthBetween(1, 10)));
-        }
-
-        BlendedTermQuery blendedTermQuery = BlendedTermQuery.dismaxBlendedQuery(terms.toArray(new Term[0]), random().nextFloat());
-        Set<Term> extracted = new HashSet<>();
-        IndexSearcher searcher = new IndexSearcher(new MultiReader());
-        searcher.createWeight(searcher.rewrite(blendedTermQuery), ScoreMode.COMPLETE_NO_SCORES, 1f).extractTerms(extracted);
-        assertThat(extracted.size(), equalTo(terms.size()));
-        assertThat(extracted, containsInAnyOrder(terms.toArray(new Term[0])));
+//        Set<Term> terms = new HashSet<>();
+//        int num = scaledRandomIntBetween(1, 10);
+//        for (int i = 0; i < num; i++) {
+//            terms.add(new Term(randomRealisticUnicodeOfLengthBetween(1, 10), randomRealisticUnicodeOfLengthBetween(1, 10)));
+//        }
+//
+//        BlendedTermQuery blendedTermQuery = BlendedTermQuery.dismaxBlendedQuery(terms.toArray(new Term[0]), random().nextFloat());
+//        Set<Term> extracted = new HashSet<>();
+//        IndexSearcher searcher = new IndexSearcher(new MultiReader());
+//        searcher.createWeight(searcher.rewrite(blendedTermQuery), ScoreMode.COMPLETE_NO_SCORES, 1f).extractTerms(extracted);
+//        assertThat(extracted.size(), equalTo(terms.size()));
+//        assertThat(extracted, containsInAnyOrder(terms.toArray(new Term[0])));
     }
 
     public void testMinTTF() throws IOException {

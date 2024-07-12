@@ -74,7 +74,7 @@ public class Alias implements Writeable, ToXContentFragment {
         filter = in.readOptionalString();
         indexRouting = in.readOptionalString();
         searchRouting = in.readOptionalString();
-        if (in.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             writeIndex = in.readOptionalBoolean();
         } else {
             writeIndex = null;
@@ -224,7 +224,7 @@ public class Alias implements Writeable, ToXContentFragment {
         out.writeOptionalString(filter);
         out.writeOptionalString(indexRouting);
         out.writeOptionalString(searchRouting);
-        if (out.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeOptionalBoolean(writeIndex);
         }
         if (out.getVersion().onOrAfter(Version.V_7_7_0)) {

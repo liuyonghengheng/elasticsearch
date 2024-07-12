@@ -824,13 +824,14 @@ public abstract class Engine implements Closeable {
     }
 
     protected void fillSegmentStats(SegmentReader segmentReader, boolean includeSegmentFileSizes, SegmentsStats stats) {
-        stats.add(1, segmentReader.ramBytesUsed());
-        stats.addTermsMemoryInBytes(guardedRamBytesUsed(segmentReader.getPostingsReader()));
-        stats.addStoredFieldsMemoryInBytes(guardedRamBytesUsed(segmentReader.getFieldsReader()));
-        stats.addTermVectorsMemoryInBytes(guardedRamBytesUsed(segmentReader.getTermVectorsReader()));
-        stats.addNormsMemoryInBytes(guardedRamBytesUsed(segmentReader.getNormsReader()));
-        stats.addPointsMemoryInBytes(guardedRamBytesUsed(segmentReader.getPointsReader()));
-        stats.addDocValuesMemoryInBytes(guardedRamBytesUsed(segmentReader.getDocValuesReader()));
+        // TODO:liuyongheng  详细看一下这里怎么处理
+        stats.add(1,0);
+//        stats.addTermsMemoryInBytes(guardedRamBytesUsed(segmentReader.getPostingsReader()));
+//        stats.addStoredFieldsMemoryInBytes(guardedRamBytesUsed(segmentReader.getFieldsReader()));
+//        stats.addTermVectorsMemoryInBytes(guardedRamBytesUsed(segmentReader.getTermVectorsReader()));
+//        stats.addNormsMemoryInBytes(guardedRamBytesUsed(segmentReader.getNormsReader()));
+//        stats.addPointsMemoryInBytes(guardedRamBytesUsed(segmentReader.getPointsReader()));
+//        stats.addDocValuesMemoryInBytes(guardedRamBytesUsed(segmentReader.getDocValuesReader()));
 
         if (includeSegmentFileSizes) {
             // TODO: consider moving this to StoreStats
@@ -986,11 +987,14 @@ public abstract class Engine implements Closeable {
         } catch (IOException e) {
             logger.trace(() -> new ParameterizedMessage("failed to get size for [{}]", info.info.name), e);
         }
-        segment.memoryInBytes = segmentReader.ramBytesUsed();
+        // TODO:liuyongheng 新版不再有ram统计,需要确认删除会不会对老版本产生影响
+        // 目前看只是记录信息，并没有依赖这个数据进行内存管理等操作
+//        segment.memoryInBytes = segmentReader.ramBytesUsed();
+//        segment.segmentSort = info.info.getIndexSort();
+//        if (verbose) {
+//            segment.ramTree = Accountables.namedAccountable("root", segmentReader);
+//        }
         segment.segmentSort = info.info.getIndexSort();
-        if (verbose) {
-            segment.ramTree = Accountables.namedAccountable("root", segmentReader);
-        }
         segment.attributes = info.info.getAttributes();
         // TODO: add more fine grained mem stats values to per segment info here
         segments.put(info.info.name, segment);
@@ -1654,7 +1658,7 @@ public abstract class Engine implements Closeable {
             this.ifPrimaryTerm = primaryTerm;
             return this;
         }
-        
+
         public long getIfPrimaryTerm() {
             return ifPrimaryTerm;
         }

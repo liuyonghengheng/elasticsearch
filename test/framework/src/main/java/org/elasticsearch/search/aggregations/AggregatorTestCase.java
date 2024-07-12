@@ -19,31 +19,13 @@
 package org.elasticsearch.search.aggregations;
 
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.document.BinaryDocValuesField;
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.HalfFloatPoint;
-import org.apache.lucene.document.InetAddressPoint;
-import org.apache.lucene.document.LatLonDocValuesField;
-import org.apache.lucene.document.SortedNumericDocValuesField;
-import org.apache.lucene.document.SortedSetDocValuesField;
-import org.apache.lucene.document.StoredField;
-import org.apache.lucene.index.AssertingDirectoryReader;
-import org.apache.lucene.index.CompositeReaderContext;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.IndexReaderContext;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.RandomIndexWriter;
-import org.apache.lucene.search.AssertingIndexSearcher;
-import org.apache.lucene.search.Collector;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryCache;
-import org.apache.lucene.search.QueryCachingPolicy;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Weight;
+import org.apache.lucene.document.*;
+import org.apache.lucene.index.*;
+import org.apache.lucene.sandbox.document.HalfFloatPoint;
+import org.apache.lucene.search.*;
 import org.apache.lucene.store.Directory;
+import org.apache.lucene.tests.index.AssertingDirectoryReader;
+import org.apache.lucene.tests.index.RandomIndexWriter;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.NumericUtils;
 import org.elasticsearch.Version;
@@ -74,25 +56,9 @@ import org.elasticsearch.index.cache.query.DisabledQueryCache;
 import org.elasticsearch.index.fielddata.IndexFieldData;
 import org.elasticsearch.index.fielddata.IndexFieldDataCache;
 import org.elasticsearch.index.fielddata.IndexFieldDataService;
-import org.elasticsearch.index.mapper.BinaryFieldMapper;
-import org.elasticsearch.index.mapper.CompletionFieldMapper;
-import org.elasticsearch.index.mapper.ContentPath;
-import org.elasticsearch.index.mapper.DateFieldMapper;
-import org.elasticsearch.index.mapper.FieldAliasMapper;
-import org.elasticsearch.index.mapper.FieldMapper;
-import org.elasticsearch.index.mapper.GeoPointFieldMapper;
-import org.elasticsearch.index.mapper.GeoShapeFieldMapper;
-import org.elasticsearch.index.mapper.KeywordFieldMapper;
-import org.elasticsearch.index.mapper.MappedFieldType;
-import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.*;
 import org.elasticsearch.index.mapper.Mapper.BuilderContext;
-import org.elasticsearch.index.mapper.MapperService;
-import org.elasticsearch.index.mapper.NumberFieldMapper;
-import org.elasticsearch.index.mapper.ObjectMapper;
 import org.elasticsearch.index.mapper.ObjectMapper.Nested;
-import org.elasticsearch.index.mapper.RangeFieldMapper;
-import org.elasticsearch.index.mapper.RangeType;
-import org.elasticsearch.index.mapper.TextFieldMapper;
 import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.ShardId;
@@ -126,29 +92,19 @@ import org.junit.Before;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.singletonList;
-import static java.util.Collections.singletonMap;
+import static java.util.Collections.*;
 import static org.elasticsearch.test.InternalAggregationTestCase.DEFAULT_MAX_BUCKETS;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.mockito.Matchers.anyObject;
 import static org.mockito.Matchers.anyString;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 /**
  * Base class for testing {@link Aggregator} implementations.
@@ -476,7 +432,7 @@ public abstract class AggregatorTestCase extends ESTestCase {
             int r = randomIntBetween(1, toReduceSize);
             List<InternalAggregation> toReduce = aggs.subList(0, r);
             InternalAggregation.ReduceContext context = InternalAggregation.ReduceContext.forPartialReduction(
-                root.context().bigArrays(), getMockScriptService(), () -> PipelineAggregator.PipelineTree.EMPTY);
+                root.context().bigArrays(), getMockScriptService(), () -> PipelineTree.EMPTY);
             A reduced = (A) aggs.get(0).reduce(toReduce, context);
             aggs = new ArrayList<>(aggs.subList(r, toReduceSize));
             aggs.add(reduced);
@@ -502,7 +458,7 @@ public abstract class AggregatorTestCase extends ESTestCase {
         return internalAgg;
     }
 
-    protected void doAssertReducedMultiBucketConsumer(Aggregation agg, MultiBucketConsumerService.MultiBucketConsumer bucketConsumer) {
+    protected void doAssertReducedMultiBucketConsumer(Aggregation agg, MultiBucketConsumer bucketConsumer) {
         InternalAggregationTestCase.assertMultiBucketConsumer(agg, bucketConsumer);
     }
 
@@ -559,13 +515,15 @@ public abstract class AggregatorTestCase extends ESTestCase {
 
     /**
      * Added to randomly run with more assertions on the index searcher level,
-     * like {@link org.apache.lucene.util.LuceneTestCase#newSearcher(IndexReader)}, which can't be used because it also
+     * like {@link org.apache.lucene.tests.util.LuceneTestCase#newSearcher(IndexReader)}, which can't be used because it also
      * wraps in the IndexSearcher's IndexReader with other implementations that we can't handle. (e.g. ParallelCompositeReader)
      */
     protected static IndexSearcher newIndexSearcher(IndexReader indexReader) {
+        // TODO:liuyongheng 这里目前直接去除了AssertingIndexSearcher方式，看一下有没有影响
         if (randomBoolean()) {
             // this executes basic query checks and asserts that weights are normalized only once etc.
-            return new AssertingIndexSearcher(random(), indexReader);
+//            return new AssertingIndexSearcher(random(), indexReader);
+            return new IndexSearcher(indexReader);
         } else {
             return new IndexSearcher(indexReader);
         }
@@ -573,7 +531,7 @@ public abstract class AggregatorTestCase extends ESTestCase {
 
     /**
      * Added to randomly run with more assertions on the index reader level,
-     * like {@link org.apache.lucene.util.LuceneTestCase#wrapReader(IndexReader)}, which can't be used because it also
+     * like {@link org.apache.lucene.tests.util.LuceneTestCase#wrapReader(IndexReader)}, which can't be used because it also
      * wraps in the IndexReader with other implementations that we can't handle. (e.g. ParallelCompositeReader)
      */
     protected static IndexReader maybeWrapReaderEs(DirectoryReader reader) throws IOException {

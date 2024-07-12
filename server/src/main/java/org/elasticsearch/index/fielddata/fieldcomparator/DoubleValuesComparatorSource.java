@@ -21,20 +21,12 @@ package org.elasticsearch.index.fielddata.fieldcomparator;
 
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NumericDocValues;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.FieldComparator;
-import org.apache.lucene.search.LeafFieldComparator;
-import org.apache.lucene.search.Scorable;
-import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.*;
 import org.apache.lucene.search.comparators.DoubleComparator;
 import org.apache.lucene.util.BitSet;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.util.BigArrays;
-import org.elasticsearch.index.fielddata.FieldData;
-import org.elasticsearch.index.fielddata.IndexFieldData;
-import org.elasticsearch.index.fielddata.IndexNumericFieldData;
-import org.elasticsearch.index.fielddata.NumericDoubleValues;
-import org.elasticsearch.index.fielddata.SortedNumericDoubleValues;
+import org.elasticsearch.index.fielddata.*;
 import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.MultiValueMode;
 import org.elasticsearch.search.sort.BucketedSort;
@@ -50,7 +42,7 @@ public class DoubleValuesComparatorSource extends IndexFieldData.XFieldComparato
     private final IndexNumericFieldData indexFieldData;
 
     public DoubleValuesComparatorSource(IndexNumericFieldData indexFieldData, @Nullable Object missingValue, MultiValueMode sortMode,
-            Nested nested) {
+                                        Nested nested) {
         super(missingValue, sortMode, nested);
         this.indexFieldData = indexFieldData;
     }
@@ -79,13 +71,13 @@ public class DoubleValuesComparatorSource extends IndexFieldData.XFieldComparato
     protected void setScorer(Scorable scorer) {}
 
     @Override
-    public FieldComparator<?> newComparator(String fieldname, int numHits, int sortPos, boolean reversed) {
+    public FieldComparator<?> newComparator(String fieldname, int numHits, Pruning enableSkipping, boolean reversed) {
         assert indexFieldData == null || fieldname.equals(indexFieldData.getFieldName());
 
         final double dMissingValue = (Double) missingObject(missingValue, reversed);
         // NOTE: it's important to pass null as a missing value in the constructor so that
         // the comparator doesn't check docsWithField since we replace missing values in select()
-        return new DoubleComparator(numHits, null, null, reversed, sortPos) {
+        return new DoubleComparator(numHits, null, null, reversed, Pruning.NONE) {
             @Override
             public LeafFieldComparator getLeafComparator(LeafReaderContext context) throws IOException {
                 return new DoubleLeafComparator(context) {

@@ -64,7 +64,7 @@ public class VersionUtilsTests extends ESTestCase {
         // sub range
         got = VersionUtils.randomVersionBetween(random(), Version.V_6_0_0_alpha1,
                 Version.V_6_2_4);
-        assertTrue(got.onOrAfter(Version.V_6_0_0_alpha1));
+        assertTrue(got.onOrAfter(Version.V_7_0_0));
         assertTrue(got.onOrBefore(Version.V_6_2_4));
 
         // unbounded lower

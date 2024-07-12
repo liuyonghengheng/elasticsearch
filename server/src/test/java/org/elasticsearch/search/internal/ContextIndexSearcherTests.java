@@ -36,21 +36,7 @@ import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.search.BoostQuery;
-import org.apache.lucene.search.BulkScorer;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.Explanation;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.LeafCollector;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.Scorable;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.Weight;
+import org.apache.lucene.search.*;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.BitSet;
@@ -403,10 +389,10 @@ public class ContextIndexSearcherTests extends ESTestCase {
             this.weight = weight;
         }
 
-        @Override
-        public void extractTerms(Set<Term> terms) {
-            weight.extractTerms(terms);
-        }
+//        @Override
+//        public void extractTerms(Set<Term> terms) {
+//            weight.extractTerms(terms);
+//        }
 
         @Override
         public Explanation explain(LeafReaderContext context, int doc) throws IOException {
@@ -452,6 +438,11 @@ public class ContextIndexSearcherTests extends ESTestCase {
                 return new CreateScorerOnceQuery(queryRewritten);
             }
             return super.rewrite(reader);
+        }
+
+        @Override
+        public void visit(QueryVisitor visitor) {
+            visitor.visitLeaf(this);
         }
 
         @Override

@@ -37,11 +37,11 @@ import org.apache.lucene.search.FuzzyQuery;
 import org.apache.lucene.search.MultiTermQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.spans.SpanMultiTermQueryWrapper;
-import org.apache.lucene.search.spans.SpanNearQuery;
-import org.apache.lucene.search.spans.SpanOrQuery;
-import org.apache.lucene.search.spans.SpanQuery;
-import org.apache.lucene.search.spans.SpanTermQuery;
+import org.apache.lucene.queries.spans.SpanMultiTermQueryWrapper;
+import org.apache.lucene.queries.spans.SpanNearQuery;
+import org.apache.lucene.queries.spans.SpanOrQuery;
+import org.apache.lucene.queries.spans.SpanQuery;
+import org.apache.lucene.queries.spans.SpanTermQuery;
 import org.apache.lucene.util.QueryBuilder;
 import org.apache.lucene.util.graph.GraphTokenStreamFiniteStrings;
 import org.elasticsearch.ElasticsearchException;
@@ -521,10 +521,10 @@ public class MatchQuery {
             return new SpanOrQuery(spanQueries);
         }
 
-        @Override
-        protected SpanQuery createSpanQuery(TokenStream in, String field) throws IOException {
-            return createSpanQuery(in, field, false);
-        }
+//        @Override
+//        protected SpanQuery createSpanQuery(TokenStream in, String field) throws IOException {
+//            return createSpanQuery(in, field, false);
+//        }
 
         private SpanQuery createSpanQuery(TokenStream in, String field, boolean isPrefix) throws IOException {
             TermToBytesRefAttribute termAtt = in.getAttribute(TermToBytesRefAttribute.class);
@@ -627,9 +627,9 @@ public class MatchQuery {
             } else {
                 // We don't apply prefix on synonyms
                 final TermAndBoost[] termAndBoosts = current.stream()
-                    .map(t -> new TermAndBoost(t, BoostAttribute.DEFAULT_BOOST))
+                    .map(t -> new TermAndBoost(t.bytes(), BoostAttribute.DEFAULT_BOOST))
                     .toArray(TermAndBoost[]::new);
-                q.add(newSynonymQuery(termAndBoosts), operator);
+                q.add(newSynonymQuery(field, termAndBoosts), operator);
             }
         }
 
@@ -744,9 +744,9 @@ public class MatchQuery {
                     } else {
                         // We don't apply prefix on synonyms
                         final TermAndBoost[] termAndBoosts = Arrays.stream(terms)
-                            .map(t -> new TermAndBoost(t, BoostAttribute.DEFAULT_BOOST))
+                            .map(t -> new TermAndBoost(t.bytes(), BoostAttribute.DEFAULT_BOOST))
                             .toArray(TermAndBoost[]::new);
-                        queryPos = newSynonymQuery(termAndBoosts);
+                        queryPos = newSynonymQuery(field, termAndBoosts);
                     }
                 }
                 if (queryPos != null) {

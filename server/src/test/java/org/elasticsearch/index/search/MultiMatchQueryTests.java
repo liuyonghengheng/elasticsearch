@@ -19,7 +19,7 @@
 
 package org.elasticsearch.index.search;
 
-import org.apache.lucene.analysis.MockSynonymAnalyzer;
+import org.apache.lucene.tests.analysis.MockSynonymAnalyzer;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.queries.BlendedTermQuery;
 import org.apache.lucene.search.BooleanClause;
@@ -59,6 +59,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.elasticsearch.index.query.QueryBuilders.multiMatchQuery;
+import static org.elasticsearch.test.AbstractBuilderTestCase.TEXT_FIELD_NAME;
 import static org.hamcrest.Matchers.equalTo;
 
 public class MultiMatchQueryTests extends ESSingleNodeTestCase {
@@ -214,7 +215,12 @@ public class MultiMatchQueryTests extends ESSingleNodeTestCase {
         Term[] terms = new Term[2];
         terms[0] = new Term("name.first", "dog");
         terms[1] = new Term("name.first", "dogs");
-        Query expectedQuery = new SynonymQuery(terms);
+//        Query expectedQuery = new SynonymQuery(terms);
+        SynonymQuery.Builder builder = new SynonymQuery.Builder(TEXT_FIELD_NAME);
+        for(Term t:terms){
+            builder.addTerm(t);
+        }
+        Query expectedQuery = builder.build();
         assertThat(parsedQuery, equalTo(expectedQuery));
 
         // check that blended term query is used for multiple fields

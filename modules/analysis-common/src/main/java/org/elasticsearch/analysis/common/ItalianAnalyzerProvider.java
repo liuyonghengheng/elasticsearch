@@ -37,7 +37,7 @@ public class ItalianAnalyzerProvider extends AbstractIndexAnalyzerProvider<Itali
             Analysis.parseStopWords(env, settings, ItalianAnalyzer.getDefaultStopSet()),
             Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET)
         );
-        analyzer.setVersion(version);
+        //analyzer.setVersion(version);
     }
 
     @Override

@@ -70,7 +70,8 @@ public final class RemoteClusterService extends RemoteClusterAware implements Cl
 
     static {
         // remove search.remote.* settings in 8.0.0
-        assert Version.CURRENT.major < 8;
+        // TODO:liuyongheng 这里先删除，后续可参考高版本
+//        assert Version.CURRENT.major < 8;
     }
 
     public static final Setting<TimeValue> SEARCH_REMOTE_INITIAL_CONNECTION_TIMEOUT_SETTING =

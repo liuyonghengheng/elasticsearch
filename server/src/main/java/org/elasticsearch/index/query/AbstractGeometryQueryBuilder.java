@@ -187,7 +187,7 @@ public abstract class AbstractGeometryQueryBuilder<QB extends AbstractGeometryQu
             indexedShapeType = in.readOptionalString();
             indexedShapeIndex = in.readOptionalString();
             indexedShapePath = in.readOptionalString();
-            if (in.getVersion().onOrAfter(Version.V_6_4_0)) {
+            if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
                 indexedShapeRouting = in.readOptionalString();
             } else {
                 indexedShapeRouting = null;
@@ -213,7 +213,7 @@ public abstract class AbstractGeometryQueryBuilder<QB extends AbstractGeometryQu
             out.writeOptionalString(indexedShapeType);
             out.writeOptionalString(indexedShapeIndex);
             out.writeOptionalString(indexedShapePath);
-            if (out.getVersion().onOrAfter(Version.V_6_4_0)) {
+            if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
                 out.writeOptionalString(indexedShapeRouting);
             } else if (indexedShapeRouting != null) {
                 throw new IllegalStateException("indexed shape routing cannot be serialized to older nodes");

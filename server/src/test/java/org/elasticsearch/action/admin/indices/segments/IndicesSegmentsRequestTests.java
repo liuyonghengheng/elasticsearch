@@ -64,11 +64,12 @@ public class IndicesSegmentsRequestTests extends ESSingleNodeTestCase {
         assertNull(segments.get(0).toString(), segments.get(0).ramTree);
     }
 
-    public void testVerbose() {
-        IndicesSegmentResponse rsp = client().admin().indices().prepareSegments("test").setVerbose(true).get();
-        List<Segment> segments = rsp.getIndices().get("test").iterator().next().getShards()[0].getSegments();
-        assertNotNull(segments.get(0).toString(), segments.get(0).ramTree);
-    }
+    // TODO:liuyongheng 不再支持 .setVerbose(true)
+//    public void testVerbose() {
+//        IndicesSegmentResponse rsp = client().admin().indices().prepareSegments("test").setVerbose(true).get();
+//        List<Segment> segments = rsp.getIndices().get("test").iterator().next().getShards()[0].getSegments();
+//        assertNotNull(segments.get(0).toString(), segments.get(0).ramTree);
+//    }
 
     /**
      * with the default IndicesOptions inherited from BroadcastOperationRequest this will raise an exception

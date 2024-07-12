@@ -20,7 +20,7 @@
 package org.elasticsearch.common.bytes;
 
 import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.FutureArrays;
+import java.util.Arrays;
 import org.elasticsearch.common.io.stream.StreamInput;
 
 import java.io.IOException;
@@ -83,7 +83,7 @@ public final class BytesArray extends AbstractBytesReference {
         }
         if (other instanceof BytesArray) {
             final BytesArray that = (BytesArray) other;
-            return FutureArrays.equals(bytes, offset, offset + length, that.bytes, that.offset, that.offset + that.length);
+            return Arrays.equals(bytes, offset, offset + length, that.bytes, that.offset, that.offset + that.length);
         }
         return super.equals(other);
     }

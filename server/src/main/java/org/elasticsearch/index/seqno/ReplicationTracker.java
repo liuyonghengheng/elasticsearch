@@ -464,7 +464,8 @@ public class ReplicationTracker extends AbstractIndexShardComponent implements L
         }
 
         // TODO after backporting we expect this never to happen in 8.x, so adjust this to throw an exception instead.
-        assert Version.CURRENT.major <= 8 : "throw an exception instead of returning EMPTY on null";
+        // TODO:liuyongheng 这里先删除，后续可参考高版本
+//        assert Version.CURRENT.major <= 8 : "throw an exception instead of returning EMPTY on null";
         if (retentionLeases == null) {
             return RetentionLeases.EMPTY;
         }
@@ -646,7 +647,7 @@ public class ReplicationTracker extends AbstractIndexShardComponent implements L
             this.localCheckpoint = in.readZLong();
             this.globalCheckpoint = in.readZLong();
             this.inSync = in.readBoolean();
-            if (in.getVersion().onOrAfter(Version.V_6_3_0)) {
+            if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
                 this.tracked = in.readBoolean();
             } else {
                 // Every in-sync shard copy is also tracked (see invariant). This was the case even in earlier ES versions.
@@ -663,7 +664,7 @@ public class ReplicationTracker extends AbstractIndexShardComponent implements L
             out.writeZLong(localCheckpoint);
             out.writeZLong(globalCheckpoint);
             out.writeBoolean(inSync);
-            if (out.getVersion().onOrAfter(Version.V_6_3_0)) {
+            if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
                 out.writeBoolean(tracked);
             }
         }

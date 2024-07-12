@@ -51,7 +51,7 @@ public class FieldCapabilitiesIndexRequest extends ActionRequest implements Indi
         shardId = in.readOptionalWriteable(ShardId::new);
         index = in.readOptionalString();
         fields = in.readStringArray();
-        if (in.getVersion().onOrAfter(Version.V_6_2_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             originalIndices = OriginalIndices.readOriginalIndices(in);
         } else {
             originalIndices = OriginalIndices.NONE;
@@ -116,7 +116,7 @@ public class FieldCapabilitiesIndexRequest extends ActionRequest implements Indi
         out.writeOptionalWriteable(shardId);
         out.writeOptionalString(index);
         out.writeStringArray(fields);
-        if (out.getVersion().onOrAfter(Version.V_6_2_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             OriginalIndices.writeOriginalIndices(originalIndices, out);
         }
         if (out.getVersion().onOrAfter(Version.V_7_9_0)) {

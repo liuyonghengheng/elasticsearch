@@ -100,10 +100,10 @@ import org.apache.lucene.analysis.ro.RomanianAnalyzer;
 import org.apache.lucene.analysis.ru.RussianAnalyzer;
 import org.apache.lucene.analysis.shingle.ShingleFilter;
 import org.apache.lucene.analysis.snowball.SnowballFilter;
-import org.apache.lucene.analysis.standard.ClassicFilter;
-import org.apache.lucene.analysis.standard.ClassicTokenizer;
+import org.apache.lucene.analysis.classic.ClassicFilter;
+import org.apache.lucene.analysis.classic.ClassicTokenizer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.analysis.standard.UAX29URLEmailTokenizer;
+import org.apache.lucene.analysis.email.UAX29URLEmailTokenizer;
 import org.apache.lucene.analysis.sv.SwedishAnalyzer;
 import org.apache.lucene.analysis.th.ThaiAnalyzer;
 import org.apache.lucene.analysis.th.ThaiTokenizer;
@@ -412,7 +412,7 @@ public class CommonAnalysisPlugin extends Plugin implements AnalysisPlugin, Scri
         List<PreConfiguredCharFilter> filters = new ArrayList<>();
         filters.add(PreConfiguredCharFilter.singleton("html_strip", false, HTMLStripCharFilter::new));
         filters.add(PreConfiguredCharFilter.elasticsearchVersion("htmlStrip", false, (reader, version) -> {
-            if (version.onOrAfter(org.elasticsearch.Version.V_6_3_0)) {
+            if (version.onOrAfter(Version.V_7_0_0)) {
                 deprecationLogger.deprecate("htmlStrip_deprecation",
                         "The [htmpStrip] char filter name is deprecated and will be removed in a future version. "
                                 + "Please change the filter name to [html_strip] instead.");
@@ -443,7 +443,7 @@ public class CommonAnalysisPlugin extends Plugin implements AnalysisPlugin, Scri
                 throw new IllegalArgumentException(
                     "[delimited_payload_filter] is not supported for new indices, use [delimited_payload] instead");
             }
-            if (version.onOrAfter(Version.V_6_2_0)) {
+            if (version.onOrAfter(Version.V_7_0_0)) {
                 deprecationLogger.deprecate("analysis_delimited_payload_filter",
                     "Deprecated [delimited_payload_filter] used, replaced by [delimited_payload]");
             }

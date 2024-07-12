@@ -437,7 +437,7 @@ public abstract class InternalOrder extends BucketOrder {
          * @throws IOException on error reading from the stream.
          */
         public static BucketOrder readHistogramOrder(StreamInput in, boolean bwcOrderFlag) throws IOException {
-            if (in.getVersion().onOrAfter(Version.V_6_0_0_alpha2)) {
+            if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
                 return Streams.readOrder(in);
             } else { // backwards compat logic
                 if (bwcOrderFlag == false || in.readBoolean()) {
@@ -493,7 +493,7 @@ public abstract class InternalOrder extends BucketOrder {
          * @throws IOException on error writing to the stream.
          */
         public static void writeHistogramOrder(BucketOrder order, StreamOutput out, boolean bwcOrderFlag) throws IOException {
-            if (out.getVersion().onOrAfter(Version.V_6_0_0_alpha2)) {
+            if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
                 order.writeTo(out);
             } else { // backwards compat logic
                 if(bwcOrderFlag) { // need to add flag that determines if order exists

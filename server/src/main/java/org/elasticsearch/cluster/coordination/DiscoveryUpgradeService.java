@@ -105,7 +105,10 @@ public class DiscoveryUpgradeService {
                                    BooleanSupplier isBootstrappedSupplier, JoinHelper joinHelper,
                                    Supplier<Iterable<DiscoveryNode>> peersSupplier,
                                    Consumer<VotingConfiguration> initialConfigurationConsumer) {
-        assert Version.CURRENT.major == Version.V_6_6_0.major + 1 : "remove this service once unsafe upgrades are no longer needed";
+//        assert Version.CURRENT.major == Version.V_6_6_0.major + 1 : "remove this service once unsafe upgrades are no longer needed";
+        // TODO:liuyongheng 这里替换成7版本以上,原来的 Version.V_6_6_0.major + 1 就是7
+        // TODO:liuyongheng 这里先删除，后续可参考高版本
+//        assert Version.CURRENT.major == Version.V_7_0_0.major : "remove this service once unsafe upgrades are no longer needed";
         this.transportService = transportService;
         this.isBootstrappedSupplier = isBootstrappedSupplier;
         this.joinHelper = joinHelper;

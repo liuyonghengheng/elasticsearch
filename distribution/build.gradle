@@ -277,18 +277,18 @@ project.rootProject.subprojects.findAll { it.parent.path == ':modules' }.each { 
 }
 
 // use licenses from each of the bundled xpack plugins
-Project xpack = project(':x-pack:plugin')
-xpack.subprojects.findAll { it.parent == xpack }.each { Project xpackModule ->
-  File licenses = new File(xpackModule.projectDir, 'licenses')
-  if (licenses.exists()) {
-    buildDefaultNoticeTaskProvider.configure {
-      licensesDir licenses
-      source xpackModule.file('src/main/java')
-    }
-  }
-  copyModule(processDefaultOutputsTaskProvider, xpackModule)
-  copyLog4jProperties(buildDefaultLog4jConfigTaskProvider, xpackModule)
-}
+//Project xpack = project(':x-pack:plugin')
+//xpack.subprojects.findAll { it.parent == xpack }.each { Project xpackModule ->
+//  File licenses = new File(xpackModule.projectDir, 'licenses')
+//  if (licenses.exists()) {
+//    buildDefaultNoticeTaskProvider.configure {
+//      licensesDir licenses
+//      source xpackModule.file('src/main/java')
+//    }
+//  }
+//  copyModule(processDefaultOutputsTaskProvider, xpackModule)
+//  copyLog4jProperties(buildDefaultLog4jConfigTaskProvider, xpackModule)
+//}
 
 copyModule(processSystemdOutputsTaskProvider, project(':modules:systemd'))
 
@@ -341,7 +341,7 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
 
     libsPluginCli project(':distribution:tools:plugin-cli')
     libsKeystoreCli project(path: ':distribution:tools:keystore-cli')
-    libsSecurityCli project(':x-pack:plugin:security:cli')
+//    libsSecurityCli project(':x-pack:plugin:security:cli')
   }
 
   project.ext {

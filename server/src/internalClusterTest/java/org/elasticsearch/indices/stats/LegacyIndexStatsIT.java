@@ -45,7 +45,8 @@ public class LegacyIndexStatsIT extends ESIntegTestCase {
                 .admin()
                 .indices()
                 .prepareCreate("test1")
-                .setSettings(Settings.builder().put(IndexMetadata.SETTING_INDEX_VERSION_CREATED.getKey(), Version.V_6_0_0))
+//                .setSettings(Settings.builder().put(IndexMetadata.SETTING_INDEX_VERSION_CREATED.getKey(), Version.V_6_0_0))
+                .setSettings(Settings.builder().put(IndexMetadata.SETTING_INDEX_VERSION_CREATED.getKey(), Version.V_7_0_0))
                 .addMapping("_doc", "bar", "type=text,fielddata=true", "baz", "type=text,fielddata=true")
                 .get());
 

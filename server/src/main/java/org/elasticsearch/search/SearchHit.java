@@ -149,7 +149,7 @@ public final class SearchHit implements Writeable, ToXContentObject, Iterable<Do
         type = in.readOptionalText();
         nestedIdentity = in.readOptionalWriteable(NestedIdentity::new);
         version = in.readLong();
-        if (in.getVersion().onOrAfter(Version.V_6_7_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             seqNo = in.readZLong();
             primaryTerm = in.readVLong();
         }
@@ -247,7 +247,7 @@ public final class SearchHit implements Writeable, ToXContentObject, Iterable<Do
         out.writeOptionalText(type);
         out.writeOptionalWriteable(nestedIdentity);
         out.writeLong(version);
-        if (out.getVersion().onOrAfter(Version.V_6_7_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeZLong(seqNo);
             out.writeVLong(primaryTerm);
         }

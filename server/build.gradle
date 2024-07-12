@@ -86,7 +86,8 @@ dependencies {
 
   // lucene
   api "org.apache.lucene:lucene-core:${versions.lucene}"
-  api "org.apache.lucene:lucene-analyzers-common:${versions.lucene}"
+  api "org.apache.lucene:lucene-analysis-common:${versions.lucene}"
+//  api "org.apache.lucene:lucene-analyzers-common:${versions.lucene}"
   api "org.apache.lucene:lucene-backward-codecs:${versions.lucene}"
   api "org.apache.lucene:lucene-grouping:${versions.lucene}"
   api "org.apache.lucene:lucene-highlighter:${versions.lucene}"
@@ -122,7 +123,7 @@ dependencies {
 
   // repackaged jna with native bits linked against all elastic supported platforms
   api "org.elasticsearch:jna:${versions.jna}"
-
+  api 'org.apache.commons:commons-lang3:3.9'
   testImplementation(project(":test:framework")) {
     // tests use the locally compiled version of server
     exclude group: 'org.elasticsearch', module: 'server'
@@ -164,7 +165,7 @@ tasks.named("testingConventions").configure {
     naming.clear()
     naming {
         Tests {
-            baseClass "org.apache.lucene.util.LuceneTestCase"
+            baseClass "org.apache.lucene.tests.util.LuceneTestCase"
         }
         IT {
             baseClass "org.elasticsearch.test.ESIntegTestCase"
@@ -175,7 +176,7 @@ tasks.named("testingConventions").configure {
 
 def generateModulesList = tasks.register("generateModulesList") {
     List<String> modules = project(':modules').subprojects.collect { it.name }
-    modules.add('x-pack')
+//    modules.add('x-pack')
     File modulesFile = new File(buildDir, 'generated-resources/modules.txt')
     processResources.from(modulesFile)
     inputs.property('modules', modules)
@@ -312,7 +313,9 @@ tasks.named("thirdPartyAudit").configure {
             'com.google.common.geometry.S2Projections',
             'com.google.common.geometry.S2Point',
             'com.google.common.geometry.S2$Metric',
-            'com.google.common.geometry.S2LatLng'
+            'com.google.common.geometry.S2LatLng',
+
+            'org.apache.commons:commons-lang3'
     )
 
     if (BuildParams.runtimeJavaVersion > JavaVersion.VERSION_1_8) {

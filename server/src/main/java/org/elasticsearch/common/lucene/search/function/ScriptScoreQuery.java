@@ -100,10 +100,10 @@ public class ScriptScoreQuery extends Query {
                 }
             }
 
-            @Override
-            public void extractTerms(Set<Term> terms) {
-                subQueryWeight.extractTerms(terms);
-            }
+//            @Override
+//            public void extractTerms(Set<Term> terms) {
+//                subQueryWeight.extractTerms(terms);
+//            }
 
             @Override
             public Scorer scorer(LeafReaderContext context) throws IOException {

@@ -20,26 +20,14 @@
 package org.elasticsearch.common.lucene.search;
 
 import com.carrotsearch.hppc.ObjectHashSet;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.index.Terms;
-import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.MultiPhraseQuery;
-import org.apache.lucene.search.Query;
+import org.apache.lucene.index.*;
+import org.apache.lucene.search.*;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.StringHelper;
+import org.apache.lucene.util.automaton.CompiledAutomaton;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.List;
-import java.util.ListIterator;
-import java.util.Objects;
+import java.util.*;
 
 public class MultiPhrasePrefixQuery extends Query {
 
@@ -57,7 +45,7 @@ public class MultiPhrasePrefixQuery extends Query {
     /**
      * Sets the phrase slop for this query.
      *
-     * @see org.apache.lucene.search.PhraseQuery.Builder#setSlop(int)
+     * @see PhraseQuery.Builder#setSlop(int)
      */
     public void setSlop(int s) {
         slop = s;
@@ -70,7 +58,7 @@ public class MultiPhrasePrefixQuery extends Query {
     /**
      * Sets the phrase slop for this query.
      *
-     * @see org.apache.lucene.search.PhraseQuery.Builder#getSlop()
+     * @see PhraseQuery.Builder#getSlop()
      */
     public int getSlop() {
         return slop;
@@ -79,7 +67,7 @@ public class MultiPhrasePrefixQuery extends Query {
     /**
      * Add a single term at the next position in the phrase.
      *
-     * @see org.apache.lucene.search.PhraseQuery.Builder#add(Term)
+     * @see PhraseQuery.Builder#add(Term)
      */
     public void add(Term term) {
         add(new Term[]{term});
@@ -89,7 +77,7 @@ public class MultiPhrasePrefixQuery extends Query {
      * Add multiple terms at the next position in the phrase.  Any of the terms
      * may match.
      *
-     * @see org.apache.lucene.search.PhraseQuery.Builder#add(Term)
+     * @see PhraseQuery.Builder#add(Term)
      */
     public void add(Term[] terms) {
         int position = 0;
@@ -104,7 +92,7 @@ public class MultiPhrasePrefixQuery extends Query {
      *
      * @param terms the terms
      * @param position the position of the terms provided as argument
-     * @see org.apache.lucene.search.PhraseQuery.Builder#add(Term, int)
+     * @see PhraseQuery.Builder#add(Term, int)
      */
     public void add(Term[] terms, int position) {
         for (int i = 0; i < terms.length; i++) {
@@ -180,6 +168,27 @@ public class MultiPhrasePrefixQuery extends Query {
         }
         query.add(terms.toArray(Term.class), position);
         return query.build();
+    }
+
+    @Override
+    public void visit(QueryVisitor visitor) {
+        if (visitor.acceptField(field)) {
+            visitor = visitor.getSubVisitor(BooleanClause.Occur.MUST, this);
+            for (int i = 0; i < termArrays.size() - 1; i++) {
+                if (termArrays.get(i).length == 1) {
+                    visitor.consumeTerms(this, termArrays.get(i)[0]);
+                } else {
+                    QueryVisitor shouldVisitor = visitor.getSubVisitor(BooleanClause.Occur.SHOULD, this);
+                    shouldVisitor.consumeTerms(this, termArrays.get(i));
+                }
+            }
+            for (Term prefixTerm : termArrays.get(termArrays.size() - 1)) {
+                visitor.consumeTermsMatching(this, field, () -> {
+                    CompiledAutomaton ca = new CompiledAutomaton(PrefixQuery.toAutomaton(prefixTerm.bytes()));
+                    return ca.runAutomaton;
+                });
+            }
+        }
     }
 
     private void getPrefixTerms(ObjectHashSet<Term> terms, final Term prefix, final IndexReader reader) throws IOException {

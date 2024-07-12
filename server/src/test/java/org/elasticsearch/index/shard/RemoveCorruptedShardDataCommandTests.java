@@ -20,7 +20,7 @@ package org.elasticsearch.index.shard;
 
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
-import org.apache.lucene.store.BaseDirectoryWrapper;
+import org.apache.lucene.tests.store.BaseDirectoryWrapper;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
 import org.elasticsearch.cli.MockTerminal;

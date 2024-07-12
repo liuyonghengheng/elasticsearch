@@ -30,7 +30,7 @@ import java.util.List;
 import com.google.common.jimfs.Configuration;
 import com.google.common.jimfs.Jimfs;
 import org.elasticsearch.core.internal.io.IOUtils;
-import org.apache.lucene.util.LuceneTestCase;
+import org.apache.lucene.tests.util.LuceneTestCase;
 import org.elasticsearch.cli.CommandTestCase;
 import org.elasticsearch.common.io.PathUtilsForTesting;
 import org.elasticsearch.env.Environment;

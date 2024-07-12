@@ -82,7 +82,7 @@ public class DeleteRequest extends ReplicatedWriteRequest<DeleteRequest>
         }
         version = in.readLong();
         versionType = VersionType.fromValue(in.readByte());
-        if (in.getVersion().onOrAfter(Version.V_6_6_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             ifSeqNo = in.readZLong();
             ifPrimaryTerm = in.readVLong();
         } else {
@@ -157,7 +157,7 @@ public class DeleteRequest extends ReplicatedWriteRequest<DeleteRequest>
     @Override
     public String type() {
         if (type == null) {
-            return MapperService.SINGLE_MAPPING_NAME;                    
+            return MapperService.SINGLE_MAPPING_NAME;
         }
         return type;
     }
@@ -173,12 +173,12 @@ public class DeleteRequest extends ReplicatedWriteRequest<DeleteRequest>
         this.type = type;
         return this;
     }
-    
+
     /**
      * Set the default type supplied to a bulk
      * request if this individual request's type is null
      * or empty
-     * 
+     *
      * @deprecated Types are in the process of being removed.
      */
     @Deprecated
@@ -188,7 +188,7 @@ public class DeleteRequest extends ReplicatedWriteRequest<DeleteRequest>
             type = defaultType;
         }
         return this;
-    }    
+    }
 
     /**
      * The id of the document to delete.
@@ -333,7 +333,7 @@ public class DeleteRequest extends ReplicatedWriteRequest<DeleteRequest>
         }
         out.writeLong(version);
         out.writeByte(versionType.getValue());
-        if (out.getVersion().onOrAfter(Version.V_6_6_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeZLong(ifSeqNo);
             out.writeVLong(ifPrimaryTerm);
         } else if (ifSeqNo != UNASSIGNED_SEQ_NO || ifPrimaryTerm != UNASSIGNED_PRIMARY_TERM) {

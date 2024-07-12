@@ -437,7 +437,7 @@ public class RestoreInProgress extends AbstractNamedDiffable<Custom> implements 
         final ImmutableOpenMap.Builder<String, Entry> entriesBuilder = ImmutableOpenMap.builder(count);
         for (int i = 0; i < count; i++) {
             final String uuid;
-            if (in.getVersion().onOrAfter(Version.V_6_6_0)) {
+            if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
                 uuid = in.readString();
             } else {
                 uuid = BWC_UUID;
@@ -456,7 +456,7 @@ public class RestoreInProgress extends AbstractNamedDiffable<Custom> implements 
         out.writeVInt(entries.size());
         for (ObjectCursor<Entry> v : entries.values()) {
             Entry entry = v.value;
-            if (out.getVersion().onOrAfter(Version.V_6_6_0)) {
+            if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
                 out.writeString(entry.uuid);
             }
             entry.snapshot().writeTo(out);

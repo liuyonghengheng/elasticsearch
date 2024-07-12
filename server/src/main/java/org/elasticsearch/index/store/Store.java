@@ -21,6 +21,7 @@ package org.elasticsearch.index.store;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.apache.lucene.backward_codecs.store.EndiannessReverserUtil;
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.index.CheckIndex;
 import org.apache.lucene.index.CorruptIndexException;
@@ -35,17 +36,7 @@ import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfos;
-import org.apache.lucene.store.AlreadyClosedException;
-import org.apache.lucene.store.BufferedChecksum;
-import org.apache.lucene.store.ByteArrayDataInput;
-import org.apache.lucene.store.ChecksumIndexInput;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FilterDirectory;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.IndexInput;
-import org.apache.lucene.store.IndexOutput;
-import org.apache.lucene.store.Lock;
-import org.apache.lucene.store.SimpleFSDirectory;
+import org.apache.lucene.store.*;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.BytesRefBuilder;
@@ -449,7 +440,7 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
     public static MetadataSnapshot readMetadataSnapshot(Path indexLocation, ShardId shardId, NodeEnvironment.ShardLocker shardLocker,
                                                         Logger logger) throws IOException {
         try (ShardLock lock = shardLocker.lock(shardId, "read metadata snapshot", TimeUnit.SECONDS.toMillis(5));
-             Directory dir = new SimpleFSDirectory(indexLocation)) {
+             Directory dir = new NIOFSDirectory(indexLocation)) {
             failIfCorrupted(dir);
             return new MetadataSnapshot(null, dir, logger);
         } catch (IndexNotFoundException ex) {
@@ -470,7 +461,7 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
     public static void tryOpenIndex(Path indexLocation, ShardId shardId, NodeEnvironment.ShardLocker shardLocker,
                                         Logger logger) throws IOException, ShardLockObtainFailedException {
         try (ShardLock lock = shardLocker.lock(shardId, "open index", TimeUnit.SECONDS.toMillis(5));
-             Directory dir = new SimpleFSDirectory(indexLocation)) {
+             Directory dir = new NIOFSDirectory(indexLocation)) {
             failIfCorrupted(dir);
             SegmentInfos segInfo = Lucene.readSegmentInfos(dir);
             logger.trace("{} loaded segment info [{}]", shardId, segInfo);
@@ -640,7 +631,7 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
                     // FNF should not happen since we hold a write lock?
                 } catch (IOException ex) {
                     if (existingFile.startsWith(IndexFileNames.SEGMENTS)
-                            || existingFile.equals(IndexFileNames.OLD_SEGMENTS_GEN)
+//                            || existingFile.equals(IndexFileNames.OLD_SEGMENTS_GEN)
                             || existingFile.startsWith(CORRUPTED_MARKER_NAME_PREFIX)) {
                         // TODO do we need to also fail this if we can't delete the pending commit file?
                         // if one of those files can't be deleted we better fail the cleanup otherwise we might leave an old commit
@@ -992,9 +983,10 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
             final List<StoreFileMetadata> perCommitStoreFiles = new ArrayList<>();
 
             for (StoreFileMetadata meta : this) {
-                if (IndexFileNames.OLD_SEGMENTS_GEN.equals(meta.name())) { // legacy
-                    continue; // we don't need that file at all
-                }
+//                if (IndexFileNames.OLD_SEGMENTS_GEN.equals(meta.name())) { // legacy
+//                    continue; // we don't need that file at all
+//                }
+                // TODO:liuyongheng 此处需要处理
                 final String segmentId = IndexFileNames.parseSegmentName(meta.name());
                 final String extension = IndexFileNames.getExtension(meta.name());
                 if (IndexFileNames.SEGMENTS.equals(segmentId) ||
@@ -1030,9 +1022,9 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
             }
             RecoveryDiff recoveryDiff = new RecoveryDiff(Collections.unmodifiableList(identical),
                 Collections.unmodifiableList(different), Collections.unmodifiableList(missing));
-            assert recoveryDiff.size() == this.metadata.size() - (metadata.containsKey(IndexFileNames.OLD_SEGMENTS_GEN) ? 1 : 0)
-                    : "some files are missing recoveryDiff size: [" + recoveryDiff.size() + "] metadata size: [" +
-                      this.metadata.size() + "] contains  segments.gen: [" + metadata.containsKey(IndexFileNames.OLD_SEGMENTS_GEN) + "]";
+//            assert recoveryDiff.size() == this.metadata.size() - (metadata.containsKey(IndexFileNames.OLD_SEGMENTS_GEN) ? 1 : 0)
+//                    : "some files are missing recoveryDiff size: [" + recoveryDiff.size() + "] metadata size: [" +
+//                      this.metadata.size() + "] contains  segments.gen: [" + metadata.containsKey(IndexFileNames.OLD_SEGMENTS_GEN) + "]";
             return recoveryDiff;
         }
 
@@ -1167,12 +1159,23 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
             checksumPosition = metadata.length() - 8; // the last 8 bytes are the checksum - we store it in footerChecksum
         }
 
+//        private static byte[] readByteArray(DataInput input) throws IOException {
+//            final int len = input.readInt();
+//            final byte[] b = new byte[len];
+//            input.readBytes(b, 0, len);
+//            return b;
+//        }
+
         @Override
         public void verify() throws IOException {
             String footerDigest = null;
             if (metadata.checksum().equals(actualChecksum) && writtenBytes == metadata.length()) {
-                ByteArrayIndexInput indexInput = new ByteArrayIndexInput("checksum", this.footerChecksum);
-                footerDigest = digestToString(indexInput.readLong());
+//                ByteArrayIndexInput indexInput = new ByteArrayIndexInput("checksum", this.footerChecksum);
+//                footerDigest = digestToString(indexInput.readLong());
+                ByteArrayDataInput indexInput = new ByteArrayDataInput(this.footerChecksum);
+                final DataInput maybeWrappedInput = EndiannessReverserUtil.wrapDataInput(indexInput);
+                footerDigest = digestToString(maybeWrappedInput.readLong());
+
                 if (metadata.checksum().equals(footerDigest)) {
                     return;
                 }
@@ -1343,8 +1346,15 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
             throw new UnsupportedOperationException();
         }
 
+//        public long getStoredChecksum() {
+//            return new ByteArrayDataInput(checksum).readLong();
+//        }
         public long getStoredChecksum() {
-            return new ByteArrayDataInput(checksum).readLong();
+            try {
+                return CodecUtil.readBELong(new ByteArrayDataInput(checksum));
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
         }
 
         public long verify() throws CorruptIndexException {
@@ -1531,26 +1541,9 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
             final IndexCommit startingIndexCommit;
             // We may not have a safe commit if an index was create before v6.2; and if there is a snapshotted commit whose translog
             // are not retained but max_seqno is at most the global checkpoint, we may mistakenly select it as a starting commit.
-            // To avoid this issue, we only select index commits whose translog are fully retained.
-            if (indexVersionCreated.before(org.elasticsearch.Version.V_6_2_0)) {
-                final List<IndexCommit> recoverableCommits = new ArrayList<>();
-                for (IndexCommit commit : existingCommits) {
-                    final String translogGeneration = commit.getUserData().get("translog_generation");
-                    if (translogGeneration == null || minRetainedTranslogGen <= Long.parseLong(translogGeneration)) {
-                        recoverableCommits.add(commit);
-                    }
-                }
-                // We could reach here if the node is restarted multiple times after upgraded without flushing a new index commit.
-                // In this case, we can safely consider all commits as the starting commit because we have trimmed the unsafe
-                // commits in the first restart.
-                if (recoverableCommits.isEmpty()) {
-                    recoverableCommits.addAll(existingCommits);
-                }
-                startingIndexCommit = CombinedDeletionPolicy.findSafeCommitPoint(recoverableCommits, lastSyncedGlobalCheckpoint);
-            } else {
+
                 // TODO: Asserts the starting commit is a safe commit once peer-recovery sets global checkpoint.
-                startingIndexCommit = CombinedDeletionPolicy.findSafeCommitPoint(existingCommits, lastSyncedGlobalCheckpoint);
-            }
+            startingIndexCommit = CombinedDeletionPolicy.findSafeCommitPoint(existingCommits, lastSyncedGlobalCheckpoint);
 
             if (translogUUID.equals(startingIndexCommit.getUserData().get(Translog.TRANSLOG_UUID_KEY)) == false) {
                 throw new IllegalStateException("starting commit translog uuid ["

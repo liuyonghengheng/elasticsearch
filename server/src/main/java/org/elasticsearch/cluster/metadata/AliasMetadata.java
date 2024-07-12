@@ -196,7 +196,7 @@ public class AliasMetadata extends AbstractDiffable<AliasMetadata> implements To
             out.writeBoolean(false);
         }
 
-        if (out.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeOptionalBoolean(writeIndex());
         }
 
@@ -224,7 +224,7 @@ public class AliasMetadata extends AbstractDiffable<AliasMetadata> implements To
             searchRouting = null;
             searchRoutingValues = emptySet();
         }
-        if (in.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             writeIndex = in.readOptionalBoolean();
         } else {
             writeIndex = null;

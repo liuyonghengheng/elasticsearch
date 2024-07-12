@@ -142,7 +142,8 @@ public class FetchPhase {
                         // So we do a little hack here and pretend we're going to do merges in order to
                         // get better sequential access.
                         SequentialStoredFieldsLeafReader lf = (SequentialStoredFieldsLeafReader) currentReaderContext.reader();
-                        fieldReader = lf.getSequentialStoredFieldsReader()::visitDocument;
+                        // TODO:liuyongheng 仔细看一下上层的调用逻辑确认这么写有没有问题
+                        fieldReader = lf.getSequentialStoredFieldsReader()::document;
                     } else {
                         fieldReader = currentReaderContext.reader()::document;
                     }
@@ -503,7 +504,7 @@ public class FetchPhase {
             BitSet parentBits = context.bitsetFilterCache().getBitSetProducer(parentFilter).getBitSet(subReaderContext);
 
             int offset = 0;
-            if (indexSettings.getIndexVersionCreated().onOrAfter(Version.V_6_5_0)) {
+            if (indexSettings.getIndexVersionCreated().onOrAfter(Version.V_7_0_0)) {
                 /**
                  * Starts from the previous parent and finds the offset of the
                  * <code>nestedSubDocID</code> within the nested children. Nested documents

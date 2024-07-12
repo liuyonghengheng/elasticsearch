@@ -18,6 +18,7 @@
  */
 package org.elasticsearch.search.fetch.subphase.highlight;
 
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.lucene.search.highlight.Encoder;
 import org.apache.lucene.search.vectorhighlight.BaseFragmentsBuilder;
 import org.apache.lucene.search.vectorhighlight.BoundaryScanner;
@@ -232,7 +233,7 @@ public class FastVectorHighlighter implements Highlighter {
                 return DEFAULT_WORD_BOUNDARY_SCANNER;
             case CHARS:
                 if (fieldOptions.boundaryMaxScan() != SimpleBoundaryScanner.DEFAULT_MAX_SCAN
-                    || fieldOptions.boundaryChars() != SimpleBoundaryScanner.DEFAULT_BOUNDARY_CHARS) {
+                    || fieldOptions.boundaryChars() != ArrayUtils.toObject(SimpleBoundaryScanner.DEFAULT_BOUNDARY_CHARS)) {
                     return new SimpleBoundaryScanner(fieldOptions.boundaryMaxScan(), fieldOptions.boundaryChars());
                 }
                 return DEFAULT_SIMPLE_BOUNDARY_SCANNER;

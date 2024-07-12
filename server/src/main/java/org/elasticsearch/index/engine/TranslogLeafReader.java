@@ -18,21 +18,8 @@
  */
 package org.elasticsearch.index.engine;
 
-import org.apache.lucene.index.BinaryDocValues;
-import org.apache.lucene.index.DocValuesType;
-import org.apache.lucene.index.FieldInfo;
-import org.apache.lucene.index.FieldInfos;
-import org.apache.lucene.index.Fields;
-import org.apache.lucene.index.IndexOptions;
-import org.apache.lucene.index.LeafMetaData;
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.NumericDocValues;
-import org.apache.lucene.index.PointValues;
-import org.apache.lucene.index.SortedDocValues;
-import org.apache.lucene.index.SortedNumericDocValues;
-import org.apache.lucene.index.SortedSetDocValues;
-import org.apache.lucene.index.StoredFieldVisitor;
-import org.apache.lucene.index.Terms;
+import org.apache.lucene.index.*;
+import org.apache.lucene.search.KnnCollector;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.util.set.Sets;
@@ -43,7 +30,6 @@ import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.translog.Translog;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Set;
 
@@ -51,17 +37,66 @@ import java.util.Set;
  * Internal class that mocks a single doc read from the transaction log as a leaf reader.
  */
 public final class TranslogLeafReader extends LeafReader {
-
+// TODO:liuyongheng 如果要实现可以参考es8.14 TranslogDirectoryReader.TranslogLeafReader ,目前版本并没有具体实现
     private final Translog.Index operation;
-    private static final FieldInfo FAKE_SOURCE_FIELD
-        = new FieldInfo(SourceFieldMapper.NAME, 1, false, false, false, IndexOptions.NONE, DocValuesType.NONE, -1, Collections.emptyMap(),
-        0, 0, 0, false);
-    private static final FieldInfo FAKE_ROUTING_FIELD
-        = new FieldInfo(RoutingFieldMapper.NAME, 2, false, false, false, IndexOptions.NONE, DocValuesType.NONE, -1, Collections.emptyMap(),
-        0, 0, 0, false);
-    private static final FieldInfo FAKE_ID_FIELD
-        = new FieldInfo(IdFieldMapper.NAME, 3, false, false, false, IndexOptions.NONE, DocValuesType.NONE, -1, Collections.emptyMap(),
-        0, 0, 0, false);
+
+    private static final FieldInfo FAKE_SOURCE_FIELD = new FieldInfo(
+        SourceFieldMapper.NAME,
+        1,
+        false,
+        false,
+        false,
+        IndexOptions.NONE,
+        DocValuesType.NONE,
+        -1,
+        Collections.emptyMap(),
+        0,
+        0,
+        0,
+        0,
+        VectorEncoding.FLOAT32,
+        VectorSimilarityFunction.EUCLIDEAN,
+        false,
+        false
+    );
+    private static final FieldInfo FAKE_ROUTING_FIELD = new FieldInfo(
+        RoutingFieldMapper.NAME,
+        2,
+        false,
+        false,
+        false,
+        IndexOptions.NONE,
+        DocValuesType.NONE,
+        -1,
+        Collections.emptyMap(),
+        0,
+        0,
+        0,
+        0,
+        VectorEncoding.FLOAT32,
+        VectorSimilarityFunction.EUCLIDEAN,
+        false,
+        false
+    );
+    private static final FieldInfo FAKE_ID_FIELD = new FieldInfo(
+        IdFieldMapper.NAME,
+        3,
+        false,
+        false,
+        false,
+        IndexOptions.DOCS,
+        DocValuesType.NONE,
+        -1,
+        Collections.emptyMap(),
+        0,
+        0,
+        0,
+        0,
+        VectorEncoding.FLOAT32,
+        VectorSimilarityFunction.EUCLIDEAN,
+        false,
+        false
+    );
     public static Set<String> ALL_FIELD_NAMES = Sets.newHashSet(FAKE_SOURCE_FIELD.name, FAKE_ROUTING_FIELD.name, FAKE_ID_FIELD.name);
 
     TranslogLeafReader(Translog.Index operation) {
@@ -108,6 +143,26 @@ public final class TranslogLeafReader extends LeafReader {
     }
 
     @Override
+    public FloatVectorValues getFloatVectorValues(String s) throws IOException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public ByteVectorValues getByteVectorValues(String s) throws IOException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void searchNearestVectors(String s, float[] floats, KnnCollector knnCollector, Bits bits) throws IOException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void searchNearestVectors(String s, byte[] bytes, KnnCollector knnCollector, Bits bits) throws IOException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public FieldInfos getFieldInfos() {
         throw new UnsupportedOperationException();
     }
@@ -138,6 +193,11 @@ public final class TranslogLeafReader extends LeafReader {
     }
 
     @Override
+    public TermVectors termVectors() throws IOException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public int numDocs() {
         return 1;
     }
@@ -158,7 +218,7 @@ public final class TranslogLeafReader extends LeafReader {
             visitor.binaryField(FAKE_SOURCE_FIELD, operation.source().toBytesRef().bytes);
         }
         if (operation.routing() != null && visitor.needsField(FAKE_ROUTING_FIELD) == StoredFieldVisitor.Status.YES) {
-            visitor.stringField(FAKE_ROUTING_FIELD, operation.routing().getBytes(StandardCharsets.UTF_8));
+            visitor.stringField(FAKE_ROUTING_FIELD, operation.routing());
         }
         if (visitor.needsField(FAKE_ID_FIELD) == StoredFieldVisitor.Status.YES) {
             BytesRef bytesRef = Uid.encodeId(operation.id());
@@ -166,6 +226,11 @@ public final class TranslogLeafReader extends LeafReader {
             System.arraycopy(bytesRef.bytes, bytesRef.offset, id, 0, bytesRef.length);
             visitor.binaryField(FAKE_ID_FIELD, id);
         }
+    }
+
+    @Override
+    public StoredFields storedFields() throws IOException {
+        throw new UnsupportedOperationException();
     }
 
     @Override

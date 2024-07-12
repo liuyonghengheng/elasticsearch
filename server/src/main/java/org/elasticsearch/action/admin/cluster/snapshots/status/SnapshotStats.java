@@ -57,7 +57,7 @@ public class SnapshotStats implements Writeable, ToXContentObject {
         incrementalSize = in.readVLong();
         processedSize = in.readVLong();
 
-        if (in.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             totalFileCount = in.readVInt();
             totalSize = in.readVLong();
         } else {
@@ -147,7 +147,7 @@ public class SnapshotStats implements Writeable, ToXContentObject {
         out.writeVLong(incrementalSize);
         out.writeVLong(processedSize);
 
-        if (out.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeVInt(totalFileCount);
             out.writeVLong(totalSize);
         }

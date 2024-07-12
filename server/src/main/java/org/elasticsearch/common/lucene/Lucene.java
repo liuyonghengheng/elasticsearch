@@ -105,7 +105,7 @@ import java.util.List;
 import java.util.Map;
 
 public class Lucene {
-    public static final String LATEST_CODEC = "Lucene87";
+    public static final String LATEST_CODEC = "Lucene99";
 
     public static final String SOFT_DELETES_FIELD = "__soft_deletes";
 
@@ -201,7 +201,7 @@ public class Lucene {
                  * since checksums don's match anymore. that's why we prune the name here directly.
                  * We also want the caller to know if we were not able to remove a segments_N file.
                  */
-                if (file.startsWith(IndexFileNames.SEGMENTS) || file.equals(IndexFileNames.OLD_SEGMENTS_GEN)) {
+                if (file.startsWith(IndexFileNames.SEGMENTS)) {
                     foundSegmentFiles++;
                     if (file.equals(si.getSegmentsFileName()) == false) {
                         directory.deleteFile(file); // remove all segment_N files except of the one we wanna keep
@@ -240,7 +240,7 @@ public class Lucene {
     public static void cleanLuceneIndex(Directory directory) throws IOException {
         try (Lock writeLock = directory.obtainLock(IndexWriter.WRITE_LOCK_NAME)) {
             for (final String file : directory.listAll()) {
-                if (file.startsWith(IndexFileNames.SEGMENTS) || file.equals(IndexFileNames.OLD_SEGMENTS_GEN)) {
+                if (file.startsWith(IndexFileNames.SEGMENTS)) {
                     directory.deleteFile(file); // remove all segment_N files
                 }
             }
@@ -998,87 +998,5 @@ public class Lucene {
      */
     public static NumericDocValuesField newSoftDeletesField() {
         return new NumericDocValuesField(SOFT_DELETES_FIELD, 1);
-    }
-
-    /**
-     * Returns an empty leaf reader with the given max docs. The reader will be fully deleted.
-     */
-    public static LeafReader emptyReader(final int maxDoc) {
-        return new LeafReader() {
-            final Bits liveDocs = new Bits.MatchNoBits(maxDoc);
-
-            public Terms terms(String field) {
-                return null;
-            }
-
-            public NumericDocValues getNumericDocValues(String field) {
-                return null;
-            }
-
-            public BinaryDocValues getBinaryDocValues(String field) {
-                return null;
-            }
-
-            public SortedDocValues getSortedDocValues(String field) {
-                return null;
-            }
-
-            public SortedNumericDocValues getSortedNumericDocValues(String field) {
-                return null;
-            }
-
-            public SortedSetDocValues getSortedSetDocValues(String field) {
-                return null;
-            }
-
-            public NumericDocValues getNormValues(String field) {
-                return null;
-            }
-
-            public FieldInfos getFieldInfos() {
-                return new FieldInfos(new FieldInfo[0]);
-            }
-
-            public Bits getLiveDocs() {
-                return this.liveDocs;
-            }
-
-            public PointValues getPointValues(String fieldName) {
-                return null;
-            }
-
-            public void checkIntegrity() {
-            }
-
-            public Fields getTermVectors(int docID) {
-                return null;
-            }
-
-            public int numDocs() {
-                return 0;
-            }
-
-            public int maxDoc() {
-                return maxDoc;
-            }
-
-            public void document(int docID, StoredFieldVisitor visitor) {
-            }
-
-            protected void doClose() {
-            }
-
-            public LeafMetaData getMetaData() {
-                return new LeafMetaData(Version.LATEST.major, Version.LATEST, null);
-            }
-
-            public CacheHelper getCoreCacheHelper() {
-                return null;
-            }
-
-            public CacheHelper getReaderCacheHelper() {
-                return null;
-            }
-        };
     }
 }

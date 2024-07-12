@@ -65,7 +65,7 @@ public class IngestStats implements Writeable, ToXContentFragment {
             String pipelineId = in.readString();
             Stats pipelineStat = new Stats(in);
             this.pipelineStats.add(new PipelineStat(pipelineId, pipelineStat));
-            if (in.getVersion().onOrAfter(Version.V_6_5_0)) {
+            if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
                 int processorsSize = in.readVInt();
                 List<ProcessorStat> processorStatsPerPipeline = new ArrayList<>(processorsSize);
                 for (int j = 0; j < processorsSize; j++) {
@@ -89,7 +89,7 @@ public class IngestStats implements Writeable, ToXContentFragment {
         for (PipelineStat pipelineStat : pipelineStats) {
             out.writeString(pipelineStat.getPipelineId());
             pipelineStat.getStats().writeTo(out);
-            if (out.getVersion().onOrAfter(Version.V_6_5_0)) {
+            if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
                 List<ProcessorStat> processorStatsForPipeline = processorStats.get(pipelineStat.getPipelineId());
                 if (processorStatsForPipeline == null) {
                     out.writeVInt(0);

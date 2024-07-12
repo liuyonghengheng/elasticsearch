@@ -20,10 +20,7 @@
 package org.elasticsearch.search.searchafter;
 
 import org.apache.lucene.document.LatLonDocValuesField;
-import org.apache.lucene.search.FieldComparator;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.SortedNumericSortField;
-import org.apache.lucene.search.SortedSetSortField;
+import org.apache.lucene.search.*;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
@@ -269,7 +266,7 @@ public class SearchAfterBuilderTests extends ESTestCase {
             }
 
             @Override
-            public FieldComparator<?> newComparator(String fieldname, int numHits, int sortPos, boolean reversed) {
+            public FieldComparator<?> newComparator(String fieldname, int numHits, Pruning pruning, boolean reversed) {
                 return null;
             }
 

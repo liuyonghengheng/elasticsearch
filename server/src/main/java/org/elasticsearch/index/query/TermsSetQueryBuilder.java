@@ -22,7 +22,7 @@ import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.SortedNumericDocValues;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.CoveringQuery;
+import org.apache.lucene.sandbox.search.CoveringQuery;
 import org.apache.lucene.search.DoubleValues;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.LongValues;

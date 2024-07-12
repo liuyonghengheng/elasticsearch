@@ -82,13 +82,15 @@ final class EsTieredMergePolicy extends FilterMergePolicy {
         return regularMergePolicy.getMaxMergeAtOnce();
     }
 
+    // 不再支持
     public void setMaxMergeAtOnceExplicit(int maxMergeAtOnceExplicit) {
-        regularMergePolicy.setMaxMergeAtOnceExplicit(maxMergeAtOnceExplicit);
-        forcedMergePolicy.setMaxMergeAtOnceExplicit(maxMergeAtOnceExplicit);
+//        regularMergePolicy.setMaxMergeAtOnceExplicit(maxMergeAtOnceExplicit);
+//        forcedMergePolicy.setMaxMergeAtOnceExplicit(maxMergeAtOnceExplicit);
     }
 
     public int getMaxMergeAtOnceExplicit() {
-        return forcedMergePolicy.getMaxMergeAtOnceExplicit();
+//        return forcedMergePolicy.getMaxMergeAtOnceExplicit();
+        return 0;
     }
 
     // only setter that must NOT delegate to the forced merge policy

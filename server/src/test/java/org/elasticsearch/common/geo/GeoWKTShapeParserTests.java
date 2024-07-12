@@ -18,7 +18,7 @@
  */
 package org.elasticsearch.common.geo;
 
-import org.apache.lucene.geo.GeoTestUtil;
+import org.apache.lucene.tests.geo.GeoTestUtil;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.Version;
@@ -347,8 +347,10 @@ public class GeoWKTShapeParserTests extends BaseGeoParsingTestCase {
         XContentParser parser = createParser(xContentBuilder);
         parser.nextToken();
 
+        // TODO:liuyongheng 这里需要确认版本有没有影响
         Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.V_6_3_0)
+//            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.V_6_3_0)
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.V_7_0_0)
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
             .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID()).build();
@@ -378,7 +380,7 @@ public class GeoWKTShapeParserTests extends BaseGeoParsingTestCase {
         parser.nextToken();
 
         Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.V_6_3_0)
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.V_7_0_0)
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
             .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID()).build();
@@ -399,7 +401,7 @@ public class GeoWKTShapeParserTests extends BaseGeoParsingTestCase {
         parser.nextToken();
 
         Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.V_6_3_0)
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.V_7_0_0)
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
             .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID()).build();

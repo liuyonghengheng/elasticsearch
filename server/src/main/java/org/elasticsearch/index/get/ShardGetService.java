@@ -258,8 +258,11 @@ public final class ShardGetService extends AbstractIndexShardComponent {
                     for (IndexableField indexableField : doc.rootDoc().getFields()) {
                         IndexableFieldType fieldType = indexableField.fieldType();
                         if (fieldType.stored()) {
+//                            FieldInfo fieldInfo = new FieldInfo(indexableField.name(), 0, false, false, false, IndexOptions.NONE,
+//                                DocValuesType.NONE, -1, Collections.emptyMap(), 0, 0, 0, false);
+                            // TODO:liuyongheng 此处需要处理参数初始化值
                             FieldInfo fieldInfo = new FieldInfo(indexableField.name(), 0, false, false, false, IndexOptions.NONE,
-                                DocValuesType.NONE, -1, Collections.emptyMap(), 0, 0, 0, false);
+                                DocValuesType.NONE, -1, Collections.emptyMap(), 0, 0, 0, 0,null,null,false,false);
                             StoredFieldVisitor.Status status = fieldVisitor.needsField(fieldInfo);
                             if (status == StoredFieldVisitor.Status.YES) {
                                 if (indexableField.numericValue() != null) {

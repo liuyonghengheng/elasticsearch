@@ -19,7 +19,7 @@
 package org.elasticsearch.index.mapper;
 
 import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.TestUtil;
+import org.apache.lucene.tests.util.TestUtil;
 import org.elasticsearch.test.ESTestCase;
 
 import java.util.Arrays;

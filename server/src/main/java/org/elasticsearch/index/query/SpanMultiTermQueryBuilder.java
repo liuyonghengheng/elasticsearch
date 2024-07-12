@@ -25,7 +25,7 @@ import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.MultiTermQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TopTermsRewrite;
-import org.apache.lucene.search.spans.SpanMultiTermQueryWrapper;
+import org.apache.lucene.queries.spans.SpanMultiTermQueryWrapper;
 import org.elasticsearch.common.ParseField;
 import org.elasticsearch.common.ParsingException;
 import org.elasticsearch.common.io.stream.StreamInput;

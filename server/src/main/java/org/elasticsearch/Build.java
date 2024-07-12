@@ -224,13 +224,13 @@ public class Build {
     public static Build readBuild(StreamInput in) throws IOException {
         final Flavor flavor;
         final Type type;
-        if (in.getVersion().onOrAfter(Version.V_6_3_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             // be lenient when reading on the wire, the enumeration values from other versions might be different than what we know
             flavor = Flavor.fromDisplayName(in.readString(), false);
         } else {
             flavor = Flavor.OSS;
         }
-        if (in.getVersion().onOrAfter(Version.V_6_3_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             // be lenient when reading on the wire, the enumeration values from other versions might be different than what we know
             type = Type.fromDisplayName(in.readString(), false);
         } else {
@@ -250,16 +250,12 @@ public class Build {
     }
 
     public static void writeBuild(Build build, StreamOutput out) throws IOException {
-        if (out.getVersion().onOrAfter(Version.V_6_3_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeString(build.flavor().displayName());
         }
-        if (out.getVersion().onOrAfter(Version.V_6_3_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             final Type buildType;
-            if (out.getVersion().before(Version.V_6_7_0) && build.type() == Type.DOCKER) {
-                buildType = Type.TAR;
-            } else {
-                buildType = build.type();
-            }
+            buildType = build.type();
             out.writeString(buildType.displayName());
         }
         out.writeString(build.hash());

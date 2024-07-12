@@ -20,9 +20,9 @@
 package org.elasticsearch.index.mapper;
 
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.CannedTokenStream;
-import org.apache.lucene.analysis.MockTokenizer;
-import org.apache.lucene.analysis.Token;
+import org.apache.lucene.tests.analysis.CannedTokenStream;
+import org.apache.lucene.tests.analysis.MockTokenizer;
+import org.apache.lucene.tests.analysis.Token;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.core.KeywordAnalyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;

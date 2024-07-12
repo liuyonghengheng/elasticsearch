@@ -160,26 +160,14 @@ public final class InnerHitBuilder implements Writeable, ToXContentObject {
         size = in.readVInt();
         explain = in.readBoolean();
         version = in.readBoolean();
-        if (in.getVersion().onOrAfter(Version.V_6_7_0)){
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)){
             seqNoAndPrimaryTerm = in.readBoolean();
         } else {
             seqNoAndPrimaryTerm = false;
         }
         trackScores = in.readBoolean();
         storedFieldsContext = in.readOptionalWriteable(StoredFieldsContext::new);
-        if (in.getVersion().before(Version.V_6_4_0)) {
-            @SuppressWarnings("unchecked")
-            List<String> fieldList = (List<String>) in.readGenericValue();
-            if (fieldList == null) {
-                docValueFields = null;
-            } else {
-                docValueFields = fieldList.stream()
-                        .map(field -> new FieldAndFormat(field, null))
-                        .collect(Collectors.toList());
-            }
-        } else {
-            docValueFields = in.readBoolean() ? in.readList(FieldAndFormat::new) : null;
-        }
+        docValueFields = in.readBoolean() ? in.readList(FieldAndFormat::new) : null;
         if (in.readBoolean()) {
             int size = in.readVInt();
             scriptFields = new HashSet<>(size);
@@ -196,7 +184,7 @@ public final class InnerHitBuilder implements Writeable, ToXContentObject {
             }
         }
         highlightBuilder = in.readOptionalWriteable(HighlightBuilder::new);
-        if (in.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (in.getVersion().onOrAfter(Version.V_7_0_0)) {
             this.innerCollapseBuilder = in.readOptionalWriteable(CollapseBuilder::new);
         }
 
@@ -215,20 +203,14 @@ public final class InnerHitBuilder implements Writeable, ToXContentObject {
         out.writeVInt(size);
         out.writeBoolean(explain);
         out.writeBoolean(version);
-        if (out.getVersion().onOrAfter(Version.V_6_7_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeBoolean(seqNoAndPrimaryTerm);
         }
         out.writeBoolean(trackScores);
         out.writeOptionalWriteable(storedFieldsContext);
-        if (out.getVersion().before(Version.V_6_4_0)) {
-            out.writeGenericValue(docValueFields == null
-                    ? null
-                    : docValueFields.stream().map(ff -> ff.field).collect(Collectors.toList()));
-        } else {
-            out.writeBoolean(docValueFields != null);
-            if (docValueFields != null) {
-                out.writeList(docValueFields);
-            }
+        out.writeBoolean(docValueFields != null);
+        if (docValueFields != null) {
+            out.writeList(docValueFields);
         }
         boolean hasScriptFields = scriptFields != null;
         out.writeBoolean(hasScriptFields);
@@ -250,7 +232,7 @@ public final class InnerHitBuilder implements Writeable, ToXContentObject {
             }
         }
         out.writeOptionalWriteable(highlightBuilder);
-        if (out.getVersion().onOrAfter(Version.V_6_4_0)) {
+        if (out.getVersion().onOrAfter(Version.V_7_0_0)) {
             out.writeOptionalWriteable(innerCollapseBuilder);
         }
 

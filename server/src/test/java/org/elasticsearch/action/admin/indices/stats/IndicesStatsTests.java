@@ -84,11 +84,13 @@ public class IndicesStatsTests extends ESSingleNodeTestCase {
 
         IndicesStatsResponse rsp = client().admin().indices().prepareStats("test").get();
         SegmentsStats stats = rsp.getIndex("test").getTotal().getSegments();
-        assertThat(stats.getTermsMemoryInBytes(), greaterThan(0L));
-        assertThat(stats.getStoredFieldsMemoryInBytes(), greaterThan(0L));
-        assertThat(stats.getTermVectorsMemoryInBytes(), greaterThan(0L));
-        assertThat(stats.getNormsMemoryInBytes(), greaterThan(0L));
-        assertThat(stats.getDocValuesMemoryInBytes(), greaterThan(0L));
+        // TODO:liuyogheng 最新版本不再支持从segments状态中获取 内存使用情况！
+//        assertThat(stats.getTermsMemoryInBytes(), greaterThan(0L));
+//        assertThat(stats.getStoredFieldsMemoryInBytes(), greaterThan(0L));
+//        assertThat(stats.getTermVectorsMemoryInBytes(), greaterThan(0L));
+//        assertThat(stats.getNormsMemoryInBytes(), greaterThan(0L));
+//        assertThat(stats.getDocValuesMemoryInBytes(), greaterThan(0L));
+        assertThat(stats.getCount(), greaterThan(0L));
         if ((storeType == IndexModule.Type.MMAPFS) || (storeType == IndexModule.Type.HYBRIDFS)) {
             assertEquals(0, stats.getPointsMemoryInBytes()); // bkd tree is stored off-heap
         } else {
@@ -101,11 +103,12 @@ public class IndicesStatsTests extends ESSingleNodeTestCase {
 
         rsp = client().admin().indices().prepareStats("test").get();
         SegmentsStats stats2 = rsp.getIndex("test").getTotal().getSegments();
-        assertThat(stats2.getTermsMemoryInBytes(), greaterThan(stats.getTermsMemoryInBytes()));
-        assertThat(stats2.getStoredFieldsMemoryInBytes(), greaterThan(stats.getStoredFieldsMemoryInBytes()));
-        assertThat(stats2.getTermVectorsMemoryInBytes(), greaterThan(stats.getTermVectorsMemoryInBytes()));
-        assertThat(stats2.getNormsMemoryInBytes(), greaterThan(stats.getNormsMemoryInBytes()));
-        assertThat(stats2.getDocValuesMemoryInBytes(), greaterThan(stats.getDocValuesMemoryInBytes()));
+//        assertThat(stats2.getTermsMemoryInBytes(), greaterThan(stats.getTermsMemoryInBytes()));
+//        assertThat(stats2.getStoredFieldsMemoryInBytes(), greaterThan(stats.getStoredFieldsMemoryInBytes()));
+//        assertThat(stats2.getTermVectorsMemoryInBytes(), greaterThan(stats.getTermVectorsMemoryInBytes()));
+//        assertThat(stats2.getNormsMemoryInBytes(), greaterThan(stats.getNormsMemoryInBytes()));
+//        assertThat(stats2.getDocValuesMemoryInBytes(), greaterThan(stats.getDocValuesMemoryInBytes()));
+        assertThat(stats2.getCount(), greaterThan(0L));
         if ((storeType == IndexModule.Type.MMAPFS) || (storeType == IndexModule.Type.HYBRIDFS)) {
             assertEquals(0, stats2.getPointsMemoryInBytes()); // bkd tree is stored off-heap
         } else {
