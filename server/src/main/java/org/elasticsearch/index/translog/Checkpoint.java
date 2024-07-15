@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.translog;
 
+import org.apache.lucene.backward_codecs.store.EndiannessReverserUtil;
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.IndexFormatTooNewException;
@@ -52,10 +53,21 @@ final class Checkpoint {
     final long trimmedAboveSeqNo;
 
     private static final int VERSION_6_0_0 = 2; // introduction of global checkpoints
-    private static final int CURRENT_VERSION = 3; // introduction of trimmed above seq#
+    private static final int VERSION_8_0_0 = 3; // introduction of global checkpoints
+    private static final int CURRENT_VERSION = 4; // introduction of trimmed above seq#
 
     private static final String CHECKPOINT_CODEC = "ckp";
 
+    static final int V4_FILE_SIZE = CodecUtil.headerLength(CHECKPOINT_CODEC)
+        + Integer.BYTES  // ops
+        + Long.BYTES // offset
+        + Long.BYTES // generation
+        + Long.BYTES // minimum sequence number
+        + Long.BYTES // maximum sequence number
+        + Long.BYTES // global checkpoint
+        + Long.BYTES // minimum translog generation in the translog
+        + Long.BYTES // maximum reachable (trimmed) sequence number, introduced in 6.4.0
+        + CodecUtil.footerLength();
     // size of 6.4.0 checkpoint
 
     static final int V3_FILE_SIZE = CodecUtil.headerLength(CHECKPOINT_CODEC)
@@ -140,6 +152,10 @@ final class Checkpoint {
     }
 
     static Checkpoint readCheckpointV3(final DataInput in) throws IOException {
+        return readCheckpointV4(EndiannessReverserUtil.wrapDataInput(in));
+    }
+
+    static Checkpoint readCheckpointV4(final DataInput in) throws IOException {
         final long offset = in.readLong();
         final int numOps = in.readInt();
         final long generation = in.readLong();
@@ -182,14 +198,18 @@ final class Checkpoint {
             try (IndexInput indexInput = dir.openInput(path.getFileName().toString(), IOContext.DEFAULT)) {
                 // We checksum the entire file before we even go and parse it. If it's corrupted we barf right here.
                 CodecUtil.checksumEntireFile(indexInput);
-                final int fileVersion = CodecUtil.checkHeader(indexInput, CHECKPOINT_CODEC, VERSION_6_0_0, CURRENT_VERSION);
+                final int fileVersion = CodecUtil.checkHeader(indexInput, CHECKPOINT_CODEC, VERSION_8_0_0, CURRENT_VERSION);
+                // TODO:liuyongheng 后续不支持VERSION_6_0_0，需要删除
                 if (fileVersion == VERSION_6_0_0) {
                     assert indexInput.length() == V2_FILE_SIZE : indexInput.length();
                     return Checkpoint.readCheckpointV2(indexInput);
-                } else {
-                    assert fileVersion == CURRENT_VERSION : fileVersion;
+                } else if (fileVersion == VERSION_8_0_0){
+//                    assert fileVersion == VERSION_8_0_0 : fileVersion;
                     assert indexInput.length() == V3_FILE_SIZE : indexInput.length();
                     return Checkpoint.readCheckpointV3(indexInput);
+                }else{
+                    assert indexInput.length() == V4_FILE_SIZE : indexInput.length();
+                    return Checkpoint.readCheckpointV4(indexInput);
                 }
             } catch (CorruptIndexException | NoSuchFileException | IndexFormatTooOldException | IndexFormatTooNewException e) {
                 throw new TranslogCorruptedException(path.toString(), e);
@@ -218,7 +238,7 @@ final class Checkpoint {
     }
 
     private static byte[] createCheckpointBytes(Path checkpointFile, Checkpoint checkpoint) throws IOException {
-        final ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream(V3_FILE_SIZE) {
+        final ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream(V4_FILE_SIZE) {
             @Override
             public synchronized byte[] toByteArray() {
                 // don't clone
@@ -227,13 +247,13 @@ final class Checkpoint {
         };
         final String resourceDesc = "checkpoint(path=\"" + checkpointFile + "\", gen=" + checkpoint + ")";
         try (OutputStreamIndexOutput indexOutput =
-                 new OutputStreamIndexOutput(resourceDesc, checkpointFile.toString(), byteOutputStream, V3_FILE_SIZE)) {
+                 new OutputStreamIndexOutput(resourceDesc, checkpointFile.toString(), byteOutputStream, V4_FILE_SIZE)) {
             CodecUtil.writeHeader(indexOutput, CHECKPOINT_CODEC, CURRENT_VERSION);
             checkpoint.write(indexOutput);
             CodecUtil.writeFooter(indexOutput);
 
-            assert indexOutput.getFilePointer() == V3_FILE_SIZE :
-                "get you numbers straight; bytes written: " + indexOutput.getFilePointer() + ", buffer size: " + V3_FILE_SIZE;
+            assert indexOutput.getFilePointer() == V4_FILE_SIZE :
+                "get you numbers straight; bytes written: " + indexOutput.getFilePointer() + ", buffer size: " + V4_FILE_SIZE;
             assert indexOutput.getFilePointer() < 512 :
                 "checkpoint files have to be smaller than 512 bytes for atomic writes; size: " + indexOutput.getFilePointer();
         }

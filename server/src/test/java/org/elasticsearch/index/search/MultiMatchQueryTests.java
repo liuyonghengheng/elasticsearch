@@ -216,7 +216,7 @@ public class MultiMatchQueryTests extends ESSingleNodeTestCase {
         terms[0] = new Term("name.first", "dog");
         terms[1] = new Term("name.first", "dogs");
 //        Query expectedQuery = new SynonymQuery(terms);
-        SynonymQuery.Builder builder = new SynonymQuery.Builder(TEXT_FIELD_NAME);
+        SynonymQuery.Builder builder = new SynonymQuery.Builder("name.first");
         for(Term t:terms){
             builder.addTerm(t);
         }

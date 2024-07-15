@@ -150,8 +150,9 @@ public class Version implements Comparable<Version>, ToXContentFragment {
     public static final Version V_7_9_3 = new Version(7090399, org.apache.lucene.util.Version.LUCENE_8_6_2);
     public static final Version V_7_10_0 = new Version(7100099, org.apache.lucene.util.Version.LUCENE_8_7_0);
     public static final Version V_7_10_1 = new Version(7100199, org.apache.lucene.util.Version.LUCENE_8_7_0);
-//    public static final Version V_7_10_2 = new Version(7100299, org.apache.lucene.util.Version.LUCENE_8_7_0);
-    public static final Version V_7_10_2 = new Version(7100299, org.apache.lucene.util.Version.LUCENE_9_11_1);
+    // TODO:liuyongheng 一二级版本相同的es，lucene版本也要相同，也就是小版本允许升级lucene
+    public static final Version V_7_10_2 = new Version(7100299, org.apache.lucene.util.Version.LUCENE_8_7_0);
+    public static final Version V_7_11_2 = new Version(7110299, org.apache.lucene.util.Version.LUCENE_9_11_1);
     public static final Version V_8_0_0 = new Version(8000099, org.apache.lucene.util.Version.LUCENE_9_11_1);
     public static final Version V_8_1_2 = new Version(8010299, org.apache.lucene.util.Version.LUCENE_9_11_1);
     public static final Version V_9_0_0 = new Version(9000099, org.apache.lucene.util.Version.LUCENE_9_11_1);

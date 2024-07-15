@@ -211,8 +211,11 @@ public abstract class AbstractStringFieldDataTestCase extends AbstractFieldDataI
         addField(d, "value", "08");
         writer.addDocument(d);
 
+//        d = new Document();
+//        d.add(new StringField("_id", "6", Field.Store.NO));
+//        writer.addDocument(d);
         d = new Document();
-        d.add(new StringField("_id", "6", Field.Store.NO));
+        addField(d, "_id", "6");
         writer.addDocument(d);
 
         d = new Document();

@@ -54,7 +54,7 @@ public class CodecTests extends ESTestCase {
         CodecService codecService = createCodecService();
         assertThat(codecService.codec("default"), instanceOf(PerFieldMappingPostingFormatCodec.class));
         assertThat(codecService.codec("default"), instanceOf(Lucene99Codec.class));
-        assertThat(codecService.codec("Lucene87"), instanceOf(Lucene99Codec.class));
+        assertThat(codecService.codec("Lucene99"), instanceOf(Lucene99Codec.class));
     }
 
     public void testDefault() throws Exception {

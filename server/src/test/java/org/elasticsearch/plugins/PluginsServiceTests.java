@@ -618,14 +618,16 @@ public class PluginsServiceTests extends ESTestCase {
 //        PluginInfo info = new PluginInfo("my_plugin", "desc", "1.0", Version.V_6_0_0,
         PluginInfo info = new PluginInfo("my_plugin", "desc", "1.0", Version.V_7_0_0,
             "1.8", "FakePlugin", Collections.emptyList(), false);
+        // 这里会判断上面的plugin版本是否和当前版本一致，也就是说es版本必须和plugin版本一致，不一致直接报错
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> PluginsService.verifyCompatibility(info));
-        assertThat(e.getMessage(), containsString("was built for Elasticsearch version 6.0.0"));
+        assertThat(e.getMessage(), containsString("was built for Elasticsearch version 7.0.0"));
     }
 
     public void testIncompatibleJavaVersion() throws Exception {
         PluginInfo info = new PluginInfo("my_plugin", "desc", "1.0", Version.CURRENT,
             "1000000.0", "FakePlugin", Collections.emptyList(), false);
         IllegalStateException e = expectThrows(IllegalStateException.class, () -> PluginsService.verifyCompatibility(info));
+        // 检查plugin使用的 java版本是否和es一致，不一致不能用
         assertThat(e.getMessage(), containsString("my_plugin requires Java"));
     }
 

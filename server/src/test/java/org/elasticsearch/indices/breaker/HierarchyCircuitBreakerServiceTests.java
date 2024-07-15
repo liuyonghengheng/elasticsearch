@@ -420,6 +420,7 @@ public class HierarchyCircuitBreakerServiceTests extends ESTestCase {
         assumeTrue("Only G1GC can utilize the over limit check", JvmInfo.jvmInfo().useG1GC().equals("true"));
         assumeTrue("Must have region size", JvmInfo.jvmInfo().getG1RegionSize() > 0);
 
+        // TODO:liuyongheng 这里计算regonsize时由于拿到的heapMax 和 heapInit 不一致，导致计算出来的RegionSize 对不上
         assertThat(HierarchyCircuitBreakerService.G1OverLimitStrategy.fallbackRegionSize(JvmInfo.jvmInfo()),
             equalTo(JvmInfo.jvmInfo().getG1RegionSize()));
     }

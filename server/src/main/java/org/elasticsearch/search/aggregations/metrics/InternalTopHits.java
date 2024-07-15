@@ -110,37 +110,40 @@ public class InternalTopHits extends InternalAggregation implements TopHits {
 
         final TopDocs reducedTopDocs;
         final TopDocs[] shardDocs;
+        float maxScore = Float.NaN;
 
         if (topDocs.topDocs instanceof TopFieldDocs) {
             Sort sort = new Sort(((TopFieldDocs) topDocs.topDocs).fields);
             shardDocs = new TopFieldDocs[aggregations.size()];
-            for (int i = 0; i < shardDocs.length; i++) {
-                InternalTopHits topHitsAgg = (InternalTopHits) aggregations.get(i);
-                shardDocs[i] = topHitsAgg.topDocs.topDocs;
-                shardHits[i] = topHitsAgg.searchHits;
-            }
+//            for (int i = 0; i < shardDocs.length; i++) {
+//                InternalTopHits topHitsAgg = (InternalTopHits) aggregations.get(i);
+//                shardDocs[i] = topHitsAgg.topDocs.topDocs;
+//                shardHits[i] = topHitsAgg.searchHits;
+//            }
+            maxScore = reduceShardAndGetMaxScore(aggregations, shardDocs, shardHits);
             reducedTopDocs = TopDocs.merge(sort, from, size, (TopFieldDocs[]) shardDocs);
         } else {
             shardDocs = new TopDocs[aggregations.size()];
-            for (int i = 0; i < shardDocs.length; i++) {
-                InternalTopHits topHitsAgg = (InternalTopHits) aggregations.get(i);
-                shardDocs[i] = topHitsAgg.topDocs.topDocs;
-                shardHits[i] = topHitsAgg.searchHits;
-            }
+//            for (int i = 0; i < shardDocs.length; i++) {
+//                InternalTopHits topHitsAgg = (InternalTopHits) aggregations.get(i);
+//                shardDocs[i] = topHitsAgg.topDocs.topDocs;
+//                shardHits[i] = topHitsAgg.searchHits;
+//            }
+            maxScore = reduceShardAndGetMaxScore(aggregations, shardDocs, shardHits);
             reducedTopDocs = TopDocs.merge(from, size, shardDocs);
         }
 
-        float maxScore = Float.NaN;
-        for (InternalAggregation agg : aggregations) {
-            InternalTopHits topHitsAgg = (InternalTopHits) agg;
-            if (Float.isNaN(topHitsAgg.topDocs.maxScore) == false) {
-                if (Float.isNaN(maxScore)) {
-                    maxScore = topHitsAgg.topDocs.maxScore;
-                } else {
-                    maxScore = Math.max(maxScore, topHitsAgg.topDocs.maxScore);
-                }
-            }
-        }
+//        float maxScore = Float.NaN;
+//        for (InternalAggregation agg : aggregations) {
+//            InternalTopHits topHitsAgg = (InternalTopHits) agg;
+//            if (Float.isNaN(topHitsAgg.topDocs.maxScore) == false) {
+//                if (Float.isNaN(maxScore)) {
+//                    maxScore = topHitsAgg.topDocs.maxScore;
+//                } else {
+//                    maxScore = Math.max(maxScore, topHitsAgg.topDocs.maxScore);
+//                }
+//            }
+//        }
 
         final int[] tracker = new int[shardHits.length];
         SearchHit[] hits = new SearchHit[reducedTopDocs.scoreDocs.length];
@@ -156,6 +159,24 @@ public class InternalTopHits extends InternalAggregation implements TopHits {
         return new InternalTopHits(name, this.from, this.size,
             new TopDocsAndMaxScore(reducedTopDocs, maxScore),
             new SearchHits(hits, reducedTopDocs.totalHits, maxScore), getMetadata());
+    }
+
+    // TODO:liuyongheng  重要，看看上层是不是也会受到shardIndex影响！
+    private static float reduceShardAndGetMaxScore(List<InternalAggregation> aggregations, TopDocs[] shardDocs, SearchHits[] shardHits) {
+        float maxScore = Float.NaN;
+        for (int i = 0; i < shardDocs.length; i++) {
+            InternalTopHits topHitsAgg = (InternalTopHits)aggregations.get(i);
+            shardDocs[i] = topHitsAgg.topDocs.topDocs;
+            shardHits[i] = topHitsAgg.searchHits;
+            for (ScoreDoc doc : shardDocs[i].scoreDocs) {
+                doc.shardIndex = i;
+            }
+            final float max = topHitsAgg.topDocs.maxScore;
+            if (Float.isNaN(max) == false) {
+                maxScore = Float.isNaN(maxScore) ? max : Math.max(maxScore, max);
+            }
+        }
+        return maxScore;
     }
 
     @Override

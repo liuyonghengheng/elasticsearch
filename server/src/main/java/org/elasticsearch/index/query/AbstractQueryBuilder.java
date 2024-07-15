@@ -97,6 +97,7 @@ public abstract class AbstractQueryBuilder<QB extends AbstractQueryBuilder<QB>> 
             builder.field(NAME_FIELD.getPreferredName(), queryName);
         }
     }
+// TODO:liuyongheng 新版本lucene已经没有SpanBoostQuery
 
 //    @Override
 //    public final Query toQuery(QueryShardContext context) throws IOException {

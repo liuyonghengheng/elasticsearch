@@ -47,6 +47,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import static org.apache.lucene.search.MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE;
 import static org.apache.lucene.search.MultiTermQuery.CONSTANT_SCORE_REWRITE;
 import static org.hamcrest.Matchers.equalTo;
 
@@ -139,10 +140,10 @@ public class TextFieldTypeTests extends FieldTypeTestCase {
         Query q = ft.prefixQuery("goin", CONSTANT_SCORE_REWRITE, false, randomMockShardContext());
         assertEquals(new ConstantScoreQuery(new TermQuery(new Term("field._index_prefix", "goin"))), q);
 
-        q = ft.prefixQuery("internationalisatio", CONSTANT_SCORE_REWRITE, false, MOCK_QSC);
+        q = ft.prefixQuery("internationalisatio", CONSTANT_SCORE_BLENDED_REWRITE, false, MOCK_QSC);
         assertEquals(new PrefixQuery(new Term("field", "internationalisatio")), q);
 
-        q = ft.prefixQuery("Internationalisatio", CONSTANT_SCORE_REWRITE, true, MOCK_QSC);
+        q = ft.prefixQuery("Internationalisatio", CONSTANT_SCORE_BLENDED_REWRITE, true, MOCK_QSC);
         assertEquals(AutomatonQueries.caseInsensitivePrefixQuery(new Term("field", "Internationalisatio")), q);
 
 
@@ -151,14 +152,18 @@ public class TextFieldTypeTests extends FieldTypeTestCase {
         assertEquals("[prefix] queries cannot be executed when 'search.allow_expensive_queries' is set to false. " +
                 "For optimised prefix queries on text fields please enable [index_prefixes].", ee.getMessage());
 
-        q = ft.prefixQuery("g", CONSTANT_SCORE_REWRITE, false, randomMockShardContext());
+        q = ft.prefixQuery("g", CONSTANT_SCORE_BLENDED_REWRITE, false, randomMockShardContext());
         Automaton automaton
             = Operations.concatenate(Arrays.asList(Automata.makeChar('g'), Automata.makeAnyChar()));
 
-        Query expected = new ConstantScoreQuery(new BooleanQuery.Builder()
+//        Query expected = new ConstantScoreQuery(new BooleanQuery.Builder()
+//            .add(new AutomatonQuery(new Term("field._index_prefix", "g*"), automaton), BooleanClause.Occur.SHOULD)
+//            .add(new TermQuery(new Term("field", "g")), BooleanClause.Occur.SHOULD)
+//            .build());
+        Query expected = new BooleanQuery.Builder()
             .add(new AutomatonQuery(new Term("field._index_prefix", "g*"), automaton), BooleanClause.Occur.SHOULD)
             .add(new TermQuery(new Term("field", "g")), BooleanClause.Occur.SHOULD)
-            .build());
+            .build();
 
         assertThat(q, equalTo(expected));
     }

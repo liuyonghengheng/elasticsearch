@@ -553,7 +553,7 @@ public class QueryStringQueryBuilderTests extends AbstractQueryTestCase<QueryStr
             BooleanClause.Occur defaultOp = op.toBooleanClauseOccur();
             QueryStringQueryParser queryParser = new QueryStringQueryParser(createShardContext(), TEXT_FIELD_NAME);
             queryParser.setAnalyzeWildcard(true);
-            queryParser.setMultiTermRewriteMethod(MultiTermQuery.CONSTANT_SCORE_REWRITE);
+            queryParser.setMultiTermRewriteMethod(MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE);
             queryParser.setDefaultOperator(op.toQueryParserOperator());
             Query query = queryParser.parse("first foo-bar-foobar* last");
             Query expectedQuery =
@@ -570,18 +570,25 @@ public class QueryStringQueryBuilderTests extends AbstractQueryTestCase<QueryStr
         }
     }
 
+    // TODO:liuyongheng 这里相关的都需要重点看一下
+    // 9.11.1 新版本lucene 不再解析成ConstantScoreQuery
     public void testToQueryWildcardWithIndexedPrefixes() throws Exception {
         QueryStringQueryParser queryParser = new QueryStringQueryParser(createShardContext(), "prefix_field");
         Query query = queryParser.parse("foo*");
-        Query expectedQuery = new ConstantScoreQuery(new TermQuery(new Term("prefix_field._index_prefix", "foo")));
+//        Query expectedQuery = new ConstantScoreQuery(new TermQuery(new Term("prefix_field._index_prefix", "foo")));
+        Query expectedQuery = new TermQuery(new Term("prefix_field._index_prefix", "foo"));
         assertThat(query, equalTo(expectedQuery));
 
         query = queryParser.parse("g*");
         Automaton a = Operations.concatenate(Arrays.asList(Automata.makeChar('g'), Automata.makeAnyChar()));
-        expectedQuery = new ConstantScoreQuery(new BooleanQuery.Builder()
+//        expectedQuery = new ConstantScoreQuery(new BooleanQuery.Builder()
+//            .add(new AutomatonQuery(new Term("prefix_field._index_prefix", "g*"), a), Occur.SHOULD)
+//            .add(new TermQuery(new Term("prefix_field", "g")), Occur.SHOULD)
+//            .build());
+        expectedQuery = new BooleanQuery.Builder()
             .add(new AutomatonQuery(new Term("prefix_field._index_prefix", "g*"), a), Occur.SHOULD)
             .add(new TermQuery(new Term("prefix_field", "g")), Occur.SHOULD)
-            .build());
+            .build();
         assertThat(query, equalTo(expectedQuery));
     }
 
@@ -590,7 +597,8 @@ public class QueryStringQueryBuilderTests extends AbstractQueryTestCase<QueryStr
             BooleanClause.Occur defaultOp = op.toBooleanClauseOccur();
             QueryStringQueryParser queryParser = new QueryStringQueryParser(createShardContext(), TEXT_FIELD_NAME);
             queryParser.setAnalyzeWildcard(true);
-            queryParser.setMultiTermRewriteMethod(MultiTermQuery.CONSTANT_SCORE_REWRITE);
+//            queryParser.setMultiTermRewriteMethod(MultiTermQuery.CONSTANT_SCORE_REWRITE);
+            queryParser.setMultiTermRewriteMethod(MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE);
             queryParser.setDefaultOperator(op.toQueryParserOperator());
             queryParser.setForceAnalyzer(new MockRepeatAnalyzer());
             Query query = queryParser.parse("first foo-bar-foobar* last");
@@ -756,7 +764,8 @@ public class QueryStringQueryBuilderTests extends AbstractQueryTestCase<QueryStr
         TooComplexToDeterminizeException e = expectThrows(TooComplexToDeterminizeException.class,
                 () -> queryBuilder.toQuery(createShardContext()));
         assertThat(e.getMessage(), containsString("Determinizing [ac]*"));
-        assertThat(e.getMessage(), containsString("would result in more than 10000 states"));
+//        assertThat(e.getMessage(), containsString("would result in more than 10000 states"));
+        assertThat(e.getMessage(), containsString("would require more than 10000 effort"));
     }
 
     /**
@@ -778,7 +787,8 @@ public class QueryStringQueryBuilderTests extends AbstractQueryTestCase<QueryStr
         TooComplexToDeterminizeException e = expectThrows(TooComplexToDeterminizeException.class,
                 () -> queryBuilder.toQuery(createShardContext()));
         assertThat(e.getMessage(), containsString("Determinizing [ac]*"));
-        assertThat(e.getMessage(), containsString("would result in more than 10 states"));
+//        assertThat(e.getMessage(), containsString("would result in more than 10 states"));
+        assertThat(e.getMessage(), containsString("would require more than 10 effort"));
     }
 
     public void testToQueryFuzzyQueryAutoFuziness() throws Exception {

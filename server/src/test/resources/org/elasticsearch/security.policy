@@ -23,11 +23,6 @@
 
 //// SecurityManager impl:
 //// Must have all permissions to properly perform access checks
-// TODO:liuyongheng 安全控制，这里现在全部打开，后面需要细化到具体的包
-grant {
-  permission java.lang.reflect.ReflectPermission "suppressAccessChecks";
-  permission java.lang.RuntimePermission "createClassLoader";
-};
 
 grant codeBase "${codebase.elasticsearch-secure-sm}" {
   permission java.security.AllPermission;

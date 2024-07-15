@@ -729,6 +729,20 @@ public abstract class EngineTestCase extends ESTestCase {
             config.getPrimaryTermSupplier(), tombstoneDocSupplier);
     }
 
+    protected EngineConfig config(EngineConfig config, Store store, Path translogPath) {
+        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings("test",
+            Settings.builder().put(config.getIndexSettings().getSettings())
+                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true).build());
+        TranslogConfig translogConfig = new TranslogConfig(shardId, translogPath, indexSettings, BigArrays.NON_RECYCLING_INSTANCE);
+        return new EngineConfig(config.getShardId(), config.getThreadPool(),
+            indexSettings, config.getWarmer(), store, config.getMergePolicy(), config.getAnalyzer(), config.getSimilarity(),
+            new CodecService(null, logger), config.getEventListener(), config.getQueryCache(), config.getQueryCachingPolicy(),
+            translogConfig, config.getFlushMergesAfter(), config.getExternalRefreshListener(),
+            config.getInternalRefreshListener(), config.getIndexSort(), config.getCircuitBreakerService(),
+            config.getGlobalCheckpointSupplier(), config.retentionLeasesSupplier(),
+            config.getPrimaryTermSupplier(), tombstoneDocSupplier());
+    }
+
     protected EngineConfig noOpConfig(IndexSettings indexSettings, Store store, Path translogPath) {
         return noOpConfig(indexSettings, store, translogPath, null);
     }

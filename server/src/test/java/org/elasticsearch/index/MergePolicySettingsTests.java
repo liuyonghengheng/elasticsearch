@@ -106,14 +106,14 @@ public class MergePolicySettingsTests extends ESTestCase {
                 MergePolicyConfig.DEFAULT_MAX_MERGE_AT_ONCE - 1).build()));
         assertEquals(((EsTieredMergePolicy) indexSettings.getMergePolicy()).getMaxMergeAtOnce(),
             MergePolicyConfig.DEFAULT_MAX_MERGE_AT_ONCE - 1);
-
-        assertEquals(((EsTieredMergePolicy) indexSettings.getMergePolicy()).getMaxMergeAtOnceExplicit(),
-            MergePolicyConfig.DEFAULT_MAX_MERGE_AT_ONCE_EXPLICIT);
-        indexSettings.updateIndexMetadata(newIndexMeta("index",
-            Settings.builder().put(MergePolicyConfig.INDEX_MERGE_POLICY_MAX_MERGE_AT_ONCE_EXPLICIT_SETTING.getKey(),
-                MergePolicyConfig.DEFAULT_MAX_MERGE_AT_ONCE_EXPLICIT - 1).build()));
-        assertEquals(((EsTieredMergePolicy) indexSettings.getMergePolicy()).getMaxMergeAtOnceExplicit(),
-            MergePolicyConfig.DEFAULT_MAX_MERGE_AT_ONCE_EXPLICIT-1);
+//        TODO:liuyongheng DEFAULT_MAX_MERGE_AT_ONCE_EXPLICIT 代码相关的逻辑重点看一下，都删除掉
+//        assertEquals(((EsTieredMergePolicy) indexSettings.getMergePolicy()).getMaxMergeAtOnceExplicit(),
+//            MergePolicyConfig.DEFAULT_MAX_MERGE_AT_ONCE_EXPLICIT);
+//        indexSettings.updateIndexMetadata(newIndexMeta("index",
+//            Settings.builder().put(MergePolicyConfig.INDEX_MERGE_POLICY_MAX_MERGE_AT_ONCE_EXPLICIT_SETTING.getKey(),
+//                MergePolicyConfig.DEFAULT_MAX_MERGE_AT_ONCE_EXPLICIT - 1).build()));
+//        assertEquals(((EsTieredMergePolicy) indexSettings.getMergePolicy()).getMaxMergeAtOnceExplicit(),
+//            MergePolicyConfig.DEFAULT_MAX_MERGE_AT_ONCE_EXPLICIT-1);
 
         assertEquals(((EsTieredMergePolicy) indexSettings.getMergePolicy()).getMaxMergedSegmentMB(),
             MergePolicyConfig.DEFAULT_MAX_MERGED_SEGMENT.getMbFrac(), 0.0001);
@@ -149,8 +149,8 @@ public class MergePolicySettingsTests extends ESTestCase {
             new ByteSizeValue(MergePolicyConfig.DEFAULT_FLOOR_SEGMENT.getMb(), ByteSizeUnit.MB).getMbFrac(), 0.00);
         assertEquals(((EsTieredMergePolicy) indexSettings.getMergePolicy()).getMaxMergeAtOnce(),
             MergePolicyConfig.DEFAULT_MAX_MERGE_AT_ONCE);
-        assertEquals(((EsTieredMergePolicy) indexSettings.getMergePolicy()).getMaxMergeAtOnceExplicit(),
-            MergePolicyConfig.DEFAULT_MAX_MERGE_AT_ONCE_EXPLICIT);
+//        assertEquals(((EsTieredMergePolicy) indexSettings.getMergePolicy()).getMaxMergeAtOnceExplicit(),
+//            MergePolicyConfig.DEFAULT_MAX_MERGE_AT_ONCE_EXPLICIT);
         assertEquals(((EsTieredMergePolicy) indexSettings.getMergePolicy()).getMaxMergedSegmentMB(),
             new ByteSizeValue(MergePolicyConfig.DEFAULT_MAX_MERGED_SEGMENT.getBytes() + 1).getMbFrac(), 0.0001);
         assertEquals(((EsTieredMergePolicy) indexSettings.getMergePolicy()).getSegmentsPerTier(),

@@ -27,11 +27,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.filter.RegexFilter;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.document.NumericDocValuesField;
-import org.apache.lucene.document.StoredField;
-import org.apache.lucene.document.TextField;
+import org.apache.lucene.document.*;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexCommit;
 import org.apache.lucene.index.IndexReader;
@@ -312,11 +308,11 @@ public class InternalEngineTests extends EngineTestCase {
             assertThat(segments.size(), equalTo(1));
             SegmentsStats stats = engine.segmentsStats(false, false);
             assertThat(stats.getCount(), equalTo(1L));
-            assertThat(stats.getTermsMemoryInBytes(), greaterThan(0L));
-            assertThat(stats.getStoredFieldsMemoryInBytes(), greaterThan(0L));
-            assertThat(stats.getTermVectorsMemoryInBytes(), equalTo(0L));
-            assertThat(stats.getNormsMemoryInBytes(), greaterThan(0L));
-            assertThat(stats.getDocValuesMemoryInBytes(), greaterThan(0L));
+//            assertThat(stats.getTermsMemoryInBytes(), greaterThan(0L));
+//            assertThat(stats.getStoredFieldsMemoryInBytes(), greaterThan(0L));
+//            assertThat(stats.getTermVectorsMemoryInBytes(), equalTo(0L));
+//            assertThat(stats.getNormsMemoryInBytes(), greaterThan(0L));
+//            assertThat(stats.getDocValuesMemoryInBytes(), greaterThan(0L));
             assertThat(segments.get(0).isCommitted(), equalTo(false));
             assertThat(segments.get(0).isSearch(), equalTo(true));
             assertThat(segments.get(0).getNumDocs(), equalTo(2));
@@ -341,15 +337,16 @@ public class InternalEngineTests extends EngineTestCase {
             segments = engine.segments(false);
             assertThat(segments.size(), equalTo(2));
             assertThat(engine.segmentsStats(false, false).getCount(), equalTo(2L));
-            assertThat(engine.segmentsStats(false, false).getTermsMemoryInBytes(),
-                greaterThan(stats.getTermsMemoryInBytes()));
-            assertThat(engine.segmentsStats(false, false).getStoredFieldsMemoryInBytes(),
-                greaterThan(stats.getStoredFieldsMemoryInBytes()));
-            assertThat(engine.segmentsStats(false, false).getTermVectorsMemoryInBytes(), equalTo(0L));
-            assertThat(engine.segmentsStats(false, false).getNormsMemoryInBytes(),
-                greaterThan(stats.getNormsMemoryInBytes()));
-            assertThat(engine.segmentsStats(false, false).getDocValuesMemoryInBytes(),
-                greaterThan(stats.getDocValuesMemoryInBytes()));
+            // TODO:liuyongheng 由于lucene新版本segment的没有内存统计
+//            assertThat(engine.segmentsStats(false, false).getTermsMemoryInBytes(),
+//                greaterThan(stats.getTermsMemoryInBytes()));
+//            assertThat(engine.segmentsStats(false, false).getStoredFieldsMemoryInBytes(),
+//                greaterThan(stats.getStoredFieldsMemoryInBytes()));
+//            assertThat(engine.segmentsStats(false, false).getTermVectorsMemoryInBytes(), equalTo(0L));
+//            assertThat(engine.segmentsStats(false, false).getNormsMemoryInBytes(),
+//                greaterThan(stats.getNormsMemoryInBytes()));
+//            assertThat(engine.segmentsStats(false, false).getDocValuesMemoryInBytes(),
+//                greaterThan(stats.getDocValuesMemoryInBytes()));
             assertThat(segments.get(0).getGeneration() < segments.get(1).getGeneration(), equalTo(true));
             assertThat(segments.get(0).isCommitted(), equalTo(true));
             assertThat(segments.get(0).isSearch(), equalTo(true));
@@ -489,7 +486,8 @@ public class InternalEngineTests extends EngineTestCase {
 
             segments = engine.segments(true);
             assertThat(segments.size(), equalTo(1));
-            assertThat(segments.get(0).ramTree, notNullValue());
+            // TODO:liuyongheng 由于lucene新版本segment的没有内存统计，目前不支持es统计 ramTree
+//            assertThat(segments.get(0).ramTree, notNullValue());
 
             ParsedDocument doc2 = testParsedDocument("2", null, testDocumentWithTextField(), B_2, null);
             engine.index(indexForDoc(doc2));
@@ -500,9 +498,9 @@ public class InternalEngineTests extends EngineTestCase {
 
             segments = engine.segments(true);
             assertThat(segments.size(), equalTo(3));
-            assertThat(segments.get(0).ramTree, notNullValue());
-            assertThat(segments.get(1).ramTree, notNullValue());
-            assertThat(segments.get(2).ramTree, notNullValue());
+//            assertThat(segments.get(0).ramTree, notNullValue());
+//            assertThat(segments.get(1).ramTree, notNullValue());
+//            assertThat(segments.get(2).ramTree, notNullValue());
         }
     }
 
@@ -3433,35 +3431,65 @@ public class InternalEngineTests extends EngineTestCase {
         }
     }
 
-    public void testDeleteWithFatalError() throws Exception {
+//    public void testDeleteWithFatalError() throws Exception {
+//        final IllegalStateException tragicException = new IllegalStateException("fail to store tombstone");
+//        try (Store store = createStore()) {
+//            EngineConfig.TombstoneDocSupplier tombstoneDocSupplier = new EngineConfig.TombstoneDocSupplier() {
+//                @Override
+//                public ParsedDocument newDeleteTombstoneDoc(String type, String id) {
+//                    ParsedDocument parsedDocument = tombstoneDocSupplier().newDeleteTombstoneDoc(type, id);
+//                    parsedDocument.rootDoc().add(new StoredField("foo", "bar") {
+//                        // this is a hack to add a failure during store document which triggers a tragic event
+//                        // and in turn fails the engine
+//                        @Override
+//                        public BytesRef binaryValue() {
+//                            throw tragicException;
+//                        }
+//                    });
+//                    return parsedDocument;
+//                }
+//
+//                @Override
+//                public ParsedDocument newNoopTombstoneDoc(String reason) {
+//                    return tombstoneDocSupplier().newNoopTombstoneDoc(reason);
+//                }
+//            };
+//            EngineConfig config = config(this.engine.config(), store, createTempDir(), tombstoneDocSupplier);
+//            try (InternalEngine engine = createEngine(null, null, null, config)) {
+//                final ParsedDocument doc = testParsedDocument("1", null, testDocumentWithTextField(), SOURCE, null);
+//                engine.index(indexForDoc(doc));
+//                expectThrows(IllegalStateException.class,
+//                    () -> engine.delete(new Engine.Delete("test", "1", newUid("1"), primaryTerm.get())));
+//                assertTrue(engine.isClosed.get());
+//                assertSame(tragicException, engine.failedEngine.get());
+//            }
+//        }
+//    }
+
+// TODO:liuyongheng 这里是直接copy的，后面要处理
+    public void testDeleteWithFatalError2() throws Exception {
         final IllegalStateException tragicException = new IllegalStateException("fail to store tombstone");
         try (Store store = createStore()) {
-            EngineConfig.TombstoneDocSupplier tombstoneDocSupplier = new EngineConfig.TombstoneDocSupplier() {
+            IndexWriterFactory indexWriterFactory = (directory, iwc) -> new IndexWriter(directory, iwc) {
                 @Override
-                public ParsedDocument newDeleteTombstoneDoc(String type, String id) {
-                    ParsedDocument parsedDocument = tombstoneDocSupplier().newDeleteTombstoneDoc(type, id);
-                    parsedDocument.rootDoc().add(new StoredField("foo", "bar") {
-                        // this is a hack to add a failure during store document which triggers a tragic event
-                        // and in turn fails the engine
+                public long softUpdateDocument(Term term, Iterable<? extends IndexableField> doc, Field... softDeletes) throws IOException {
+                    final List<IndexableField> docIncludeExtraField = new ArrayList<>();
+                    doc.forEach(docIncludeExtraField::add);
+                    docIncludeExtraField.add(new StoredField("foo", "bar") {
                         @Override
-                        public BytesRef binaryValue() {
+                        public StoredValue storedValue() {
                             throw tragicException;
                         }
                     });
-                    return parsedDocument;
-                }
-
-                @Override
-                public ParsedDocument newNoopTombstoneDoc(String reason) {
-                    return tombstoneDocSupplier().newNoopTombstoneDoc(reason);
+                    return super.softUpdateDocument(term, docIncludeExtraField, softDeletes);
                 }
             };
-            EngineConfig config = config(this.engine.config(), store, createTempDir(), tombstoneDocSupplier);
-            try (InternalEngine engine = createEngine(null, null, null, config)) {
+//            EngineConfig config = config(this.engine.config(), store, createTempDir());
+            EngineConfig config = config(this.engine.config(), store, createTempDir());
+            try (InternalEngine engine = createEngine(indexWriterFactory, null, null, config)) {
                 final ParsedDocument doc = testParsedDocument("1", null, testDocumentWithTextField(), SOURCE, null);
                 engine.index(indexForDoc(doc));
-                expectThrows(IllegalStateException.class,
-                    () -> engine.delete(new Engine.Delete("test", "1", newUid("1"), primaryTerm.get())));
+                expectThrows(IllegalStateException.class, () -> engine.delete(new Engine.Delete("test", "1", newUid("1"), primaryTerm.get())));
                 assertTrue(engine.isClosed.get());
                 assertSame(tragicException, engine.failedEngine.get());
             }

@@ -433,6 +433,8 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
             // https://hg.openjdk.java.net/jdk/jdk/file/e7d0ec2d06e8/src/hotspot/share/gc/g1/heapRegion.cpp#l67
             // based on this JDK "bug":
             // https://bugs.openjdk.java.net/browse/JDK-8241670
+            // TODO:liuyongheng 这里计算regonsize时由于拿到的heapMax 和 heapInit 不一致，导致计算出来的RegionSize 对不上
+            // 可能是JVM的heapMax 获取和计算方法不同导致
             long averageHeapSize =
                 (jvmInfo.getMem().getHeapMax().getBytes() + JvmInfo.jvmInfo().getMem().getHeapMax().getBytes()) / 2;
             long regionSize = Long.highestOneBit(averageHeapSize / 2048);

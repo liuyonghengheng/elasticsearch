@@ -206,7 +206,7 @@ public class VersionsTests extends ESTestCase {
 
         // should have the same Lucene version as the latest 6.x version
         Version version = Version.fromString("7.88.50");
-        assertEquals(allVersions.get(Collections.binarySearch(allVersions, Version.V_7_10_2)).luceneVersion,
+        assertEquals(allVersions.get(Collections.binarySearch(allVersions, Version.V_7_11_2)).luceneVersion,
                 version.luceneVersion);
 
         // TODO:liuyongheng 这个兼容逻辑是否也要支持？
