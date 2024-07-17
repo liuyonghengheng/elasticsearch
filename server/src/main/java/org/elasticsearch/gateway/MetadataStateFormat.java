@@ -21,15 +21,12 @@ package org.elasticsearch.gateway;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.apache.lucene.backward_codecs.store.EndiannessReverserUtil;
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.IndexFormatTooNewException;
 import org.apache.lucene.index.IndexFormatTooOldException;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.IndexInput;
-import org.apache.lucene.store.IndexOutput;
-import org.apache.lucene.store.NIOFSDirectory;
+import org.apache.lucene.store.*;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.lucene.store.IndexOutputOutputStream;
@@ -69,7 +66,8 @@ public abstract class MetadataStateFormat<T> {
 
     private static final String STATE_FILE_CODEC = "state";
     private static final int MIN_COMPATIBLE_STATE_FILE_VERSION = 1;
-    private static final int STATE_FILE_VERSION = 1;
+//    private static final int STATE_FILE_VERSION = 1;
+    private static final int STATE_FILE_VERSION = 2;
     private final String prefix;
     private final Pattern stateFilePattern;
 
@@ -288,8 +286,12 @@ public abstract class MetadataStateFormat<T> {
             try (IndexInput indexInput = dir.openInput(file.getFileName().toString(), IOContext.DEFAULT)) {
                 // We checksum the entire file before we even go and parse it. If it's corrupted we barf right here.
                 CodecUtil.checksumEntireFile(indexInput);
-                CodecUtil.checkHeader(indexInput, STATE_FILE_CODEC, MIN_COMPATIBLE_STATE_FILE_VERSION, STATE_FILE_VERSION);
-                final XContentType xContentType = XContentType.values()[indexInput.readInt()];
+                //TODO:liuyongheng 这里如果不需要兼容后续老版本，可以不用改逻辑，目前已改，后续不用兼容的话可以删掉
+                //对应单元测试为：MetadataStateFormatTests.testReadClusterState() 它用来测试的元数据文件为老版本
+                //为了区分新老版本，这里把当前版本设置为了2
+                final int fileVersion = CodecUtil.checkHeader(indexInput, STATE_FILE_CODEC, MIN_COMPATIBLE_STATE_FILE_VERSION, STATE_FILE_VERSION);
+                DataInput dataInputWrap = fileVersion == STATE_FILE_VERSION? indexInput: EndiannessReverserUtil.wrapDataInput(indexInput);
+                final XContentType xContentType = XContentType.values()[dataInputWrap.readInt()];
                 if (xContentType != FORMAT) {
                     throw new IllegalStateException("expected state in " + file + " to be " + FORMAT + " format but was " + xContentType);
                 }

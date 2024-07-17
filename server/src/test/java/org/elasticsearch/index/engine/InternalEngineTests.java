@@ -3399,23 +3399,25 @@ public class InternalEngineTests extends EngineTestCase {
                 engine.index(indexForDoc(doc2));
 
                 // test non document level failure is thrown
-                if (randomBoolean()) {
-                    // simulate close by corruption
-                    throwingIndexWriter.get().setThrowFailure(null);
-                    UncheckedIOException uncheckedIOException = expectThrows(UncheckedIOException.class, () -> {
-                        Engine.Index index = indexForDoc(doc3);
-                        index.parsedDoc().rootDoc().add(new StoredField("foo", "bar") {
-                            // this is a hack to add a failure during store document which triggers a tragic event
-                            // and in turn fails the engine
-                            @Override
-                            public BytesRef binaryValue() {
-                                throw new UncheckedIOException(new MockDirectoryWrapper.FakeIOException());
-                            }
-                        });
-                        engine.index(index);
-                    });
-                    assertTrue(uncheckedIOException.getCause() instanceof MockDirectoryWrapper.FakeIOException);
-                } else {
+//                if (randomBoolean()) {
+//                    // simulate close by corruption
+//                    throwingIndexWriter.get().setThrowFailure(null);
+//                    UncheckedIOException uncheckedIOException = expectThrows(UncheckedIOException.class, () -> {
+//                        Engine.Index index = indexForDoc(doc3);
+//                        index.parsedDoc().rootDoc().add(new StoredField("foo", "bar") {
+//                            // this is a hack to add a failure during store document which triggers a tragic event
+//                            // and in turn fails the engine
+// TODO:liuyongheng 新版本这里不会调用，新版ES也将这块ut删除了
+//                            @Override
+//                            public BytesRef binaryValue() {
+//                                throw new UncheckedIOException(new MockDirectoryWrapper.FakeIOException());
+//                            }
+//                        });
+//                        engine.index(index);
+//                    });
+//                    assertTrue(uncheckedIOException.getCause() instanceof MockDirectoryWrapper.FakeIOException);
+//                } else
+                {
                     // normal close
                     engine.close();
                 }
@@ -3467,7 +3469,7 @@ public class InternalEngineTests extends EngineTestCase {
 //    }
 
 // TODO:liuyongheng 这里是直接copy的，后面要处理
-    public void testDeleteWithFatalError2() throws Exception {
+    public void testDeleteWithFatalError() throws Exception {
         final IllegalStateException tragicException = new IllegalStateException("fail to store tombstone");
         try (Store store = createStore()) {
             IndexWriterFactory indexWriterFactory = (directory, iwc) -> new IndexWriter(directory, iwc) {

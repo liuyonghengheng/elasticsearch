@@ -38,6 +38,7 @@ public class FieldMaskingSpanQueryBuilderTests extends AbstractQueryTestCase<Fie
             fieldName = randomAlphaOfLengthBetween(1, 10);
         }
         SpanTermQueryBuilder innerQuery = new SpanTermQueryBuilderTests().createTestQueryBuilder();
+        innerQuery.boost(1.0f);
         return new FieldMaskingSpanQueryBuilder(innerQuery, fieldName);
     }
 

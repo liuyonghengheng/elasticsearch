@@ -112,7 +112,7 @@ public class InboundDecoderTests extends ESTestCase {
         String action = "test-request";
         long requestId = randomNonNegativeLong();
 //        final Version preHeaderVariableInt = Version.V_7_5_0;
-        final Version preHeaderVariableInt = Version.V_7_10_2;
+        final Version preHeaderVariableInt = Version.V_9_0_0;
         final String contentValue = randomAlphaOfLength(100);
         final OutboundMessage message = new OutboundMessage.Request(threadContext,  new String[0], new TestRequest(contentValue),
             preHeaderVariableInt, action, requestId, true, isCompressed);

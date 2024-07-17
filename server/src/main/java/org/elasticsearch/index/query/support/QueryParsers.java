@@ -44,8 +44,9 @@ public final class QueryParsers {
         query.setRewriteMethod(rewriteMethod);
     }
 
+    // TODO:liuyongheng 此处默认RewriteMethod 改成了CONSTANT_SCORE_BLENDED_REWRITE 看一下有没有影响
     public static MultiTermQuery.RewriteMethod parseRewriteMethod(@Nullable String rewriteMethod, DeprecationHandler deprecationHandler) {
-        return parseRewriteMethod(rewriteMethod, MultiTermQuery.CONSTANT_SCORE_REWRITE, deprecationHandler);
+        return parseRewriteMethod(rewriteMethod, MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE, deprecationHandler);
     }
 
     public static MultiTermQuery.RewriteMethod parseRewriteMethod(@Nullable String rewriteMethod,

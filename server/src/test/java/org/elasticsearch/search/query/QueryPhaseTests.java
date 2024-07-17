@@ -155,6 +155,7 @@ public class QueryPhaseTests extends IndexShardTestCase {
         Query matchAllCsq = new ConstantScoreQuery(matchAll);
         Query tq = new TermQuery(new Term("foo", "bar"));
         Query tCsq = new ConstantScoreQuery(tq);
+        // TODO:liuyongheng 重要，所有的DocValuesFieldExistsQuery相关的代码都要进行替换和处理
         Query dvfeq = new DocValuesFieldExistsQuery("foo");
         Query dvfeq_points = new DocValuesFieldExistsQuery("latLonDVField");
         Query dvfeqCsq = new ConstantScoreQuery(dvfeq);

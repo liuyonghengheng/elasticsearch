@@ -23,6 +23,7 @@ import com.carrotsearch.randomizedtesting.generators.RandomNumbers;
 import org.apache.lucene.tests.geo.GeoTestUtil;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.common.CheckedSupplier;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.geo.ShapeRelation;
@@ -459,11 +460,15 @@ public class GeoShapeQueryTests extends GeoQueryTests {
         }
         XContentBuilder docSource = gcb.toXContent(jsonBuilder().startObject().field("geo"), null).endObject();
         client().prepareIndex("test", "type", "1").setSource(docSource).setRefreshPolicy(IMMEDIATE).get();
+        client().admin().indices().prepareRefresh("test").setIndicesOptions(IndicesOptions.lenientExpandOpen()).get();
+        Thread.sleep(2000);
 
+        logger.info(""+pb.latitude()+"    "+pb.longitude());
         GeoShapeQueryBuilder geoShapeQueryBuilder = QueryBuilders.geoShapeQuery("geo", pb);
         geoShapeQueryBuilder.relation(ShapeRelation.INTERSECTS);
         SearchResponse result = client().prepareSearch("test").setQuery(geoShapeQueryBuilder).get();
         assertSearchResponse(result);
+        // TODO:liuyongheng 这里有时候会报错，目前还没找出来原因
         assertHitCount(result, 1);
     }
 

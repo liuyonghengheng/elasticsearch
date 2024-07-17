@@ -78,6 +78,7 @@ import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 import static org.elasticsearch.index.query.AbstractQueryBuilder.parseInnerQueryBuilder;
 import static org.elasticsearch.index.query.QueryBuilders.queryStringQuery;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertBooleanSubQuery;
+import static org.hamcrest.CoreMatchers.anyOf;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.hasItems;
 import static org.hamcrest.Matchers.containsString;
@@ -506,10 +507,18 @@ public class QueryStringQueryBuilderTests extends AbstractQueryTestCase<QueryStr
         Query query = queryStringQuery("test").field(TEXT_FIELD_NAME).field(KEYWORD_FIELD_NAME)
             .toQuery(createShardContext());
         assertThat(query, instanceOf(DisjunctionMaxQuery.class));
-        DisjunctionMaxQuery disMaxQuery = (DisjunctionMaxQuery) query;
-        List<Query> disjuncts = new ArrayList<>(disMaxQuery.getDisjuncts());
-        assertThat(((TermQuery) disjuncts.get(0)).getTerm(), equalTo(new Term(TEXT_FIELD_NAME, "test")));
-        assertThat(((TermQuery) disjuncts.get(1)).getTerm(), equalTo(new Term(KEYWORD_FIELD_NAME, "test")));
+//        DisjunctionMaxQuery disMaxQuery = (DisjunctionMaxQuery) query;
+//        List<Query> disjuncts = new ArrayList<>(disMaxQuery.getDisjuncts());
+//        assertThat(((TermQuery) disjuncts.get(0)).getTerm(), equalTo(new Term(TEXT_FIELD_NAME, "test")));
+//        assertThat(((TermQuery) disjuncts.get(1)).getTerm(), equalTo(new Term(KEYWORD_FIELD_NAME, "test")));
+        Query expected = new DisjunctionMaxQuery(
+            List.of(
+                new TermQuery(new Term(TEXT_FIELD_NAME, "test")),
+                new TermQuery(new Term(KEYWORD_FIELD_NAME, "test"))
+            ),
+            0
+        );
+        assertEquals(expected, query);
     }
 
     public void testToQueryFieldsWildcard() throws Exception {
@@ -542,10 +551,18 @@ public class QueryStringQueryBuilderTests extends AbstractQueryTestCase<QueryStr
             .field(KEYWORD_FIELD_NAME)
             .toQuery(createShardContext());
         assertThat(query, instanceOf(DisjunctionMaxQuery.class));
-        DisjunctionMaxQuery disMaxQuery = (DisjunctionMaxQuery) query;
-        List<Query> disjuncts = new ArrayList<>(disMaxQuery.getDisjuncts());
-        assertTermOrBoostQuery(disjuncts.get(0), TEXT_FIELD_NAME, "test", 2.2f);
-        assertTermOrBoostQuery(disjuncts.get(1), KEYWORD_FIELD_NAME, "test", 1.0f);
+//        DisjunctionMaxQuery disMaxQuery = (DisjunctionMaxQuery) query;
+//        List<Query> disjuncts = new ArrayList<>(disMaxQuery.getDisjuncts());
+//        assertTermOrBoostQuery(disjuncts.get(0), TEXT_FIELD_NAME, "test", 2.2f);
+//        assertTermOrBoostQuery(disjuncts.get(1), KEYWORD_FIELD_NAME, "test", 1.0f);
+        Query expected = new DisjunctionMaxQuery(
+            List.of(
+                new BoostQuery(new TermQuery(new Term(TEXT_FIELD_NAME, "test")), 2.2f),
+                new TermQuery(new Term(KEYWORD_FIELD_NAME, "test"))
+            ),
+            0
+        );
+        assertEquals(expected, query);
     }
 
     public void testToQueryWildcardQuery() throws Exception {
