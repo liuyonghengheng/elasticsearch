@@ -189,7 +189,7 @@ public class AnnotatedTextHighlighterTests extends ESTestCase {
     public void testAnnotatedTextSingleFieldWithPhraseQuery() throws Exception {
         final String[] markedUpInputs = { "[Donald Trump](Donald+Trump) visited Singapore",
                 "Donald Jr was with Melania Trump"};
-        String[] expectedPassages = { "[Donald](_hit_term=donald) [Trump](_hit_term=trump) visited Singapore"};
+        String[] expectedPassages = { "[Donald Trump](_hit_term=donald+trump&Donald+Trump) visited Singapore" };
         Query query = new PhraseQuery("text", "donald", "trump");
         BreakIterator breakIterator = new CustomSeparatorBreakIterator(MULTIVAL_SEP_CHAR);
         assertHighlightOneDoc("text", markedUpInputs, query, Locale.ROOT, breakIterator, 0, expectedPassages);

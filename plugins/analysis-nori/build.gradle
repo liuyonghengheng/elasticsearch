@@ -24,8 +24,9 @@ esplugin {
 }
 
 dependencies {
+  api "org.apache.lucene:lucene-analysis-nori:${versions.lucene}"
 //  api "org.apache.lucene:lucene-analyzers-nori:${versions.lucene}"
-  api "org.apache.lucene:lucene-analyzers-nori:8.11.3"
+//  api "org.apache.lucene:lucene-analyzers-nori:8.11.3"
 }
 
 restResources {

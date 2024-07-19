@@ -38,6 +38,7 @@ import java.io.IOException;
 import java.util.Collections;
 
 import static java.util.Arrays.asList;
+import static org.apache.lucene.search.MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE;
 import static org.apache.lucene.search.MultiTermQuery.CONSTANT_SCORE_REWRITE;
 import static org.hamcrest.Matchers.equalTo;
 
@@ -102,7 +103,7 @@ public class SearchAsYouTypeFieldTypeTests extends FieldTypeTestCase {
 
         // this term should be too long to be rewriteable to a term query on the prefix field
         final String longTerm = "toolongforourprefixfieldthistermis";
-        assertThat(fieldType.prefixQuery(longTerm, CONSTANT_SCORE_REWRITE, MOCK_QSC),
+        assertThat(fieldType.prefixQuery(longTerm, CONSTANT_SCORE_BLENDED_REWRITE, MOCK_QSC),
             equalTo(new PrefixQuery(new Term(NAME, longTerm))));
 
         ElasticsearchException ee = expectThrows(ElasticsearchException.class,

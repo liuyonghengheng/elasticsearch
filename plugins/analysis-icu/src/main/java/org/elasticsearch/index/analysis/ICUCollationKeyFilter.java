@@ -19,10 +19,10 @@ package org.elasticsearch.index.analysis;
 
 import com.ibm.icu.text.Collator;
 import com.ibm.icu.text.RawCollationKey;
+import org.apache.lucene.analysis.icu.ICUCollationDocValuesField;
 import org.apache.lucene.analysis.TokenFilter;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
-import org.apache.lucene.collation.ICUCollationDocValuesField;
 
 import java.io.IOException;
 

@@ -66,6 +66,7 @@ public class RepositoryCredentialsTests extends ESSingleNodeTestCase {
         AccessController.doPrivileged((PrivilegedAction<Void>) () -> {
             // required for client settings overwriting when running in IDE
             System.setProperty("es.allow_insecure_settings", "true");
+            System.setProperty("allow_insecure_settings", "true");
             return null;
         });
     }
@@ -142,6 +143,7 @@ public class RepositoryCredentialsTests extends ESSingleNodeTestCase {
         }
 
         final String repositoryName = "repo-reinit-creds";
+        repositorySettings.put("allow_insecure_settings", true);
         createRepository(repositoryName, repositorySettings.build());
 
         final RepositoriesService repositories = getInstanceFromNode(RepositoriesService.class);

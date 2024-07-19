@@ -40,4 +40,5 @@ grant {
 
   // only for tests : org.elasticsearch.repositories.s3.S3RepositoryPlugin
   permission java.util.PropertyPermission "es.allow_insecure_settings", "read,write";
+  permission java.util.PropertyPermission "allow_insecure_settings", "read,write";
 };

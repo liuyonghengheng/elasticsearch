@@ -34,6 +34,7 @@ import java.text.ParseException;
 import java.util.Collections;
 
 import static org.hamcrest.Matchers.equalTo;
+import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyObject;
 import static org.mockito.Mockito.mock;
@@ -61,7 +62,8 @@ public class ExpressionFieldScriptTests extends ESTestCase {
 
         IndexNumericFieldData fieldData = mock(IndexNumericFieldData.class);
         when(fieldData.getFieldName()).thenReturn("field");
-        when(fieldData.load(anyObject())).thenReturn(atomicFieldData);
+//        when(fieldData.load(anyObject())).thenReturn(atomicFieldData);
+        when(fieldData.load(any())).thenReturn(atomicFieldData);
 
         service = new ExpressionScriptEngine();
         lookup = new SearchLookup(mapperService, (ignored, lookup) -> fieldData, null);

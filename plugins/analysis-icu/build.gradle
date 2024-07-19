@@ -34,8 +34,9 @@ forbiddenApisMain {
 }
 
 dependencies {
+  api "org.apache.lucene:lucene-analysis-icu:${versions.lucene}"
 //  api "org.apache.lucene:lucene-analyzers-icu:${versions.lucene}"
-  api "org.apache.lucene:lucene-analyzers-icu:8.11.3"
+//  api "org.apache.lucene:lucene-analyzers-icu:8.11.3"
   api "com.ibm.icu:icu4j:${versions.icu4j}"
 }
 

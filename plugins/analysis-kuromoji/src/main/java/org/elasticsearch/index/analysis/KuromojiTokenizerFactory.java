@@ -23,13 +23,13 @@ import org.apache.lucene.analysis.Tokenizer;
 import org.apache.lucene.analysis.ja.JapaneseTokenizer;
 import org.apache.lucene.analysis.ja.JapaneseTokenizer.Mode;
 import org.apache.lucene.analysis.ja.dict.UserDictionary;
-import org.apache.lucene.analysis.ja.util.CSVUtil;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.index.IndexSettings;
 
 import java.io.IOException;
+import java.io.Reader;
 import java.io.StringReader;
 import java.util.HashSet;
 import java.util.List;
@@ -70,19 +70,6 @@ public class KuromojiTokenizerFactory extends AbstractTokenizerFactory {
             List<String> ruleList = Analysis.getWordList(env, settings, USER_DICT_PATH_OPTION, USER_DICT_RULES_OPTION, false);
             if (ruleList == null || ruleList.isEmpty()) {
                 return null;
-            }
-            Set<String> dup = new HashSet<>();
-            int lineNum = 0;
-            for (String line : ruleList) {
-                // ignore comments
-                if (line.startsWith("#") == false) {
-                    String[] values = CSVUtil.parse(line);
-                    if (dup.add(values[0]) == false) {
-                        throw new IllegalArgumentException("Found duplicate term [" + values[0] + "] in user dictionary " +
-                            "at line [" + lineNum + "]");
-                    }
-                }
-                ++ lineNum;
             }
             StringBuilder sb = new StringBuilder();
             for (String line : ruleList) {

@@ -59,8 +59,7 @@ public class IcuAnalyzerTests extends BaseTokenStreamTestCase {
         String input = "경승지·산악·협곡·해협·곶·심연·폭포·호수·급류";
 
         Analyzer analyzer = new IcuAnalyzerProvider(idxSettings, null, "icu", settings).get();
-        assertAnalyzesTo(analyzer, input,
-            new String[]{"경승지", "산악", "협곡", "해협", "곶", "심연", "폭포", "호수", "급류"});
+        assertAnalyzesTo(analyzer, input, new String[] { "경승지", "산악", "협곡", "해협", "곶", "심연", "폭포", "호수", "급류" });
     }
 
     public void testUnicodeNumericCharacters() throws IOException {
