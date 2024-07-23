@@ -108,33 +108,33 @@ distribution_archives {
     }
   }
 
-  darwinTar {
-    archiveClassifier = 'darwin-x86_64'
-    content {
-      archiveFiles(modulesFiles(false, 'darwin-x86_64'), 'tar', 'darwin', 'x64', false, true)
-    }
-  }
+//  darwinTar {
+//    archiveClassifier = 'darwin-x86_64'
+//    content {
+//      archiveFiles(modulesFiles(false, 'darwin-x86_64'), 'tar', 'darwin', 'x64', false, true)
+//    }
+//  }
+//
+//  ossDarwinTar {
+//    archiveClassifier = 'darwin-x86_64'
+//    content {
+//      archiveFiles(modulesFiles(true, 'darwin-x86_64'), 'tar', 'darwin', 'x64', true, true)
+//    }
+//  }
 
-  ossDarwinTar {
-    archiveClassifier = 'darwin-x86_64'
-    content {
-      archiveFiles(modulesFiles(true, 'darwin-x86_64'), 'tar', 'darwin', 'x64', true, true)
-    }
-  }
+//  noJdkDarwinTar {
+//    archiveClassifier = 'no-jdk-darwin-x86_64'
+//    content {
+//      archiveFiles(modulesFiles(false, 'darwin-x86_64'), 'tar', 'darwin', 'x64', false, false)
+//    }
+//  }
 
-  noJdkDarwinTar {
-    archiveClassifier = 'no-jdk-darwin-x86_64'
-    content {
-      archiveFiles(modulesFiles(false, 'darwin-x86_64'), 'tar', 'darwin', 'x64', false, false)
-    }
-  }
-
-  ossNoJdkDarwinTar {
-    archiveClassifier = 'no-jdk-darwin-x86_64'
-    content {
-      archiveFiles(modulesFiles(true, 'darwin-x86_64'), 'tar', 'darwin', 'x64', true, false)
-    }
-  }
+//  ossNoJdkDarwinTar {
+//    archiveClassifier = 'no-jdk-darwin-x86_64'
+//    content {
+//      archiveFiles(modulesFiles(true, 'darwin-x86_64'), 'tar', 'darwin', 'x64', true, false)
+//    }
+//  }
 
   linuxAarch64Tar {
     archiveClassifier = 'linux-aarch64'

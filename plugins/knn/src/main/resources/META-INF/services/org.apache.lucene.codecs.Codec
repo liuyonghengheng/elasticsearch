@@ -1,0 +1,4 @@
+org.elasticsearch.knn.codec.Elasticknn84Codec
+org.elasticsearch.knn.codec.Elasticknn86Codec
+org.elasticsearch.knn.codec.Elasticknn87Codec
+org.elasticsearch.knn.codec.Elasticknn99Codec

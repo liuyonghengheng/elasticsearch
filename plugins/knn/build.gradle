@@ -1,0 +1,85 @@
+apply plugin: 'scala'
+
+
+esplugin {
+  name 'knn'
+  description 'Elasticsearch plugin for exact and approximate nearest neighbors search on sparse and dense vectors.'
+  classname ' org.elasticsearch.knn.ElasticknnPlugin'
+}
+
+
+buildscript {
+  ext {
+    circeVersion = '0.14.1'
+    scalaShortVersion = '2.12'
+    scalaFullVersion = '2.12.18'
+    zioVersion = '1.0.1'
+  }
+  repositories {
+    jcenter()
+    maven {
+      url "https://plugins.gradle.org/m2/"
+    }
+  }
+  dependencies {
+    classpath 'com.github.jengelman.gradle.plugins:shadow:5.2.0'
+    classpath 'gradle.plugin.com.github.maiflai:gradle-scalatest:0.30'
+  }
+}
+
+
+//tasks.named("dependencyLicenses").configure { enabled = false }
+//tasks.named("dependenciesInfo").configure { enabled = false }
+//tasks.named("dependenciesGraph").configure { enabled = false }
+//tasks.named("forbiddenApisMain").configure { enabled = false }
+//tasks.named("forbiddenPatterns").configure { enabled = false }
+//tasks.named("forbiddenApisTest").configure { enabled = false }
+//tasks.named("javadoc").configure { enabled = false }
+
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  implementation "com.google.guava:guava:28.1-jre"
+  runtime "com.google.guava:guava:28.1-jre"
+  implementation "org.scala-lang:scala-library:${scalaFullVersion}"
+
+//  api "io.circe:circe-parser_${scalaShortVersion}:${circeVersion}"
+//  api "io.circe:circe-generic-extras_${scalaShortVersion}:${circeVersion}"
+//  api "io.circe:circe-generic_${scalaShortVersion}:${circeVersion}"
+//  api "io.circe:circe-core_${scalaShortVersion}:${circeVersion}"
+
+  implementation 'io.circe:circe-core_2.12:0.14.1'
+  implementation 'io.circe:circe-generic_2.12:0.14.1'
+  implementation 'io.circe:circe-parser_2.12:0.14.1'
+  implementation 'io.circe:circe-jawn_2.12:0.14.1'
+  implementation 'io.circe:circe-numbers_2.12:0.14.1'
+  implementation "io.circe:circe-generic-extras_2.12:0.14.1"
+
+  implementation "org.typelevel:jawn-parser_2.12:1.4.0"
+  implementation "org.typelevel:cats-core_2.12:2.1.0"  // Replace with the version you need
+  implementation 'com.chuusai:shapeless_2.12:2.3.3'
+  implementation 'org.typelevel:cats-kernel_2.12:2.1.0'
+  testImplementation 'org.scalatest:scalatest_2.12:3.2.0'
+  testImplementation "junit:junit:4.13.2"
+  api 'org.hamcrest:hamcrest-core:1.3'
+
+
+}
+
+
+configurations {
+  all {
+    // Needed to resolve scala minor version conflicts.
+    resolutionStrategy.preferProjectModules()
+  }
+}
+
+
+test.enabled = false
+
+tasks.withType(ScalaCompile) {
+  scalaCompileOptions.setAdditionalParameters(List.of("-feature"))
+}

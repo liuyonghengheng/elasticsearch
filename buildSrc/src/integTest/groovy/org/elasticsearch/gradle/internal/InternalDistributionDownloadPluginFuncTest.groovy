@@ -73,6 +73,7 @@ class InternalDistributionDownloadPluginFuncTest extends AbstractGradleFuncTest 
 
         then:
         result.task(":distribution:archives:linux-tar:buildExpanded").outcome == TaskOutcome.SUCCESS
+//        result.task(":distribution:archives:oss-linux-tar:buildExpanded").outcome == TaskOutcome.SUCCESS
         result.task(":setupDistro").outcome == TaskOutcome.SUCCESS
         assertExtractedDistroIsCreated("build/distro", 'current-marker.txt')
     }
@@ -142,9 +143,10 @@ class InternalDistributionDownloadPluginFuncTest extends AbstractGradleFuncTest 
         new File(bwcSubProjectFolder, 'bwc-marker.txt') << "bwc=minor"
         new File(bwcSubProjectFolder, 'build.gradle') << """
             apply plugin:'base'
-            
+
             // packed distro
             configurations.create("linux-tar")
+//            configurations.create("oss-linux-tar")
             tasks.register("buildBwcTask", Tar) {
                 from('bwc-marker.txt')
                 archiveExtension = "tar.gz"
@@ -152,8 +154,9 @@ class InternalDistributionDownloadPluginFuncTest extends AbstractGradleFuncTest 
             }
             artifacts {
                 it.add("linux-tar", buildBwcTask)
+//                it.add("oss-linux-tar", buildBwcTask)
             }
-            
+
             // expanded distro
             configurations.create("expanded-linux-tar")
             def expandedTask = tasks.register("buildBwcExpandedTask", Copy) {
@@ -173,7 +176,11 @@ class InternalDistributionDownloadPluginFuncTest extends AbstractGradleFuncTest 
         settingsFile << """
         include ":distribution:archives:linux-tar"
         """
+//        settingsFile << """
+//        include ":distribution:archives:oss-linux-tar"
+//        """
         def bwcSubProjectFolder = testProjectDir.newFolder("distribution", "archives", "linux-tar")
+//        def bwcSubProjectFolder = testProjectDir.newFolder("distribution", "archives", "oss-linux-tar")
         new File(bwcSubProjectFolder, 'current-marker.txt') << "current"
         new File(bwcSubProjectFolder, 'build.gradle') << """
             import org.gradle.api.internal.artifacts.ArtifactAttributes;
