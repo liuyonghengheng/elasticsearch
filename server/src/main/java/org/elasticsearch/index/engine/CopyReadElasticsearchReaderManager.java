@@ -34,7 +34,7 @@ import java.util.List;
 import java.util.function.BiConsumer;
 
 @SuppressForbidden(reason = "reference counting is required here")
-class CopyReadElasticsearchReaderManager extends ReferenceManager<ElasticsearchDirectoryReader> {
+public class CopyReadElasticsearchReaderManager extends ReferenceManager<ElasticsearchDirectoryReader> {
     private final BiConsumer<ElasticsearchDirectoryReader, ElasticsearchDirectoryReader> refreshListener;
     private volatile SegmentInfos currentInfos;
     /**
@@ -49,7 +49,11 @@ class CopyReadElasticsearchReaderManager extends ReferenceManager<ElasticsearchD
                                        BiConsumer<ElasticsearchDirectoryReader, ElasticsearchDirectoryReader> refreshListener) {
         this.current = reader;
         this.refreshListener = refreshListener;
-        refreshListener.accept(current, null);
+    }
+
+    public CopyReadElasticsearchReaderManager(ElasticsearchDirectoryReader reader) {
+        this.current = reader;
+        refreshListener=null;
     }
 
     @Override
@@ -72,7 +76,7 @@ class CopyReadElasticsearchReaderManager extends ReferenceManager<ElasticsearchD
         // Open a new reader, sharing any common segment readers with the old one:
         DirectoryReader r = StandardDirectoryReader.open(this.current.directory(), currentInfos, subs);
         final ElasticsearchDirectoryReader reader = ElasticsearchDirectoryReader.wrap(r, old.shardId());
-        if (reader != null) {
+        if (refreshListener !=null) {
             refreshListener.accept(reader, old);
         }
         return reader;
@@ -96,5 +100,9 @@ class CopyReadElasticsearchReaderManager extends ReferenceManager<ElasticsearchD
         }
         currentInfos = infos;
         maybeRefresh();
+    }
+
+    public SegmentInfos getCurrentInfos() {
+        return currentInfos;
     }
 }

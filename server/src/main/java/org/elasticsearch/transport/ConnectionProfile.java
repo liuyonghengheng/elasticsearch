@@ -78,6 +78,7 @@ public final class ConnectionProfile {
         int connectionsPerNodeReg = TransportSettings.CONNECTIONS_PER_NODE_REG.get(settings);
         int connectionsPerNodeState = TransportSettings.CONNECTIONS_PER_NODE_STATE.get(settings);
         int connectionsPerNodePing = TransportSettings.CONNECTIONS_PER_NODE_PING.get(settings);
+        int connectionsPerNodeCopy = TransportSettings.CONNECTIONS_PER_NODE_COPY.get(settings);
         Builder builder = new Builder();
         builder.setConnectTimeout(TransportSettings.CONNECT_TIMEOUT.get(settings));
         builder.setHandshakeTimeout(TransportSettings.CONNECT_TIMEOUT.get(settings));
@@ -90,6 +91,7 @@ public final class ConnectionProfile {
         // if we are not a data-node we don't need any dedicated channels for recovery
         builder.addConnections(DiscoveryNode.isDataNode(settings) ? connectionsPerNodeRecovery : 0, TransportRequestOptions.Type.RECOVERY);
         builder.addConnections(connectionsPerNodeReg, TransportRequestOptions.Type.REG);
+        builder.addConnections(DiscoveryNode.isDataNode(settings) ? connectionsPerNodeCopy : 0, TransportRequestOptions.Type.COPY);
         return builder.build();
     }
 

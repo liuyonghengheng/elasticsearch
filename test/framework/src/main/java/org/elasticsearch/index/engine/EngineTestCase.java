@@ -1244,6 +1244,14 @@ public abstract class EngineTestCase extends ESTestCase {
         return ((InternalEngine) engine).getNumVersionLookups();
     }
 
+    public static long getCopyReadNumVersionLookups(Engine engine) {
+        return ((DataCopyReadEngine) engine).getNumVersionLookups();
+    }
+
+    public static long getCopyNumVersionLookups(Engine engine) {
+        return ((DataCopyEngine) engine).getNumVersionLookups();
+    }
+
     public static long getInFlightDocCount(Engine engine) {
         if (engine instanceof InternalEngine) {
             return ((InternalEngine) engine).getInFlightDocCount();

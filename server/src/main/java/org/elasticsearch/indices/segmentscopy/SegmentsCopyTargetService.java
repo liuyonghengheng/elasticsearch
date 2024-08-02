@@ -2,6 +2,7 @@ package org.elasticsearch.indices.segmentscopy;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.lucene.store.RateLimiter;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ChannelActionListener;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
@@ -26,6 +27,7 @@ import org.elasticsearch.transport.TransportService;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class SegmentsCopyTargetService {
 
@@ -33,8 +35,7 @@ public class SegmentsCopyTargetService {
     private static final DeprecationLogger DEPRECATION_LOGGER = DeprecationLogger.getLogger(logger.getName());
 
     public static class Actions {
-        public static final String SEGMENTS_INFO = "internal:index/shard/segments/copy/segmentsInfo";
-        public static final String FILES_INFO = "internal:index/shard/segments/copy/filesInfo";
+        public static final String SEGMENTS_INFO = "internal:index/shard/segments/copy/segments_info";
         public static final String FILE_CHUNK = "internal:index/shard/segments/copy/file_chunk";
         public static final String CLEAN_FILES = "internal:index/shard/segments/copy/clean_files";
     }
@@ -42,22 +43,20 @@ public class SegmentsCopyTargetService {
     private final IndicesService indicesService;
     private final ClusterService clusterService;
     private final TransportService transportService;
-    private final IndexNameExpressionResolver indexNameExpressionResolver;
+    private final SegmentsCopySettings segmentsCopySettings;
 
     private final Map<ShardId, LocalTargetShardCopyState> onGoingShards = new HashMap<>();
 
     @Inject
-    public SegmentsCopyTargetService(IndicesService indicesService, ClusterService clusterService, TransportService transportService, IndexNameExpressionResolver indexNameExpressionResolver) {
+    public SegmentsCopyTargetService(IndicesService indicesService, ClusterService clusterService, TransportService transportService,
+                                     SegmentsCopySettings segmentsCopySettings) {
         this.indicesService = indicesService;
         this.clusterService = clusterService;
         this.transportService = transportService;
-        this.indexNameExpressionResolver = indexNameExpressionResolver;
+        this.segmentsCopySettings =  segmentsCopySettings;
 
         transportService.registerRequestHandler(SegmentsCopyTargetService.Actions.SEGMENTS_INFO, ThreadPool.Names.GENERIC, SegmentsInfoRequest::new,
             new SegmentsInfoRequestHandler());
-
-        transportService.registerRequestHandler(SegmentsCopyTargetService.Actions.FILES_INFO, ThreadPool.Names.GENERIC, CopyFilesInfoRequest::new,
-            new FilesInfoRequestHandler());
 
         transportService.registerRequestHandler(SegmentsCopyTargetService.Actions.FILE_CHUNK, ThreadPool.Names.GENERIC, CopyFileChunkRequest::new,
             new FileChunkTransportRequestHandler());
@@ -77,8 +76,7 @@ public class SegmentsCopyTargetService {
 
             if (engine != null && "segment".equals(indexService.getIndexSettings().getSettings()
                 .get("index.datasycn.type","operation"))) {
-                localTargetShardCopyState = new LocalTargetShardCopyState(request.shardId(), indexShard,
-                    transportService, request.sourceNode,
+                localTargetShardCopyState = new LocalTargetShardCopyState(indexShard, request.sourceNode,
                     indexService.getIndexSettings().getSettings()
                         .getAsLong("index.datasycn.segment.shard.internal_action_timeout", 500L));
                 onGoingShards.put(request.shardId(), localTargetShardCopyState);
@@ -103,62 +101,73 @@ public class SegmentsCopyTargetService {
     class SegmentsInfoRequestHandler implements TransportRequestHandler<SegmentsInfoRequest> {
         @Override
         public void messageReceived(SegmentsInfoRequest request, TransportChannel channel, Task task) throws Exception {
+            logger.error("SegmentCopyTargetService [{}] receive segments info request", request.shardId());
             ChannelActionListener<TransportResponse, SegmentsInfoRequest> listener =
                 new ChannelActionListener<>(channel, Actions.SEGMENTS_INFO, request);
             LocalTargetShardCopyState localTargetShardCopyState = getTargetShardCopyState(request, listener);
+            logger.error("SegmentCopyTargetService [{}] receive segments info request", request.shardId());
             if(localTargetShardCopyState == null){
                 // 异常情况直接返回
 //                channel.sendResponse(new LocalTargetShardCopyState.ErrorResponse(LocalTargetShardCopyState.ErrorType.PRIMARY_TERM_ERROR));
                 return;
             }
-            localTargetShardCopyState.isRunning.set(true);
-            SegmentsCopyInfo segmentsCopyInfo = new SegmentsCopyInfo(request.fileNames, request.segmentInfoVersion,
+            logger.error("SegmentCopyTargetService [{}] receive segments info request", request.shardId());
+//            localTargetShardCopyState.isRunning.set(true);
+            SegmentsCopyInfo segmentsCopyInfo = new SegmentsCopyInfo(request.fileNames, null, request.segmentInfoVersion,
                 request.segmentInfoGen, request.infosBytes, request.primaryTerm, null, null);
             localTargetShardCopyState.receiveSegmentsInfo(segmentsCopyInfo, listener);
         }
     }
 
-    class FilesInfoRequestHandler implements TransportRequestHandler<CopyFilesInfoRequest> {
-
-        @Override
-        public void messageReceived(CopyFilesInfoRequest request, TransportChannel channel, Task task) throws Exception {
-//            try (RecoveriesCollection.RecoveryRef recoveryRef = onGoingShards.getRecoverySafe(request.recoveryId(), request.shardId())) {
-//                final ActionListener<Void> listener = createOrFinishListener(recoveryRef, channel, PeerRecoveryTargetService.Actions.FILES_INFO, request);
-//                if (listener == null) {
-//                    return;
-//                }
-//
-//                recoveryRef.target().receiveFileInfo(
-//                    request.phase1FileNames, request.phase1FileSizes, request.phase1ExistingFileNames, request.phase1ExistingFileSizes,
-//                    request.totalTranslogOps, listener);
-//            }
-        }
-    }
 
     class FileChunkTransportRequestHandler implements TransportRequestHandler<CopyFileChunkRequest> {
-
+        final AtomicLong bytesSinceLastPause = new AtomicLong();
         @Override
         public void messageReceived(CopyFileChunkRequest request, TransportChannel channel, Task task) throws Exception {
+            logger.error("SegmentCopyTargetService [{}] receive FileChunk request", request.shardId());
+            LocalTargetShardCopyState targetShardCopyState = onGoingShards.get(request.shardId());
+            final ActionListener<Void> listener = createOrFinishListener(targetShardCopyState, channel, SegmentsCopyTargetService.Actions.FILE_CHUNK, request);
+            if (listener == null) {
+                return;
+            }
+// TODO 设置限速等
+//            final RecoveryState.Index indexState = recoveryTarget.state().getIndex();
+//            if (request.sourceThrottleTimeInNanos() != RecoveryState.Index.UNKNOWN) {
+//                indexState.addSourceThrottling(request.sourceThrottleTimeInNanos());
+//            }
 
+            RateLimiter rateLimiter = segmentsCopySettings.rateLimiter();
+            if (rateLimiter != null) {
+                long bytes = bytesSinceLastPause.addAndGet(request.content().length());
+                if (bytes > rateLimiter.getMinPauseCheckBytes()) {
+                    // Time to pause
+                    bytesSinceLastPause.addAndGet(-bytes);
+                    long throttleTimeInNanos = rateLimiter.pause(bytes);
+// TODO 设置限速等
+//                    indexState.addTargetThrottling(throttleTimeInNanos);
+//                    recoveryTarget.indexShard().recoveryStats().addThrottleTime(throttleTimeInNanos);
+                }
+            }
+            targetShardCopyState.writeFileChunk(request.metadata(), request.position(), request.content(), request.lastChunk(),
+                request.totalTranslogOps(), listener);
         }
     }
 
-    private ActionListener<Void> createOrFinishListener(final RecoveriesCollection.RecoveryRef recoveryRef, final TransportChannel channel,
-                                                        final String action, final RecoveryTransportRequest request) {
-        return createOrFinishListener(recoveryRef, channel, action, request, nullVal -> TransportResponse.Empty.INSTANCE);
+    private ActionListener<Void> createOrFinishListener(final LocalTargetShardCopyState targetShardCopyState, final TransportChannel channel,
+                                                        final String action, final CopyTransportRequest request) {
+        return createOrFinishListener(targetShardCopyState, channel, action, request, nullVal -> TransportResponse.Empty.INSTANCE);
     }
 
-    private ActionListener<Void> createOrFinishListener(final RecoveriesCollection.RecoveryRef recoveryRef, final TransportChannel channel,
-                                                        final String action, final RecoveryTransportRequest request,
+    private ActionListener<Void> createOrFinishListener(final LocalTargetShardCopyState targetShardCopyState, final TransportChannel channel,
+                                                        final String action, final CopyTransportRequest request,
                                                         final CheckedFunction<Void, TransportResponse, Exception> responseFn) {
-        final RecoveryTarget recoveryTarget = recoveryRef.target();
         final ActionListener<TransportResponse> channelListener = new ChannelActionListener<>(channel, action, request);
         final ActionListener<Void> voidListener = ActionListener.map(channelListener, responseFn);
 
         final long requestSeqNo = request.requestSeqNo();
         final ActionListener<Void> listener;
         if (requestSeqNo != SequenceNumbers.UNASSIGNED_SEQ_NO) {
-            listener = recoveryTarget.markRequestReceivedAndCreateListener(requestSeqNo, voidListener);
+            listener = targetShardCopyState.markRequestReceivedAndCreateListener(requestSeqNo, voidListener);
         } else {
             listener = voidListener;
         }

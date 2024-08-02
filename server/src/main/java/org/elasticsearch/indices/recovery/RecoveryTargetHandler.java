@@ -92,6 +92,13 @@ public interface RecoveryTargetHandler {
                          int totalTranslogOps,
                          ActionListener<Void> listener);
 
+    void receiveFileInfoCopyP2(List<String> phase1FileNames,
+                         List<Long> phase1FileSizes,
+                         List<String> phase1ExistingFileNames,
+                         List<Long> phase1ExistingFileSizes,
+                         int totalTranslogOps,
+                         ActionListener<Void> listener);
+
     /**
      * After all source files has been sent over, this command is sent to the target so it can clean any local
      * files that are not part of the source store
@@ -101,9 +108,13 @@ public interface RecoveryTargetHandler {
      * @param sourceMetadata   meta data of the source store
      */
     void cleanFiles(int totalTranslogOps, long globalCheckpoint, Store.MetadataSnapshot sourceMetadata, ActionListener<Void> listener);
+    void cleanFilesCopyP2(int totalTranslogOps, long globalCheckpoint, Store.MetadataSnapshot sourceMetadata, ActionListener<Long> listener);
 
     /** writes a partial file chunk to the target store */
     void writeFileChunk(StoreFileMetadata fileMetadata, long position, BytesReference content,
+                        boolean lastChunk, int totalTranslogOps, ActionListener<Void> listener);
+    /** writes a partial file chunk to the target store */
+    void writeFileChunkCopyP2(StoreFileMetadata fileMetadata, long position, BytesReference content,
                         boolean lastChunk, int totalTranslogOps, ActionListener<Void> listener);
 
     default void cancel() {}

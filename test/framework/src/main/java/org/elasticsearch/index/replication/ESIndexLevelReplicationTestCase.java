@@ -82,6 +82,7 @@ import org.elasticsearch.index.shard.PrimaryReplicaSyncer;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.shard.ShardPath;
 import org.elasticsearch.index.translog.Translog;
+import org.elasticsearch.index.translog.TranslogStats;
 import org.elasticsearch.indices.recovery.RecoveryState;
 import org.elasticsearch.indices.recovery.RecoveryTarget;
 import org.elasticsearch.tasks.TaskManager;
@@ -453,6 +454,16 @@ public abstract class ESIndexLevelReplicationTestCase extends IndexShardTestCase
                 temp = new HashSet<>(replicaIds);
                 temp.removeAll(primaryIds);
                 assertThat(replica.routingEntry() + " has extra docs", temp, empty());
+            }
+        }
+
+        public synchronized void assertAllTranslogEqual() throws IOException {
+            TranslogStats primaryTranslogStats = primary.translogStats();
+            for (IndexShard replica : replicas) {
+                TranslogStats replicaTranslogStats = replica.translogStats();
+                assertThat(primaryTranslogStats.getTranslogSizeInBytes(), equalTo(replicaTranslogStats.getTranslogSizeInBytes()));
+                assertThat(primaryTranslogStats.getUncommittedOperations(), equalTo(replicaTranslogStats.getUncommittedOperations()));
+                assertThat(primaryTranslogStats.getUncommittedSizeInBytes(), equalTo(replicaTranslogStats.getUncommittedSizeInBytes()));
             }
         }
 

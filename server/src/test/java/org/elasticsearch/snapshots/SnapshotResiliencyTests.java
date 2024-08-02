@@ -170,6 +170,7 @@ import org.elasticsearch.indices.mapper.MapperRegistry;
 import org.elasticsearch.indices.recovery.PeerRecoverySourceService;
 import org.elasticsearch.indices.recovery.PeerRecoveryTargetService;
 import org.elasticsearch.indices.recovery.RecoverySettings;
+import org.elasticsearch.indices.segmentscopy.SegmentsCopySettings;
 import org.elasticsearch.indices.segmentscopy.SegmentsCopySourceService;
 import org.elasticsearch.indices.segmentscopy.SegmentsCopyTargetService;
 import org.elasticsearch.ingest.IngestService;
@@ -1375,6 +1376,7 @@ public class SnapshotResiliencyTests extends ESTestCase {
             private final ClusterService clusterService;
 
             private final RecoverySettings recoverySettings;
+            private final SegmentsCopySettings segmentsCopySettings;
 
             private final NodeConnectionsService nodeConnectionsService;
 
@@ -1426,6 +1428,7 @@ public class SnapshotResiliencyTests extends ESTestCase {
                         }
                     });
                 recoverySettings = new RecoverySettings(settings, clusterSettings);
+                segmentsCopySettings = new SegmentsCopySettings(settings, clusterSettings);
                 mockTransport = new DisruptableMockTransport(node, logger, deterministicTaskQueue) {
                     @Override
                     protected ConnectionStatus getConnectionStatus(DiscoveryNode destination) {
@@ -1538,8 +1541,8 @@ public class SnapshotResiliencyTests extends ESTestCase {
                 nodeConnectionsService =
                     new NodeConnectionsService(clusterService.getSettings(), threadPool, transportService);
                 final MetadataMappingService metadataMappingService = new MetadataMappingService(clusterService, indicesService);
-                SegmentsCopySourceService segmentsCopySourceService = new SegmentsCopySourceService(indicesService, clusterService, transportService);
-                SegmentsCopyTargetService segmentsCopyTargetService = new SegmentsCopyTargetService(indicesService, clusterService, transportService, indexNameExpressionResolver);
+                SegmentsCopySourceService segmentsCopySourceService = new SegmentsCopySourceService(indicesService, clusterService, transportService, segmentsCopySettings);
+                SegmentsCopyTargetService segmentsCopyTargetService = new SegmentsCopyTargetService(indicesService, clusterService, transportService, segmentsCopySettings);
                 indicesClusterStateService = new IndicesClusterStateService(
                     settings,
                     indicesService,

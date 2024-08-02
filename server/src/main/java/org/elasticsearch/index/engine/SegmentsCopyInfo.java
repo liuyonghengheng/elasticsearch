@@ -2,9 +2,11 @@ package org.elasticsearch.index.engine;
 
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.SegmentInfos;
+import org.elasticsearch.index.store.StoreFileMetadata;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 public class SegmentsCopyInfo {
 
@@ -23,8 +25,11 @@ public class SegmentsCopyInfo {
 
     public List<String> files;
 
+    public final Map<String, StoreFileMetadata> filesMetadata;
+
     public SegmentsCopyInfo(
         List<String> files,
+        Map<String, StoreFileMetadata> filesMetadata,
         long version,
         long gen,
         byte[] infosBytes,
@@ -34,6 +39,7 @@ public class SegmentsCopyInfo {
         IndexWriter indexWriter) {
 //        assert completedMergeFiles != null;
         this.files = files;
+        this.filesMetadata = filesMetadata;
         this.version = version;
         this.gen = gen;
         this.infosBytes = infosBytes;

@@ -294,7 +294,8 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         this.warmer = warmer;
         this.similarityService = similarityService;
         Objects.requireNonNull(store, "Store must be provided to the index shard");
-        this.engineFactory = Objects.requireNonNull(engineFactory);
+//        this.engineFactory = Objects.requireNonNull(engineFactory);
+        this.engineFactory = genEngineFactory(Objects.requireNonNull(engineFactory), indexSettings, shardRouting);
         this.store = store;
         this.indexSortSupplier = indexSortSupplier;
         this.indexEventListener = indexEventListener;
@@ -3560,21 +3561,15 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     RetentionLeaseSyncer getRetentionLeaseSyncer() {
         return retentionLeaseSyncer;
     }
-//
-//    public SourceShardCopyState getSourceShardCopyState(){
-//        return this.sourceShardCopyState;
-//    }
-//
-//    public boolean initSourceShardCopyState() {
-//        if(!this.isRelocatedPrimary() || this.state != IndexShardState.STARTED){
-//            logger.error("Shard: " + this.shardId + " state: " + this.state + " so cannot init ShardCopyState");
-//            return false;
-//        }
-//        sourceShardCopyState = new SourceShardCopyState(this.shardId);
-//        return true;
-//    }
-//
-//    public boolean initTargetShardCopyState(){
-//        return false;
-//    }
+
+    public EngineFactory genEngineFactory(EngineFactory engineFactory, IndexSettings indexSettings, ShardRouting shardRouting){
+        if("segment".equals(indexSettings.getSettings().get("index.datasycn.type", ""))){
+           if(shardRouting.primary()){
+               return DataCopyEngine::new;
+           }else{
+               return DataCopyReadEngine::new;
+           }
+        }
+        return engineFactory;
+    }
 }

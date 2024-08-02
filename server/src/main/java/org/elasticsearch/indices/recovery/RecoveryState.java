@@ -779,6 +779,10 @@ public class RecoveryState implements ToXContentFragment, Writeable {
             complete = true;
         }
 
+        public void setCompleteFalse() {
+            complete = false;
+        }
+
         public int size() {
             return fileDetails.size();
         }
@@ -849,6 +853,10 @@ public class RecoveryState implements ToXContentFragment, Writeable {
 
         public synchronized void setFileDetailsComplete() {
             fileDetails.setComplete();
+        }
+
+        public synchronized void setFileDetailsCompleteFalse() {
+            fileDetails.setCompleteFalse();
         }
 
         public synchronized void addRecoveredBytesToFile(String name, long bytes) {

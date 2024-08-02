@@ -644,7 +644,8 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
 //                            segmentsCopySourceService.addSourceShardCopyState(shard.shardId(),
 //                                ((IndexShard)shard).getSourceShardCopyState());
 //                        }
-                        segmentsCopySourceService.addNewShardId(shard.shardId());
+                        segmentsCopySourceService.initNewShardCopy(shard.shardId());
+                        logger.error("{} init new shard copy", shard.shardId());
                     }else{
 //                        ((IndexShard)shard).initTargetShardCopyState();
                     }

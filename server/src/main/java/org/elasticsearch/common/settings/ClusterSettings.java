@@ -97,6 +97,7 @@ import org.elasticsearch.indices.breaker.BreakerSettings;
 import org.elasticsearch.indices.breaker.HierarchyCircuitBreakerService;
 import org.elasticsearch.indices.fielddata.cache.IndicesFieldDataCache;
 import org.elasticsearch.indices.recovery.RecoverySettings;
+import org.elasticsearch.indices.segmentscopy.SegmentsCopySettings;
 import org.elasticsearch.indices.store.IndicesStore;
 import org.elasticsearch.monitor.fs.FsHealthService;
 import org.elasticsearch.monitor.fs.FsService;
@@ -561,7 +562,16 @@ public final class ClusterSettings extends AbstractScopedSettings {
             FsHealthService.ENABLED_SETTING,
             FsHealthService.REFRESH_INTERVAL_SETTING,
             FsHealthService.SLOW_PATH_LOGGING_THRESHOLD_SETTING,
-            IndexingPressure.MAX_INDEXING_BYTES)));
+            IndexingPressure.MAX_INDEXING_BYTES,
+            SegmentsCopySettings.INDICES_DATASYCN_SEGMENT_MAX_BYTES_PER_SEC_SETTING,
+            SegmentsCopySettings.INDICES_DATASYCN_SEGMENT_RETRY_DELAY_STATE_SYNC_SETTING,
+            SegmentsCopySettings.INDICES_DATASYCN_SEGMENT_RETRY_DELAY_NETWORK_SETTING,
+            SegmentsCopySettings.INDICES_DATASYCN_SEGMENT_ACTIVITY_TIMEOUT_SETTING,
+            SegmentsCopySettings.INDICES_DATASYCN_SEGMENT_INTERNAL_ACTION_TIMEOUT_SETTING,
+            SegmentsCopySettings.INDICES_DATASYCN_SEGMENT_INTERNAL_LONG_ACTION_TIMEOUT_SETTING,
+            SegmentsCopySettings.INDICES_DATASYCN_SEGMENT_MAX_CONCURRENT_FILE_CHUNKS_SETTING,
+            SegmentsCopySettings.INDICES_DATASYCN_SEGMENT_MAX_CONCURRENT_OPERATIONS_SETTING
+        )));
 
     public static List<SettingUpgrader<?>> BUILT_IN_SETTING_UPGRADERS = Collections.unmodifiableList(Arrays.asList(
             SniffConnectionStrategy.SEARCH_REMOTE_CLUSTER_SEEDS_UPGRADER,

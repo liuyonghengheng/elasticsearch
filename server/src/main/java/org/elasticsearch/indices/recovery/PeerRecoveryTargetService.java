@@ -91,6 +91,10 @@ public class PeerRecoveryTargetService implements IndexEventListener {
         public static final String CLEAN_FILES = "internal:index/shard/recovery/clean_files";
         public static final String TRANSLOG_OPS = "internal:index/shard/recovery/translog_ops";
         public static final String PREPARE_TRANSLOG = "internal:index/shard/recovery/prepare_translog";
+        public static final String FILES_INFO_COPY_P2 = "internal:index/shard/recovery/filesInfo_copy_p2";
+        public static final String FILE_CHUNK_COPY_P2 = "internal:index/shard/recovery/copy_p2_file_chunk_copy_p2";
+        public static final String CLEAN_FILES_COPY_P2 = "internal:index/shard/recovery/clean_files_copy_p2";
+
         public static final String FINALIZE = "internal:index/shard/recovery/finalize";
         public static final String HANDOFF_PRIMARY_CONTEXT = "internal:index/shard/recovery/handoff_primary_context";
     }
@@ -122,6 +126,12 @@ public class PeerRecoveryTargetService implements IndexEventListener {
                 RecoveryPrepareForTranslogOperationsRequest::new, new PrepareForTranslogOperationsRequestHandler());
         transportService.registerRequestHandler(Actions.TRANSLOG_OPS, ThreadPool.Names.GENERIC, RecoveryTranslogOperationsRequest::new,
             new TranslogOperationsRequestHandler());
+        transportService.registerRequestHandler(Actions.FILES_INFO_COPY_P2, ThreadPool.Names.GENERIC, RecoveryFilesInfoCopyP2Request::new,
+            new FilesInfoRequestCopyP2Handler());
+        transportService.registerRequestHandler(Actions.FILE_CHUNK_COPY_P2, ThreadPool.Names.GENERIC, RecoveryFileChunkCopyP2Request::new,
+            new FileChunkTransportRequestCopyP2Handler());
+        transportService.registerRequestHandler(Actions.CLEAN_FILES_COPY_P2, ThreadPool.Names.GENERIC,
+            RecoveryCleanFilesCopyP2Request::new, new CleanFilesRequestCopyP2Handler());
         transportService.registerRequestHandler(Actions.FINALIZE, ThreadPool.Names.GENERIC, RecoveryFinalizeRecoveryRequest::new,
             new FinalizeRecoveryRequestHandler());
         transportService.registerRequestHandler(
@@ -429,6 +439,23 @@ public class PeerRecoveryTargetService implements IndexEventListener {
         }
     }
 
+    class FilesInfoRequestCopyP2Handler implements TransportRequestHandler<RecoveryFilesInfoCopyP2Request> {
+
+        @Override
+        public void messageReceived(RecoveryFilesInfoCopyP2Request request, TransportChannel channel, Task task) throws Exception {
+            try (RecoveryRef recoveryRef = onGoingRecoveries.getRecoverySafe(request.recoveryId(), request.shardId())) {
+                final ActionListener<Void> listener = createOrFinishListener(recoveryRef, channel, Actions.FILES_INFO_COPY_P2, request);
+                if (listener == null) {
+                    return;
+                }
+
+                recoveryRef.target().receiveFileInfoCopyP2(
+                    request.phase1FileNames, request.phase1FileSizes, request.phase1ExistingFileNames, request.phase1ExistingFileSizes,
+                    request.totalTranslogOps, listener);
+            }
+        }
+    }
+
     class CleanFilesRequestHandler implements TransportRequestHandler<RecoveryCleanFilesRequest> {
 
         @Override
@@ -441,6 +468,31 @@ public class PeerRecoveryTargetService implements IndexEventListener {
 
                 recoveryRef.target().cleanFiles(request.totalTranslogOps(), request.getGlobalCheckpoint(), request.sourceMetaSnapshot(),
                     listener);
+            }
+        }
+    }
+
+    class CleanFilesRequestCopyP2Handler implements TransportRequestHandler<RecoveryCleanFilesCopyP2Request> {
+
+        @Override
+        public void messageReceived(RecoveryCleanFilesCopyP2Request request, TransportChannel channel, Task task) throws Exception {
+            try (RecoveryRef recoveryRef = onGoingRecoveries.getRecoverySafe(request.recoveryId(), request.shardId())) {
+                final RecoveryTarget recoveryTarget = recoveryRef.target();
+                final ActionListener<Void> listener = createOrFinishListener(recoveryRef, channel, Actions.CLEAN_FILES_COPY_P2, request,
+                    nullVal -> {
+                    logger.error("cleanFilesCopyP2: createOrFinishListener recive {}", recoveryTarget.indexShard().getLocalCheckpoint());
+                    return new RecoveryCleanFilesP2Response(recoveryTarget.indexShard().getLocalCheckpoint());
+                });
+                logger.error("cleanFilesCopyP2: target duan createOrFinishListener recive request");
+                if (listener == null) {
+                    return;
+                }
+
+                recoveryRef.target().cleanFilesCopyP2(request.totalTranslogOps(), request.getGlobalCheckpoint(), request.sourceMetaSnapshot(),
+                    ActionListener.delegateFailure(listener, (l, newCheckpoint) -> {
+                        l.onResponse(null);
+                        logger.error("cleanFilesCopyP2: messageReceived recive {}", newCheckpoint);
+                    }));
             }
         }
     }
@@ -481,6 +533,43 @@ public class PeerRecoveryTargetService implements IndexEventListener {
         }
     }
 
+
+
+    class FileChunkTransportRequestCopyP2Handler implements TransportRequestHandler<RecoveryFileChunkCopyP2Request> {
+
+        // How many bytes we've copied since we last called RateLimiter.pause
+        final AtomicLong bytesSinceLastPause = new AtomicLong();
+
+        @Override
+        public void messageReceived(final RecoveryFileChunkCopyP2Request request, TransportChannel channel, Task task) throws Exception {
+            try (RecoveryRef recoveryRef = onGoingRecoveries.getRecoverySafe(request.recoveryId(), request.shardId())) {
+                final RecoveryTarget recoveryTarget = recoveryRef.target();
+                final ActionListener<Void> listener = createOrFinishListener(recoveryRef, channel, Actions.FILE_CHUNK_COPY_P2, request);
+                if (listener == null) {
+                    return;
+                }
+
+                final RecoveryState.Index indexState = recoveryTarget.state().getIndex();
+                if (request.sourceThrottleTimeInNanos() != RecoveryState.Index.UNKNOWN) {
+                    indexState.addSourceThrottling(request.sourceThrottleTimeInNanos());
+                }
+
+                RateLimiter rateLimiter = recoverySettings.rateLimiter();
+                if (rateLimiter != null) {
+                    long bytes = bytesSinceLastPause.addAndGet(request.content().length());
+                    if (bytes > rateLimiter.getMinPauseCheckBytes()) {
+                        // Time to pause
+                        bytesSinceLastPause.addAndGet(-bytes);
+                        long throttleTimeInNanos = rateLimiter.pause(bytes);
+                        indexState.addTargetThrottling(throttleTimeInNanos);
+                        recoveryTarget.indexShard().recoveryStats().addThrottleTime(throttleTimeInNanos);
+                    }
+                }
+                recoveryTarget.writeFileChunkCopyP2(request.metadata(), request.position(), request.content(), request.lastChunk(),
+                    request.totalTranslogOps(), listener);
+            }
+        }
+    }
     private ActionListener<Void> createOrFinishListener(final RecoveryRef recoveryRef, final TransportChannel channel,
                                                         final String action, final RecoveryTransportRequest request) {
         return createOrFinishListener(recoveryRef, channel, action, request, nullVal -> TransportResponse.Empty.INSTANCE);

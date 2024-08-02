@@ -173,6 +173,7 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
         IndexSettings.FINAL_PIPELINE,
         MetadataIndexStateService.VERIFIED_BEFORE_CLOSE_SETTING,
         ExistingShardsAllocator.EXISTING_SHARDS_ALLOCATOR_SETTING,
+        IndexMetadata.INDEX_DATASYCN_TYPE_SETTING,
 
         // validate that built-in similarities don't get redefined
         Setting.groupSetting("index.similarity.", (s) -> {
@@ -225,6 +226,7 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
             case "index.shrink.source.name":
             case IndexMetadata.INDEX_RESIZE_SOURCE_UUID_KEY:
             case IndexMetadata.INDEX_RESIZE_SOURCE_NAME_KEY:
+            case IndexMetadata.INDEX_DATASYCN_TYPE:
                 return true;
             default:
                 return IndexMetadata.INDEX_ROUTING_INITIAL_RECOVERY_GROUP_SETTING.getRawKey().match(key);

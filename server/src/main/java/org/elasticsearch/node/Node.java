@@ -124,6 +124,9 @@ import org.elasticsearch.indices.cluster.IndicesClusterStateService;
 import org.elasticsearch.indices.recovery.PeerRecoverySourceService;
 import org.elasticsearch.indices.recovery.PeerRecoveryTargetService;
 import org.elasticsearch.indices.recovery.RecoverySettings;
+import org.elasticsearch.indices.segmentscopy.SegmentsCopySettings;
+import org.elasticsearch.indices.segmentscopy.SegmentsCopySourceService;
+import org.elasticsearch.indices.segmentscopy.SegmentsCopyTargetService;
 import org.elasticsearch.indices.store.IndicesStore;
 import org.elasticsearch.ingest.IngestService;
 import org.elasticsearch.monitor.MonitorService;
@@ -591,6 +594,7 @@ public class Node implements Closeable {
             final IndexingPressure indexingLimits = new IndexingPressure(settings);
 
             final RecoverySettings recoverySettings = new RecoverySettings(settings, settingsModule.getClusterSettings());
+            final SegmentsCopySettings segmentsCopySettings = new SegmentsCopySettings(settings, settingsModule.getClusterSettings());
             RepositoriesModule repositoriesModule = new RepositoriesModule(this.environment,
                 pluginsService.filterPlugins(RepositoryPlugin.class), transportService, clusterService, threadPool, xContentRegistry,
                 recoverySettings);
@@ -683,6 +687,12 @@ public class Node implements Closeable {
                                 indicesService, recoverySettings));
                         b.bind(PeerRecoveryTargetService.class).toInstance(new PeerRecoveryTargetService(threadPool,
                                 transportService, recoverySettings, clusterService));
+                    }
+                    {
+                        b.bind(SegmentsCopySourceService.class).toInstance(new SegmentsCopySourceService(
+                            indicesService, clusterService, transportService, segmentsCopySettings));
+                        b.bind(SegmentsCopyTargetService.class).toInstance(new SegmentsCopyTargetService(
+                            indicesService, clusterService, transportService, segmentsCopySettings));
                     }
                     b.bind(HttpServerTransport.class).toInstance(httpServerTransport);
                     pluginComponents.stream().forEach(p -> b.bind((Class) p.getClass()).toInstance(p));
@@ -896,7 +906,8 @@ public class Node implements Closeable {
             HttpServerTransport http = injector.getInstance(HttpServerTransport.class);
             writePortsFile("http", http.boundAddress());
         }
-
+        // 启动SegmentsCopySourceService
+        injector.getInstance(SegmentsCopySourceService.class).start();
         logger.info("started");
 
         pluginsService.filterPlugins(ClusterPlugin.class).forEach(ClusterPlugin::onNodeStarted);

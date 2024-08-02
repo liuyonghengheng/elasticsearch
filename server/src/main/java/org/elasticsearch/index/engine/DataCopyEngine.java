@@ -19,8 +19,10 @@
 
 package org.elasticsearch.index.engine;
 
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.index.*;
@@ -37,7 +39,9 @@ import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.store.*;
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.BytesRefBuilder;
 import org.apache.lucene.util.InfoStream;
+import org.apache.lucene.util.Version;
 import org.elasticsearch.Assertions;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.index.IndexRequest;
@@ -76,6 +80,7 @@ import org.elasticsearch.index.seqno.SequenceNumbers;
 import org.elasticsearch.index.shard.ElasticsearchMergePolicy;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.store.Store;
+import org.elasticsearch.index.store.StoreFileMetadata;
 import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.index.translog.TranslogConfig;
 import org.elasticsearch.index.translog.TranslogCorruptedException;
@@ -86,7 +91,9 @@ import org.elasticsearch.search.suggest.completion.CompletionStats;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import java.io.Closeable;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
@@ -101,6 +108,8 @@ import java.util.function.LongConsumer;
 import java.util.function.LongSupplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static org.elasticsearch.index.store.Store.digestToString;
 
 public class DataCopyEngine extends Engine {
 
@@ -342,6 +351,8 @@ public class DataCopyEngine extends Engine {
         private SourceShardCopyState sourceShardCopyState;
         private SegmentsCopyInfo segmentsCopyInfo;
         private LongSupplier primaryTermSupplier;
+        Map<String, StoreFileMetadata> lastFileMetaData;
+        Logger logger = LogManager.getLogger(ExternalReaderManager.class);
         ExternalReaderManager(ElasticsearchReaderManager internalReaderManager,
                               BiConsumer<ElasticsearchDirectoryReader, ElasticsearchDirectoryReader> refreshListener,
                               LongSupplier primaryTermSupplier) throws IOException {
@@ -398,14 +409,17 @@ public class DataCopyEngine extends Engine {
         protected void afterMaybeRefresh() throws IOException {
             SegmentInfos newInfos;
             ElasticsearchDirectoryReader searcher = null;
+            Directory dir = null;
             try {
                 searcher = this.acquire();
                 newInfos = ((StandardDirectoryReader) searcher.getDelegate()).getSegmentInfos();
+                dir = searcher.directory();
             } finally {
                 if (searcher != null) {
                     this.release(searcher);
                 }
             }
+            logger.error("ExternalReaderManager：new infos is {}", newInfos);
             if(newInfos == null){
                 // no change
                 System.out.println("new infos is null ,skip switch to new infos");
@@ -414,9 +428,12 @@ public class DataCopyEngine extends Engine {
                 indexWriter.incRefDeleter(newInfos);
                 // 获取文件列表
                 List<String> files = new ArrayList<>();
+                Map<String, StoreFileMetadata> filesMetadata = new HashMap<>();
                 for (SegmentCommitInfo info : newInfos) {
                     for (String fileName : info.files()) {
                         files.add(fileName);
+                        StoreFileMetadata metadata = readLocalFileMetaData(fileName, dir, info.info.getVersion());
+                        filesMetadata.put(fileName, metadata);
                     }
                 }
                 // Serialize the SegmentInfos.
@@ -429,6 +446,7 @@ public class DataCopyEngine extends Engine {
 
                 segmentsCopyInfo = new SegmentsCopyInfo(
                     files,
+                    filesMetadata,
                     newInfos.getVersion(),
                     newInfos.getGeneration(),
                     infosBytes,
@@ -436,6 +454,12 @@ public class DataCopyEngine extends Engine {
                     newInfos,
                     indexWriter);
                 sourceShardCopyState.add(segmentsCopyInfo);
+                try {
+                    SourceShardCopyState.blockingQueue.put(sourceShardCopyState.getShardId());
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                System.out.println("ERROR: ExternalReaderManager source: get segments infos");
             }else if (newInfos.getVersion() == segmentsCopyInfo.infos.getVersion()) {
                 // no change
                 System.out.println(
@@ -453,9 +477,12 @@ public class DataCopyEngine extends Engine {
 //                }
                 // 获取文件列表
                 List<String> files = new ArrayList<>();
+                Map<String, StoreFileMetadata> filesMetadata = new HashMap<>();
                 for (SegmentCommitInfo info : newInfos) {
                     for (String fileName : info.files()) {
                         files.add(fileName);
+                        StoreFileMetadata metadata = readLocalFileMetaData(fileName, dir, info.info.getVersion());
+                        filesMetadata.put(fileName, metadata);
                     }
                 }
                 // Serialize the SegmentInfos.
@@ -468,6 +495,7 @@ public class DataCopyEngine extends Engine {
 
                 segmentsCopyInfo = new SegmentsCopyInfo(
                     files,
+                    filesMetadata,
                     newInfos.getVersion(),
                     newInfos.getGeneration(),
                     infosBytes,
@@ -475,6 +503,11 @@ public class DataCopyEngine extends Engine {
                     newInfos,
                     indexWriter);
                 sourceShardCopyState.add(segmentsCopyInfo);
+                try {
+                    SourceShardCopyState.blockingQueue.put(sourceShardCopyState.getShardId());
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
             }
 
             super.afterMaybeRefresh();
@@ -492,6 +525,58 @@ public class DataCopyEngine extends Engine {
             this.sourceShardCopyState = sourceShardCopyState;
         }
 
+
+        public StoreFileMetadata readLocalFileMetaData(String fileName, Directory dir, Version version) throws IOException {
+            Map<String, StoreFileMetadata> cache = lastFileMetaData;
+            StoreFileMetadata result;
+            if (cache != null) {
+                // We may already have this file cached from the last NRT point:
+                result = cache.get(fileName);
+            } else {
+                result = null;
+            }
+            if (result == null) {
+                // Pull from the filesystem
+                String checksum;
+                final BytesRefBuilder fileHash = new BytesRefBuilder();
+                long length;
+                try (IndexInput in = dir.openInput(fileName, IOContext.DEFAULT)) {
+                    try {
+                        length = in.length();
+                        if (length < CodecUtil.footerLength()) {
+                            // truncated files trigger IAE if we seek negative... these files are really corrupted though
+                            throw new CorruptIndexException("Can't retrieve checksum from file: " + fileName + " file length must be >= " +
+                                CodecUtil.footerLength() + " but was: " + in.length(), in);
+                        }
+//                    if (readFileAsHash) {
+//                        // additional safety we checksum the entire file we read the hash for...
+//                        final Store.VerifyingIndexInput verifyingIndexInput = new Store.VerifyingIndexInput(in);
+//                        hashFile(fileHash, new InputStreamIndexInput(verifyingIndexInput, length), length);
+//                        checksum = digestToString(verifyingIndexInput.verify());
+//                    } else {
+//                        checksum = digestToString(CodecUtil.retrieveChecksum(in));
+//                    }
+                        // 不检测hash
+                        checksum = digestToString(CodecUtil.retrieveChecksum(in));
+                    } catch (Exception ex) {
+//                        logger.debug(() -> new ParameterizedMessage("Can retrieve checksum from file [{}]", fileName), ex);
+                        throw ex;
+                    }
+                } catch (@SuppressWarnings("unused") FileNotFoundException | NoSuchFileException e) {
+//                if (VERBOSE_FILES) {
+//                    message("file " + fileName + ": will copy [file does not exist]");
+//                }
+                    return null;
+                }
+
+                // NOTE: checksum is redundant w/ footer, but we break it out separately because when the bits
+                // cross the wire we need direct access to
+                // checksum when copying to catch bit flips:
+//            result = new CopyFileMetaData(header, footer, length, checksum);
+                result = new StoreFileMetadata(fileName, length, checksum, version);
+            }
+            return result;
+        }
     }
 
     @Override

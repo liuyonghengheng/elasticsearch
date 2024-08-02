@@ -3,11 +3,15 @@ package org.elasticsearch.indices.segmentscopy;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.index.*;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.ReferenceManager;
+import org.apache.lucene.store.*;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.RetryableAction;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.breaker.CircuitBreakingException;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -15,8 +19,12 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.lease.Releasable;
 import org.elasticsearch.common.lucene.index.ElasticsearchDirectoryReader;
 import org.elasticsearch.common.util.CancellableThreads;
+import org.elasticsearch.common.util.concurrent.AbstractRefCounted;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
+import org.elasticsearch.index.engine.CopyReadElasticsearchReaderManager;
+import org.elasticsearch.index.engine.DataCopyReadEngine;
+import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.engine.SegmentsCopyInfo;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.ShardId;
@@ -28,6 +36,7 @@ import org.elasticsearch.transport.*;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -37,12 +46,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.IntSupplier;
 
-public class LocalTargetShardCopyState implements TargetShardCopyState{
+/**
+ * TargetShardCopyState 在接收文件过程中，会并发的接收，所以需要处理并发场景，但是其他阶段不允许并发！
+ */
+public class LocalTargetShardCopyState extends AbstractRefCounted implements TargetShardCopyState{
     private static final Logger logger = LogManager.getLogger(RemoteRecoveryTargetHandler.class);
     public final ShardId shardId;
     public final IndexShard indexShard;
-    public final TransportService transportService;
-    public final ThreadPool threadPool;
     private  long timeout;
     private final DiscoveryNode sourceNode;
     private final Map<Object, RetryableAction<?>> onGoingRetryableActions = ConcurrentCollections.newConcurrentMap();
@@ -51,26 +61,34 @@ public class LocalTargetShardCopyState implements TargetShardCopyState{
     private final CancellableThreads cancellableThreads = new CancellableThreads();
     private final boolean retriesSupported;
     private volatile boolean isCancelled = false;
+    private final AtomicBoolean finished = new AtomicBoolean();
     private  AtomicLong requestSeqNo;
     AtomicBoolean isRunning = new AtomicBoolean(false);
-
     private SegmentsCopyInfo currSegmentsCopyInfo;
     private SegmentsCopyInfo lastSegmentsCopyInfo;
     private Map<String, String> copiedFiles = new HashMap<>();
 
+    private final CopyMultiFileWriter multiFileWriter;
+    private final CopyRequestTracker requestTracker = new CopyRequestTracker();
+    public CopyReadElasticsearchReaderManager mgr;
+    private static final String COPY_PREFIX = "copy.";
 
-    public LocalTargetShardCopyState(ShardId shardId, IndexShard indexShard, TransportService transportService,
-                                     DiscoveryNode sourceNode, Long internalActionTimeout) {
-        this.transportService = transportService;
-        this.threadPool = transportService.getThreadPool();
-        this.shardId = shardId;
+
+    public LocalTargetShardCopyState(IndexShard indexShard, DiscoveryNode sourceNode, Long internalActionTimeout) {
+        super("copy_status");
+        this.shardId = indexShard.shardId();
         this.indexShard =  indexShard;
         this.sourceNode = sourceNode;
         this.fileChunkRequestOptions = TransportRequestOptions.builder()
             .withType(TransportRequestOptions.Type.COPY)
             .withTimeout(internalActionTimeout)//超时时间
             .build();
-        this.retriesSupported = sourceNode.getVersion().onOrAfter(Version.V_7_9_0);
+        String tempFilePrefix = COPY_PREFIX + UUIDs.randomBase64UUID() + ".";
+        this.multiFileWriter = new CopyMultiFileWriter(indexShard.store(), indexShard.recoveryState().getIndex(), tempFilePrefix, logger,
+            ()->{});
+//        this.retriesSupported = sourceNode.getVersion().onOrAfter(Version.V_7_9_0);
+        this.retriesSupported = true;
+        mgr = new CopyReadElasticsearchReaderManager((ElasticsearchDirectoryReader)(indexShard.acquireSearcher("123").getDirectoryReader()));
     }
 
     void receiveSegmentsInfo(SegmentsCopyInfo segmentsCopyInfo, ActionListener<TransportResponse> listener){
@@ -87,6 +105,7 @@ public class LocalTargetShardCopyState implements TargetShardCopyState{
         }else{
             try (DirectoryReader reader = indexShard.getEngineOrNull().acquireSearcher("segmentCopy").getDirectoryReader()) {
 //                oldInfos = ((StandardDirectoryReader) reader).getSegmentInfos();
+                logger.error("SegmentCopyTargetService :get old infos");
                 oldInfos = ((StandardDirectoryReader)((ElasticsearchDirectoryReader) reader).getDelegate()).getSegmentInfos();
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -95,7 +114,9 @@ public class LocalTargetShardCopyState implements TargetShardCopyState{
         long version = oldInfos.getVersion();
         if(segmentsCopyInfo.version <= version){
             // 异常处理
+            isRunning.set(false);
             listener.onResponse(new ErrorResponse(ErrorType.SEGMENTS_INFO_VERSION_ERROR));
+            logger.error("SegmentCopyTargetService :version {} grater than old version {}", segmentsCopyInfo.version, version);
             return;
         }
         // 需要同步的文件列表
@@ -120,11 +141,8 @@ public class LocalTargetShardCopyState implements TargetShardCopyState{
         // 设置当前同步的segments
         currSegmentsCopyInfo = segmentsCopyInfo;
         // 正常返回
+        logger.error("SegmentCopyTargetService : diff files: {}", diffFiles);
         listener.onResponse(new SegmentsInfoResponse(diffFiles));
-    }
-
-    void receiveFiles(Store store, StoreFileMetadata[] files, ActionListener<Void> listener) {
-
     }
 
     /**
@@ -160,6 +178,63 @@ public class LocalTargetShardCopyState implements TargetShardCopyState{
         }
     }
 
+    void receiveFilesLocal2(Directory sourceDirectory, Directory targetDirectory, List<String> files) {
+        FileChannel inChannel = null;
+        FileChannel outChannel = null;
+        try {
+            //获取通道
+            for(String fileName: files){
+                String tmpFileName = fileName+".copytmp";
+                copiedFiles.put(fileName,tmpFileName);
+                targetDirectory.copyFrom(sourceDirectory, fileName, tmpFileName, IOContext.DEFAULT);
+                System.out.println("fileName:"+fileName+" copied to: "+tmpFileName);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }finally {
+            //关闭流
+            try {
+                if (outChannel != null) {
+                    outChannel.close();
+                }
+                if (inChannel != null) {
+                    inChannel.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public void renameFiles(Directory dir) throws IOException {
+        for (Map.Entry<String, String> ent : copiedFiles.entrySet()) {
+            String tmpFileName = ent.getValue();
+            String fileName = ent.getKey();
+
+            // 如果部分文件重命名失败，这种问题不需要处理，最多也只会导致有一些无用的文件，不会造成其他问题，因为此时还没更新segment元数据
+            dir.rename(tmpFileName, fileName);
+        }
+        copiedFiles.clear();
+    }
+
+    public void updateSegmentsInfo(Directory dir) throws IOException {
+        // Turn byte[] back to SegmentInfos:
+        SegmentInfos infos =
+            SegmentInfos.readCommit(dir, toIndexInput(currSegmentsCopyInfo.infosBytes), currSegmentsCopyInfo.gen);
+        // for test
+        // TODO 处理
+        mgr.setCurrentInfos(infos);
+        Engine engine = indexShard.getEngineOrNull();
+        if(engine !=null && engine instanceof DataCopyReadEngine){
+            ((DataCopyReadEngine) engine).setCurrentInfos(infos);
+        }
+    }
+
+    private ChecksumIndexInput toIndexInput(byte[] input) {
+        return new BufferedChecksumIndexInput(
+            new ByteBuffersIndexInput(
+                new ByteBuffersDataInput(Arrays.asList(ByteBuffer.wrap(input))), "SegmentInfos"));
+    }
     private static void traverseFolder(File folder) {
         File[] files = folder.listFiles();
         if (files != null) {
@@ -261,4 +336,51 @@ public class LocalTargetShardCopyState implements TargetShardCopyState{
             return this.message;
         }
     }
+
+    @Override
+    public void writeFileChunk(StoreFileMetadata fileMetadata, long position, BytesReference content,
+                               boolean lastChunk, int totalTranslogOps, ActionListener<Void> listener) {
+        try {
+            multiFileWriter.writeFileChunk(fileMetadata, position, content, lastChunk);
+            listener.onResponse(null);
+        } catch (Exception e) {
+            listener.onFailure(e);
+        }finally {
+            isRunning.set(false);
+        }
+    }
+
+
+    public void cancel(String reason) {
+        if (finished.compareAndSet(false, true)) {
+            try {
+                logger.debug("recovery canceled (reason: [{}])", reason);
+                cancellableThreads.cancel(reason);
+            } finally {
+            }
+        }
+    }
+
+    public void  close() {
+        try {
+            multiFileWriter.close();
+        } finally {
+
+        }
+    }
+
+
+    @Override
+    protected void closeInternal() {
+
+    }
+
+    public ActionListener<Void> markRequestReceivedAndCreateListener(long requestSeqNo, ActionListener<Void> listener) {
+        return requestTracker.markReceivedAndCreateListener(requestSeqNo, listener);
+    }
+
+    public void setCurrSegmentsCopyInfo(SegmentsCopyInfo currSegmentsCopyInfo) {
+        this.currSegmentsCopyInfo = currSegmentsCopyInfo;
+    }
+
 }

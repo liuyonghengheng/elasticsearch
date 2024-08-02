@@ -881,13 +881,28 @@ public class RecoverySourceHandlerTests extends ESTestCase {
         }
 
         @Override
+        public void receiveFileInfoCopyP2(List<String> phase1FileNames, List<Long> phase1FileSizes, List<String> phase1ExistingFileNames, List<Long> phase1ExistingFileSizes, int totalTranslogOps, ActionListener<Void> listener) {
+
+        }
+
+        @Override
         public void cleanFiles(int totalTranslogOps, long globalCheckpoint, Store.MetadataSnapshot sourceMetadata,
                                ActionListener<Void> listener) {
         }
 
         @Override
+        public void cleanFilesCopyP2(int totalTranslogOps, long globalCheckpoint, Store.MetadataSnapshot sourceMetadata, ActionListener<Long> listener) {
+
+        }
+
+        @Override
         public void writeFileChunk(StoreFileMetadata fileMetadata, long position, BytesReference content, boolean lastChunk,
                                    int totalTranslogOps, ActionListener<Void> listener) {
+        }
+
+        @Override
+        public void writeFileChunkCopyP2(StoreFileMetadata fileMetadata, long position, BytesReference content, boolean lastChunk, int totalTranslogOps, ActionListener<Void> listener) {
+
         }
     }
 

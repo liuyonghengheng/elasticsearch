@@ -158,7 +158,8 @@ public final class TransportSettings {
         intSetting("transport.connections_per_node.state", 1, 1, Setting.Property.NodeScope);
     public static final Setting<Integer> CONNECTIONS_PER_NODE_PING =
         intSetting("transport.connections_per_node.ping", 1, 1, Setting.Property.NodeScope);
-
+    public static final Setting<Integer> CONNECTIONS_PER_NODE_COPY =
+        intSetting("transport.connections_per_node.copy", 2, 1, Setting.Property.NodeScope);
     // Tracer settings
 
     public static final Setting<List<String>> TRACE_LOG_INCLUDE_SETTING =

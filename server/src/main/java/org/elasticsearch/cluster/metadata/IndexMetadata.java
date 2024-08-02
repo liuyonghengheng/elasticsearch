@@ -303,6 +303,9 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
     public static final Setting.AffixSetting<String> INDEX_ROUTING_INITIAL_RECOVERY_GROUP_SETTING =
         Setting.prefixKeySetting("index.routing.allocation.initial_recovery.", key -> Setting.simpleString(key));
 
+    public static final String INDEX_DATASYCN_TYPE= "index.datasycn.type";
+    public static final Setting<String> INDEX_DATASYCN_TYPE_SETTING =
+        new Setting<>(INDEX_DATASYCN_TYPE, "", Function.identity(), Property.IndexScope);
     /**
      * The number of active shard copies to check for before proceeding with a write operation.
      */

@@ -37,13 +37,7 @@ import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.iterable.Iterables;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.IndexSettings;
-import org.elasticsearch.index.engine.Engine;
-import org.elasticsearch.index.engine.EngineFactory;
-import org.elasticsearch.index.engine.EngineTestCase;
-import org.elasticsearch.index.engine.InternalEngine;
-import org.elasticsearch.index.engine.InternalEngineTests;
-import org.elasticsearch.index.engine.SegmentsStats;
-import org.elasticsearch.index.engine.VersionConflictEngineException;
+import org.elasticsearch.index.engine.*;
 import org.elasticsearch.index.mapper.SeqNoFieldMapper;
 import org.elasticsearch.index.seqno.SeqNoStats;
 import org.elasticsearch.index.seqno.SequenceNumbers;
@@ -58,12 +52,7 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.hamcrest.Matcher;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Future;
@@ -71,19 +60,63 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.elasticsearch.index.translog.SnapshotMatchers.containsOperationsInAnyOrder;
-import static org.hamcrest.Matchers.anyOf;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.either;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.*;
 import static org.hamcrest.core.Is.is;
 
-public class IndexLevelReplicationTests extends ESIndexLevelReplicationTestCase {
+public class IndexLevelReplicationCopyTests extends ESIndexLevelReplicationTestCase {
 
     public void testSimpleReplication() throws Exception {
+        try (ReplicationGroup shards = createGroup(1, Settings.builder()
+            .put("index.datasycn.type", "segment").put("index.soft_deletes.enabled", true).build())) {
+            shards.startAll();
+            final int docCount = randomInt(50);
+            shards.indexDocs(docCount);
+            Thread.sleep(10000);
+            shards.appendDocs(docCount);
+            // 对比trans-log是否相同
+//            shards.assertAllTranslogEqual();
+            shards.assertAllEqual(docCount);
+            for (IndexShard replica : shards.getReplicas()) {
+                assertThat(EngineTestCase.getCopyReadNumVersionLookups(getEngine(replica)), equalTo(0L));
+            }
+        }
+        // TODO
+        //最终close过过程还是会比较文档数，所以这里会有点问题，需要重现实现 ESIndexLevelReplicationTestCase
+    }
+    public void testSimpleReplication1() throws Exception {
+        try (ReplicationGroup shards = createGroup(1, Settings.builder()
+            .put("index.datasycn.type", "segment").put("index.soft_deletes.enabled", true).build())) {
+            shards.startAll();
+            final int docCount = randomInt(50);
+            shards.indexDocs(docCount);
+            Thread.sleep(1000);
+            shards.appendDocs(docCount);
+            shards.assertAllEqual(docCount);
+            for (IndexShard replica : shards.getReplicas()) {
+                assertThat(EngineTestCase.getCopyReadNumVersionLookups(getEngine(replica)), equalTo(0L));
+            }
+        }
+        // TODO
+        //最终close过过程还是会比较文档数，所以这里会有点问题，需要重现实现 ESIndexLevelReplicationTestCase
+    }
+
+    public void testSimpleReplication2() throws Exception {
+        try (ReplicationGroup shards = createGroup(2)) {
+            shards.startAll();
+            final int docCount = randomInt(50);
+            shards.indexDocs(docCount);
+            shards.assertAllEqual(docCount);
+            for (IndexShard replica : shards.getReplicas()) {
+                assertThat(EngineTestCase.getNumVersionLookups(getEngine(replica)), equalTo(0L));
+                assertThat(replica.docStats().getCount(), equalTo((long)docCount));
+            }
+        }
+
+        // TODO
+        //最终close过过程还是会比较文档数，所以这里会有点问题，需要重现实现 ESIndexLevelReplicationTestCase
+    }
+
+    public void testSimpleReplication3() throws Exception {
         try (ReplicationGroup shards = createGroup(randomInt(2))) {
             shards.startAll();
             final int docCount = randomInt(50);
@@ -91,17 +124,16 @@ public class IndexLevelReplicationTests extends ESIndexLevelReplicationTestCase 
             shards.assertAllEqual(docCount);
             for (IndexShard replica : shards.getReplicas()) {
                 assertThat(EngineTestCase.getNumVersionLookups(getEngine(replica)), equalTo(0L));
-                assertThat(replica.docStats().getCount(), equalTo(docCount));
+                assertThat(replica.docStats().getCount(), equalTo((long)docCount));
             }
         }
     }
-
     public void testSimpleAppendOnlyReplication() throws Exception {
         try (ReplicationGroup shards = createGroup(randomInt(2))) {
             shards.startAll();
             final int docCount = randomInt(50);
             shards.appendDocs(docCount);
-            shards.assertAllEqual(docCount);
+            shards.assertAllTranslogEqual();
             for (IndexShard replica : shards.getReplicas()) {
                 assertThat(EngineTestCase.getNumVersionLookups(getEngine(replica)), equalTo(0L));
             }

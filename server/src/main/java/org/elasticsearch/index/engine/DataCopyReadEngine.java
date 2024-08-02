@@ -30,6 +30,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.LockObtainFailedException;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.InfoStream;
+import org.apache.lucene.util.Version;
 import org.elasticsearch.Assertions;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.index.IndexRequest;
@@ -83,6 +84,11 @@ import java.util.function.LongSupplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.apache.lucene.index.SegmentInfos;
+
+import static org.apache.lucene.index.SegmentInfos.getLastCommitSegmentsFileName;
+import static org.apache.lucene.index.SegmentInfos.readCommit;
+
 public class DataCopyReadEngine extends Engine {
 
     /**
@@ -95,7 +101,7 @@ public class DataCopyReadEngine extends Engine {
 
     private final IndexWriter indexWriter;
 
-    private final ExternalReaderManager externalReaderManager;
+    private final CopyReadElasticsearchReaderManager externalReaderManager;
     private final ElasticsearchReaderManager internalReaderManager;
 
     private final Lock flushLock = new ReentrantLock();
@@ -180,10 +186,12 @@ public class DataCopyReadEngine extends Engine {
         store.incRef();
         IndexWriter writer = null;
         Translog translog = null;
-        ExternalReaderManager externalReaderManager = null;
+        CopyReadElasticsearchReaderManager externalReaderManager = null;
         ElasticsearchReaderManager internalReaderManager = null;
         EngineMergeScheduler scheduler = null;
         boolean success = false;
+
+        externalReaderManager = createReaderManager(new RefreshWarmerListener(logger, isClosed, engineConfig));
         try {
             this.lastDeleteVersionPruneTimeMSec = engineConfig.getThreadPool().relativeTimeInMillis();
             mergeScheduler = scheduler = new EngineMergeScheduler(engineConfig.getShardId(), engineConfig.getIndexSettings());
@@ -211,6 +219,7 @@ public class DataCopyReadEngine extends Engine {
                 historyUUID = loadHistoryUUID(commitData);
                 forceMergeUUID = commitData.get(FORCE_MERGE_UUID_KEY);
                 indexWriter = writer;
+                indexWriter.close();
             } catch (IOException | TranslogCorruptedException e) {
                 throw new EngineCreationFailureException(shardId, "failed to create engine", e);
             } catch (AssertionError e) {
@@ -222,8 +231,15 @@ public class DataCopyReadEngine extends Engine {
                     throw e;
                 }
             }
-            externalReaderManager = createReaderManager(new RefreshWarmerListener(logger, isClosed, engineConfig));
-            internalReaderManager = externalReaderManager.internalReaderManager;
+
+            final ElasticsearchDirectoryReader directoryReader;
+            try {
+                directoryReader = ElasticsearchDirectoryReader.wrap(DirectoryReader.open(store.directory()), shardId);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            internalReaderManager = new ElasticsearchReaderManager(directoryReader,
+                new RamAccountingRefreshListener(engineConfig.getCircuitBreakerService()));
             this.internalReaderManager = internalReaderManager;
             this.externalReaderManager = externalReaderManager;
             internalReaderManager.addListener(versionMap);
@@ -275,6 +291,10 @@ public class DataCopyReadEngine extends Engine {
         return localCheckpointTrackerSupplier.apply(maxSeqNo, localCheckpoint);
     }
 
+    public void setCurrentInfos(SegmentInfos si) throws IOException {
+        externalReaderManager.setCurrentInfos(si);
+    }
+
     private SoftDeletesPolicy newSoftDeletesPolicy() throws IOException {
         final Map<String, String> commitUserData = store.readLastCommittedSegmentsInfo().userData;
         final long lastMinRetainedSeqNo;
@@ -295,86 +315,9 @@ public class DataCopyReadEngine extends Engine {
         return completionStatsCache.get(fieldNamePatterns);
     }
 
-    /**
-     * This reference manager delegates all it's refresh calls to another (internal) ReaderManager
-     * The main purpose for this is that if we have external refreshes happening we don't issue extra
-     * refreshes to clear version map memory etc. this can cause excessive segment creation if heavy indexing
-     * is happening and the refresh interval is low (ie. 1 sec) 这个引用管理器将它的所有刷新调用委托给另一个（内部）ReaderManager。
-     * 这样做的主要目的是，如果发生外部刷新，我们不会发出额外的刷新来清除版本映射内存等。如果发生重索引且刷新间隔较低（即1秒），这可能会导致过度的段创建
-     * This also prevents segment starvation where an internal reader holds on to old segments literally forever
-     * since no indexing is happening and refreshes are only happening to the external reader manager, while with
-     * this specialized implementation an external refresh will immediately be reflected on the internal reader
-     * and old segments can be released in the same way previous version did this (as a side-effect of _refresh)
-     *///这也能避免segment饥饿，（例如一个内部的reader一直持有旧的segment 由于没有索引操作发生或者所有的刷新操作都发生在外部的reader manager，）但是当有这个特殊的实现时，一个外部的刷新会马上反映在这个内部的reader上，并且可以以与以前版本相同的方式释放旧段
-    @SuppressForbidden(reason = "reference counting is required here")
-    private static final class ExternalReaderManager extends ReferenceManager<ElasticsearchDirectoryReader> {
-        private final BiConsumer<ElasticsearchDirectoryReader, ElasticsearchDirectoryReader> refreshListener;
-        private final ElasticsearchReaderManager internalReaderManager;
-        private boolean isWarmedUp; //guarded by refreshLock
-
-        ExternalReaderManager(ElasticsearchReaderManager internalReaderManager,
-                              BiConsumer<ElasticsearchDirectoryReader, ElasticsearchDirectoryReader> refreshListener) throws IOException {
-            this.refreshListener = refreshListener;
-            this.internalReaderManager = internalReaderManager;
-            this.current = internalReaderManager.acquire(); // steal the reference without warming up
-        }
-
-        @Override
-        protected ElasticsearchDirectoryReader refreshIfNeeded(ElasticsearchDirectoryReader referenceToRefresh) throws IOException {
-            // we simply run a blocking refresh on the internal reference manager and then steal it's reader
-            // it's a save operation since we acquire the reader which incs it's reference but then down the road
-            // steal it by calling incRef on the "stolen" reader
-            internalReaderManager.maybeRefreshBlocking();
-            final ElasticsearchDirectoryReader newReader = internalReaderManager.acquire();
-            if (isWarmedUp == false || newReader != referenceToRefresh) {
-                boolean success = false;
-                try {
-                    refreshListener.accept(newReader, isWarmedUp ? referenceToRefresh : null);
-                    isWarmedUp = true;
-                    success = true;
-                } finally {
-                    if (success == false) {
-                        internalReaderManager.release(newReader);
-                    }
-                }
-            }
-            // nothing has changed - both ref managers share the same instance so we can use reference equality
-            if (referenceToRefresh == newReader) {
-                internalReaderManager.release(newReader);
-                return null;
-            } else {
-                return newReader; // steal the reference
-            }
-        }
-
-        @Override
-        protected boolean tryIncRef(ElasticsearchDirectoryReader reference) {
-            return reference.tryIncRef();
-        }
-
-        @Override
-        protected int getRefCount(ElasticsearchDirectoryReader reference) {
-            return reference.getRefCount();
-        }
-
-        @Override
-        protected void decRef(ElasticsearchDirectoryReader reference) throws IOException {
-            reference.decRef();
-        }
-    }
 
     @Override
     final boolean assertSearcherIsWarmedUp(String source, SearcherScope scope) {
-        if (scope == SearcherScope.EXTERNAL) {
-            switch (source) {
-                // we can access segment_stats while a shard is still in the recovering state.
-                case "segments":
-                case "segments_stats":
-                    break;
-                default:
-                    assert externalReaderManager.isWarmedUp : "searcher was not warmed up yet for source[" + source + "]";
-            }
-        }
         return true;
     }
 
@@ -580,7 +523,7 @@ public class DataCopyReadEngine extends Engine {
     /** Returns how many bytes we are currently moving from indexing buffer to segments on disk */
     @Override
     public long getWritingBytes() {
-        return indexWriter.getFlushingBytes() + versionMap.getRefreshingBytes();
+        return 0L;
     }
 
     /**
@@ -594,31 +537,47 @@ public class DataCopyReadEngine extends Engine {
         return uuid;
     }
 
-    private ExternalReaderManager createReaderManager(RefreshWarmerListener externalRefreshListener) throws EngineException {
+    private CopyReadElasticsearchReaderManager createReaderManager(RefreshWarmerListener externalRefreshListener) throws EngineException {
         boolean success = false;
         ElasticsearchReaderManager internalReaderManager = null;
         try {
             try {
+                String segmentsFileName = SegmentInfos.getLastCommitSegmentsFileName(store.directory());
+                SegmentInfos infos;
+                if (segmentsFileName == null) {
+                    // No index here yet:
+                    infos = new SegmentInfos(Version.LATEST.major);
+                } else {
+                    infos = SegmentInfos.readCommit(store.directory(), segmentsFileName);
+                    Collection<String> indexFiles = infos.files(false);
+
+//                    lastCommitFiles.add(segmentsFileName);
+//                    lastCommitFiles.addAll(indexFiles);
+//
+//                    // Always protect the last commit:
+//                    deleter.incRef(lastCommitFiles);
+//
+//                    lastNRTFiles.addAll(indexFiles);
+//                    deleter.incRef(lastNRTFiles);
+                }
+
                 final ElasticsearchDirectoryReader directoryReader =
-                    ElasticsearchDirectoryReader.wrap(DirectoryReader.open(indexWriter), shardId);
+                    ElasticsearchDirectoryReader.wrap(DirectoryReader.open(store.directory()), shardId);
                 internalReaderManager = new ElasticsearchReaderManager(directoryReader,
                     new RamAccountingRefreshListener(engineConfig.getCircuitBreakerService()));
-                lastCommittedSegmentInfos = store.readLastCommittedSegmentsInfo();
-                ExternalReaderManager externalReaderManager = new ExternalReaderManager(internalReaderManager, externalRefreshListener);
+
+                CopyReadElasticsearchReaderManager externalReaderManager = new CopyReadElasticsearchReaderManager(directoryReader, externalRefreshListener);
+                externalReaderManager.setCurrentInfos(infos);
+                lastCommittedSegmentInfos = infos;
                 success = true;
                 return externalReaderManager;
             } catch (IOException e) {
                 maybeFailEngine("start", e);
-                try {
-                    indexWriter.rollback();
-                } catch (IOException inner) { // iw is closed below
-                    e.addSuppressed(inner);
-                }
                 throw new EngineCreationFailureException(shardId, "failed to open reader on writer", e);
             }
         } finally {
             if (success == false) { // release everything we created on a failure
-                IOUtils.closeWhileHandlingException(internalReaderManager, indexWriter);
+                IOUtils.closeWhileHandlingException(internalReaderManager);
             }
         }
     }
@@ -798,11 +757,7 @@ public class DataCopyReadEngine extends Engine {
 
     @Override
     public IndexResult index(Index index) throws IOException {
-        if(index.origin() == Operation.Origin.PRIMARY){
-            return indexPrimary(index);
-        }else{
-            return indexReplica(index);
-        }
+        return indexReplica(index);
     }
 
     public IndexResult indexPrimary(Index index) throws IOException {
@@ -2195,14 +2150,13 @@ public class DataCopyReadEngine extends Engine {
 
     @Override
     protected final ReferenceManager<ElasticsearchDirectoryReader> getReferenceManager(SearcherScope scope) {
-        switch (scope) {
-            case INTERNAL:
-                return internalReaderManager;
-            case EXTERNAL:
-                return externalReaderManager;
-            default:
-                throw new IllegalStateException("unknown scope: " + scope);
+        try {
+            SegmentInfos info = SegmentInfos.readCommit(store.directory(), getLastCommitSegmentsFileName(store.directory()));
+            setCurrentInfos(info);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
+        return externalReaderManager;
     }
 
     private IndexWriter createWriter() throws IOException {
@@ -2212,15 +2166,6 @@ public class DataCopyReadEngine extends Engine {
         } catch (LockObtainFailedException ex) {
             logger.warn("could not lock IndexWriter", ex);
             throw ex;
-        }
-    }
-
-    // pkg-private for testing
-    IndexWriter createWriter(Directory directory, IndexWriterConfig iwc) throws IOException {
-        if (Assertions.ENABLED) {
-            return new AssertingIndexWriter(directory, iwc);
-        } else {
-            return new IndexWriter(directory, iwc);
         }
     }
 
@@ -2263,6 +2208,15 @@ public class DataCopyReadEngine extends Engine {
             iwc.setIndexSort(config().getIndexSort());
         }
         return iwc;
+    }
+
+    // pkg-private for testing
+    IndexWriter createWriter(Directory directory, IndexWriterConfig iwc) throws IOException {
+        if (Assertions.ENABLED) {
+            return new AssertingIndexWriter(directory, iwc);
+        } else {
+            return new IndexWriter(directory, iwc);
+        }
     }
 
     /** A listener that warms the segments if needed when acquiring a new reader */
@@ -2413,7 +2367,61 @@ public class DataCopyReadEngine extends Engine {
             });
         }
     }
+    protected void commitIndexReader(final Translog translog, @Nullable final String syncId) throws IOException {
+        ensureCanFlush();
+        try {
+            final long localCheckpoint = localCheckpointTracker.getProcessedCheckpoint();
+            final Map<String, String> commitData = new HashMap<>(7);
+            commitData.put(Translog.TRANSLOG_UUID_KEY, translog.getTranslogUUID());
+            commitData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(localCheckpoint));
+            if (syncId != null) {
+                commitData.put(Engine.SYNC_COMMIT_ID, syncId);
+            }
+            commitData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(localCheckpointTracker.getMaxSeqNo()));
+            commitData.put(MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID, Long.toString(maxUnsafeAutoIdTimestamp.get()));
+            commitData.put(HISTORY_UUID_KEY, historyUUID);
+            if (softDeleteEnabled) {
+                commitData.put(Engine.MIN_RETAINED_SEQNO, Long.toString(softDeletesPolicy.getMinRetainedSeqNo()));
+            }
+            final String currentForceMergeUUID = forceMergeUUID;
+            if (currentForceMergeUUID != null) {
+                commitData.put(FORCE_MERGE_UUID_KEY, currentForceMergeUUID);
+            }
+            logger.trace("committing writer with commit data [{}]", commitData);
 
+            SegmentInfos infos = externalReaderManager.getCurrentInfos();
+            infos.setUserData(commitData,false);
+            infos.commit(store.directory());
+            Collection<String> indexFiles = infos.files(false);
+
+            store.directory().sync(indexFiles);
+            shouldPeriodicallyFlushAfterBigMerge.set(false);
+
+        } catch (final Exception ex) {
+            try {
+                failEngine("lucene commit failed", ex);
+            } catch (final Exception inner) {
+                ex.addSuppressed(inner);
+            }
+            throw ex;
+        } catch (final AssertionError e) {
+            /*
+             * If assertions are enabled, IndexWriter throws AssertionError on commit if any files don't exist, but tests that randomly
+             * throw FileNotFoundException or NoSuchFileException can also hit this.
+             */
+            if (ExceptionsHelper.stackTrace(e).contains("org.apache.lucene.index.IndexWriter.filesExist")) {
+                final EngineException engineException = new EngineException(shardId, "failed to commit engine", e);
+                try {
+                    failEngine("lucene commit failed", engineException);
+                } catch (final Exception inner) {
+                    engineException.addSuppressed(inner);
+                }
+                throw engineException;
+            } else {
+                throw e;
+            }
+        }
+    }
     /**
      * Commits the specified index writer.
      *

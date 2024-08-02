@@ -24,13 +24,15 @@ public class SegmentsInfoRequest extends CopyTransportRequest {
         super(in);
         shardId = new ShardId(in);
         sourceNode = new DiscoveryNode(in);
-        segmentInfoVersion = in.readLong();
-        segmentInfoGen = in.readLong();
+        segmentInfoVersion = in.readVLong();
+        segmentInfoGen = in.readVLong();
         primaryTerm = in.readVLong();
-        int size = in.readVInt();
-        in.readBytes(infosBytes, 0, size);
+//        int size = in.readVInt();
+//        infosBytes = new byte[size];
+//        in.readBytes(infosBytes, 0, size);
+        infosBytes = in.readByteArray();
 
-        size = in.readVInt();
+        int size = in.readVInt();
         fileNames = new ArrayList<>(size);
         for (int i = 0; i < size; i++) {
             fileNames.add(in.readString());
@@ -68,8 +70,9 @@ public class SegmentsInfoRequest extends CopyTransportRequest {
         out.writeVLong(segmentInfoVersion);
         out.writeVLong(segmentInfoGen);
         out.writeVLong(primaryTerm);
-        out.writeVInt(infosBytes.length);
-        out.writeBytes(infosBytes, 0, infosBytes.length);
+//        out.writeVInt(infosBytes.length);
+//        out.writeBytes(infosBytes, 0, infosBytes.length);
+        out.writeByteArray(infosBytes);
 
         out.writeVInt(fileNames.size());
         for (String fileName : fileNames) {
