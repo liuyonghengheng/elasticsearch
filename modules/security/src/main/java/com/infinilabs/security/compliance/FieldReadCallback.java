@@ -139,12 +139,22 @@ public final class FieldReadCallback {
         }
     }
 
-    public void stringFieldRead(final FieldInfo fieldInfo, final byte[] fieldValue) {
+//    public void stringFieldRead(final FieldInfo fieldInfo, final byte[] fieldValue) {
+//        try {
+//            if(!recordField(fieldInfo.name, true)) {
+//                return;
+//            }
+//            fieldRead0(fieldInfo.name, new String(fieldValue, StandardCharsets.UTF_8));
+//        } catch (Exception e) {
+//            log.error("Unexpected error reading string field '{}' in index '{}'", fieldInfo.name, index.getName());
+//        }
+//    }
+    public void stringFieldRead(final FieldInfo fieldInfo, String fieldValue) {
         try {
             if(!recordField(fieldInfo.name, true)) {
                 return;
             }
-            fieldRead0(fieldInfo.name, new String(fieldValue, StandardCharsets.UTF_8));
+            fieldRead0(fieldInfo.name, fieldValue);
         } catch (Exception e) {
             log.error("Unexpected error reading string field '{}' in index '{}'", fieldInfo.name, index.getName());
         }

@@ -80,7 +80,7 @@ class ShardReplicationParams : PersistentTaskParams {
     }
 
     override fun getMinimalSupportedVersion(): Version {
-        return Version.V_1_0_0
+        return Version.V_7_10_2
     }
 
     override fun toString(): String {

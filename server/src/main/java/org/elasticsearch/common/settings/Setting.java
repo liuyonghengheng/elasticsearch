@@ -1207,6 +1207,96 @@ public class Setting<T> implements ToXContentObject {
             properties);
     }
 
+    // Long
+
+    private static long parseLong(String s, long minValue, long maxValue, String key, boolean isFiltered) {
+        long value = Long.parseLong(s);
+        if (value < minValue) {
+            String err = "Failed to parse value" + (isFiltered ? "" : " [" + s + "]") + " for setting [" + key + "] must be >= " + minValue;
+            throw new IllegalArgumentException(err);
+        }
+        if (value > maxValue) {
+            String err = "Failed to parse value" + (isFiltered ? "" : " [" + s + "]") + " for setting [" + key + "] must be <= " + maxValue;
+            throw new IllegalArgumentException(err);
+        }
+        return value;
+    }
+
+    // Setting<Long> with defaultValue
+
+    public static Setting<Long> longSetting(String key, long defaultValue, Property... properties) {
+        return longSetting(key, defaultValue, Long.MIN_VALUE, Long.MAX_VALUE, properties);
+    }
+
+    public static Setting<Long> longSetting(String key, long defaultValue, long minValue, long maxValue, Property... properties) {
+        return longSetting(key, defaultValue, minValue, maxValue, v -> {}, properties);
+    }
+
+    public static Setting<Long> longSetting(
+        String key,
+        long defaultValue,
+        long minValue,
+        long maxValue,
+        Validator<Long> validator,
+        Property... properties
+    ) {
+        return new Setting<>(
+            key,
+            Long.toString(defaultValue),
+            (s) -> parseLong(s, minValue, maxValue, key, isFiltered(properties)),
+            validator,
+            properties
+        );
+    }
+
+    // Setting<Long> with fallback
+
+    public static Setting<Long> longSetting(String key, Setting<Long> fallbackSetting, Property... properties) {
+        return longSetting(key, fallbackSetting, Long.MIN_VALUE, Long.MAX_VALUE, properties);
+    }
+
+    public static Setting<Long> longSetting(String key, Setting<Long> fallbackSetting, long minValue, Property... properties) {
+        return longSetting(key, fallbackSetting, minValue, Long.MAX_VALUE, properties);
+    }
+
+    public static Setting<Long> longSetting(
+        String key,
+        Setting<Long> fallbackSetting,
+        long minValue,
+        long maxValue,
+        Property... properties
+    ) {
+        return longSetting(key, fallbackSetting, minValue, maxValue, v -> {}, properties);
+    }
+
+    public static Setting<Long> longSetting(
+        String key,
+        Setting<Long> fallbackSetting,
+        long minValue,
+        Validator<Long> validator,
+        Property... properties
+    ) {
+        return longSetting(key, fallbackSetting, minValue, Long.MAX_VALUE, validator, properties);
+    }
+
+    public static Setting<Long> longSetting(
+        String key,
+        Setting<Long> fallbackSetting,
+        long minValue,
+        long maxValue,
+        Validator<Long> validator,
+        Property... properties
+    ) {
+        return new Setting<>(
+            new SimpleKey(key),
+            fallbackSetting,
+            fallbackSetting::getRaw,
+            (s) -> parseLong(s, minValue, maxValue, key, isFiltered(properties)),
+            validator,
+            properties
+        );
+    }
+
     public static Setting<String> simpleString(String key, Property... properties) {
         return new Setting<>(key, s -> "", Function.identity(), properties);
     }

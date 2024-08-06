@@ -17,7 +17,7 @@ tasks.named("javadoc").configure {enabled = false }
 //tasks.named("jarHell").configure {enabled = false}
 
 dependencies {
-  api "junit:junit:4.9"
+  api "junit:junit:4.12"
 }
 
 // no unit tests
