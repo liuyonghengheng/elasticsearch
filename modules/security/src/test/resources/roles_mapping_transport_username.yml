@@ -1,0 +1,357 @@
+---
+_meta:
+  type: "role_mapping"
+  config_version: 2
+security_own_index:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "spock"
+  - "kirk"
+  and_external_roles: []
+  description: "Migrated from v6"
+unittest_1:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "client"
+  and_external_roles: []
+  description: "Migrated from v6"
+rexclude:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "rexclude"
+  and_external_roles: []
+  description: "Migrated from v6"
+underscore:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "underscore"
+  and_external_roles: []
+  description: "Migrated from v6"
+role_vulcans_admin:
+  reserved: false
+  hidden: false
+  external_roles:
+  - "vulcanadmin"
+  hosts: []
+  users: []
+  and_external_roles: []
+  description: "Migrated from v6"
+shakespeare:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "picard"
+  and_external_roles: []
+  description: "Migrated from v6"
+aliastest:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "aliastest"
+  - "dummy"
+  and_external_roles: []
+  description: "Migrated from v6"
+user1:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "worf"
+  and_external_roles: []
+  description: "Migrated from v6"
+role_vulcans:
+  reserved: false
+  hidden: false
+  external_roles:
+  - "vulcangov"
+  hosts: []
+  users:
+  - "kirk"
+  and_external_roles: []
+  description: "Migrated from v6"
+flsdls:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "sarek"
+  and_external_roles: []
+  description: "Migrated from v6"
+ccsresolv:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "ccsresolv"
+  and_external_roles: []
+  description: "Migrated from v6"
+user2:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "picard"
+  and_external_roles: []
+  description: "Migrated from v6"
+role_starfleet_captains:
+  reserved: false
+  hidden: false
+  external_roles:
+  - "captains"
+  hosts: []
+  users: []
+  and_external_roles: []
+  description: "Migrated from v6"
+restore:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "restoreuser"
+  and_external_roles: []
+  description: "Migrated from v6"
+attr:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "custattr"
+  and_external_roles: []
+  description: "Migrated from v6"
+mindex3:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "mindex12"
+  and_external_roles: []
+  description: "Migrated from v6"
+role_starfleet_library:
+  reserved: false
+  hidden: false
+  external_roles:
+  - "starfleet*"
+  - "ambassador"
+  hosts: []
+  users: []
+  and_external_roles: []
+  description: "Migrated from v6"
+baz:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "baz"
+  and_external_roles: []
+  description: "Migrated from v6"
+mindex2:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "mindex12"
+  and_external_roles: []
+  description: "Migrated from v6"
+mindex1:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "mindex12"
+  and_external_roles: []
+  description: "Migrated from v6"
+role_klingons1:
+  reserved: false
+  hidden: false
+  external_roles:
+  - "klingon"
+  hosts: []
+  users: []
+  and_external_roles: []
+  description: "Migrated from v6"
+snapres:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "snapresuser"
+  and_external_roles: []
+  description: "Migrated from v6"
+role_klingons2:
+  reserved: false
+  hidden: false
+  external_roles:
+  - "klingon"
+  hosts: []
+  users: []
+  and_external_roles: []
+  description: "Migrated from v6"
+kibana4:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "bug108"
+  and_external_roles: []
+  description: "Migrated from v6"
+dlsnoinvest:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "dlsnoinvest"
+  and_external_roles: []
+  description: "Migrated from v6"
+theindex_admin:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "theindexadmin"
+  and_external_roles: []
+  description: "Migrated from v6"
+zdummy_all:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "bug108"
+  and_external_roles: []
+  description: "Migrated from v6"
+multiget:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "picard"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_kibana_server:
+  reserved: true
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "kibanaserver"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_superuser:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "nagilum"
+  and_external_roles: []
+  description: "Migrated from v6"
+public:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "*"
+  and_external_roles: []
+  description: "Migrated from v6"
+writer:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "writer"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_logstash:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "security_logstash"
+  and_external_roles: []
+  description: "Migrated from v6"
+role01_role02:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users: []
+  and_external_roles:
+  - "role01"
+  - "role02"
+  description: "Migrated from v6"
+role_starfleet:
+  reserved: false
+  hidden: false
+  external_roles:
+  - "starfleet"
+  - "captains"
+  - "defectors"
+  hosts:
+    - "*.starfleetintranet.com"
+  users:
+  - "nagilum"
+  and_external_roles: []
+  description: "Migrated from v6"
+role_host1:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts:
+  - "127.0.0.1"
+  - "localhost"
+  users: []
+  and_external_roles: []
+  description: "Migrated from v6"
+role_host2:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "host_127.0.0.1"
+  - "host_localhost"
+  and_external_roles: []
+  description: "Migrated from v6"
+twitter:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "twitter"
+  and_external_roles: []
+  description: "Migrated from v6"

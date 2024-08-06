@@ -1,0 +1,23 @@
+
+
+
+package org.elasticsearch.jdbc.protocol;
+
+import java.util.List;
+
+public interface QueryResponse {
+
+    List<? extends ColumnDescriptor> getColumnDescriptors();
+
+    List<List<Object>> getDatarows();
+
+    long getTotal();
+
+    long getSize();
+
+    int getStatus();
+
+    String getCursor();
+
+    RequestError getError();
+}

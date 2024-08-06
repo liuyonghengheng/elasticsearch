@@ -1,0 +1,110 @@
+
+package org.elasticsearch.sql.search.storage.script.aggregation.dsl;
+
+import com.google.common.collect.ImmutableList;
+import java.util.List;
+import org.apache.commons.lang3.tuple.Triple;
+import org.elasticsearch.search.aggregations.bucket.composite.CompositeValuesSourceBuilder;
+import org.elasticsearch.search.aggregations.bucket.composite.DateHistogramValuesSourceBuilder;
+import org.elasticsearch.search.aggregations.bucket.composite.HistogramValuesSourceBuilder;
+import org.elasticsearch.search.aggregations.bucket.composite.TermsValuesSourceBuilder;
+import org.elasticsearch.search.aggregations.bucket.histogram.DateHistogramInterval;
+import org.elasticsearch.search.aggregations.bucket.missing.MissingOrder;
+import org.elasticsearch.search.sort.SortOrder;
+import org.elasticsearch.sql.ast.expression.SpanUnit;
+import org.elasticsearch.sql.expression.NamedExpression;
+import org.elasticsearch.sql.expression.span.SpanExpression;
+import org.elasticsearch.sql.search.storage.serialization.ExpressionSerializer;
+
+/**
+ * Bucket Aggregation Builder.
+ */
+public class BucketAggregationBuilder {
+
+  private final AggregationBuilderHelper helper;
+
+  public BucketAggregationBuilder(
+      ExpressionSerializer serializer) {
+    this.helper = new AggregationBuilderHelper(serializer);
+  }
+
+  /**
+   * Build the list of CompositeValuesSourceBuilder.
+   */
+  public List<CompositeValuesSourceBuilder<?>> build(
+      List<Triple<NamedExpression, SortOrder, MissingOrder>> groupList) {
+    ImmutableList.Builder<CompositeValuesSourceBuilder<?>> resultBuilder =
+        new ImmutableList.Builder<>();
+    for (Triple<NamedExpression, SortOrder, MissingOrder> groupPair : groupList) {
+      resultBuilder.add(
+          buildCompositeValuesSourceBuilder(groupPair.getLeft(),
+              groupPair.getMiddle(), groupPair.getRight()));
+    }
+    return resultBuilder.build();
+  }
+
+  // todo, Expression should implement buildCompositeValuesSourceBuilder() interface.
+  private CompositeValuesSourceBuilder<?> buildCompositeValuesSourceBuilder(
+      NamedExpression expr, SortOrder sortOrder, MissingOrder missingOrder) {
+    if (expr.getDelegated() instanceof SpanExpression) {
+      SpanExpression spanExpr = (SpanExpression) expr.getDelegated();
+      return buildHistogram(
+          expr.getNameOrAlias(),
+          spanExpr.getField().toString(),
+          spanExpr.getValue().valueOf(null).doubleValue(),
+          spanExpr.getUnit(),
+          missingOrder);
+    } else {
+      CompositeValuesSourceBuilder<?> sourceBuilder =
+          new TermsValuesSourceBuilder(expr.getNameOrAlias())
+              .missingBucket(true)
+              //.missingOrder(missingOrder)
+              .order(sortOrder);
+      return helper.build(expr.getDelegated(), sourceBuilder::field, sourceBuilder::script);
+    }
+  }
+
+  private CompositeValuesSourceBuilder<?> buildHistogram(
+      String name, String field, Double value, SpanUnit unit, MissingOrder missingOrder) {
+    switch (unit) {
+      case NONE:
+        return new HistogramValuesSourceBuilder(name)
+            .field(field)
+            .interval(value)
+            .missingBucket(true);
+            //.missingOrder(missingOrder);
+      case UNKNOWN:
+        throw new IllegalStateException("Invalid span unit");
+      default:
+        return buildDateHistogram(name, field, value.intValue(), unit, missingOrder);
+    }
+  }
+
+  private CompositeValuesSourceBuilder<?> buildDateHistogram(
+      String name, String field, Integer value, SpanUnit unit, MissingOrder missingOrder) {
+    String spanValue = value + unit.getName();
+    switch (unit) {
+      case MILLISECOND:
+      case MS:
+      case SECOND:
+      case S:
+      case MINUTE:
+      case m:
+      case HOUR:
+      case H:
+      case DAY:
+      case D:
+        return new DateHistogramValuesSourceBuilder(name)
+            .field(field)
+            .missingBucket(true)
+            //.missingOrder(missingOrder)
+            .fixedInterval(new DateHistogramInterval(spanValue));
+      default:
+        return new DateHistogramValuesSourceBuilder(name)
+            .field(field)
+            .missingBucket(true)
+            //.missingOrder(missingOrder)
+            .calendarInterval(new DateHistogramInterval(spanValue));
+    }
+  }
+}

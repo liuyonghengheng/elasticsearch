@@ -1,0 +1,70 @@
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+package org.elasticsearch.commons.notifications.action
+
+import org.elasticsearch.common.io.stream.StreamInput
+import org.elasticsearch.common.io.stream.StreamOutput
+import org.elasticsearch.common.io.stream.Writeable
+import org.elasticsearch.common.xcontent.ToXContent
+import org.elasticsearch.common.xcontent.XContentBuilder
+import org.elasticsearch.common.xcontent.XContentParser
+import org.elasticsearch.commons.notifications.model.ChannelList
+import java.io.IOException
+
+/**
+ * Action Response for creating new configuration.
+ */
+class GetChannelListResponse : BaseResponse {
+    val searchResult: ChannelList
+
+    companion object {
+
+        /**
+         * reader to create instance of class from writable.
+         */
+        val reader = Writeable.Reader { GetChannelListResponse(it) }
+
+        /**
+         * Creator used in REST communication.
+         * @param parser XContentParser to deserialize data from.
+         */
+        @JvmStatic
+        @Throws(IOException::class)
+        fun parse(parser: XContentParser): GetChannelListResponse {
+            return GetChannelListResponse(ChannelList(parser))
+        }
+    }
+
+    /**
+     * constructor for creating the class
+     * @param searchResult the notification configuration list
+     */
+    constructor(searchResult: ChannelList) {
+        this.searchResult = searchResult
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Throws(IOException::class)
+    constructor(input: StreamInput) : super(input) {
+        searchResult = ChannelList(input)
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Throws(IOException::class)
+    override fun writeTo(output: StreamOutput) {
+        searchResult.writeTo(output)
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    override fun toXContent(builder: XContentBuilder?, params: ToXContent.Params?): XContentBuilder {
+        return searchResult.toXContent(builder, params)
+    }
+}

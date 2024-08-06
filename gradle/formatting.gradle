@@ -89,6 +89,8 @@ def projectPathsToExclude = [
   ':modules:systemd',
   ':modules:tasks',
   ':modules:transport-netty4',
+  ':modules:security',
+  ':modules:job-scheduler',
   ':plugins:analysis-icu',
   ':plugins:analysis-kuromoji',
   ':plugins:analysis-nori',

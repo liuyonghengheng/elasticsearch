@@ -1,0 +1,50 @@
+
+
+package org.elasticsearch.sql.planner.optimizer.rule;
+
+import static com.facebook.presto.matching.Pattern.typeOf;
+import static org.elasticsearch.sql.planner.optimizer.pattern.Patterns.source;
+
+import com.facebook.presto.matching.Capture;
+import com.facebook.presto.matching.Captures;
+import com.facebook.presto.matching.Pattern;
+import lombok.Getter;
+import lombok.experimental.Accessors;
+import org.elasticsearch.sql.expression.DSL;
+import org.elasticsearch.sql.planner.logical.LogicalFilter;
+import org.elasticsearch.sql.planner.logical.LogicalPlan;
+import org.elasticsearch.sql.planner.optimizer.Rule;
+
+/**
+ * Merge Filter --> Filter to the single Filter condition.
+ */
+public class MergeFilterAndFilter implements Rule<LogicalFilter> {
+
+  private final Capture<LogicalFilter> capture;
+
+  private final DSL dsl;
+
+  @Accessors(fluent = true)
+  @Getter
+  private final Pattern<LogicalFilter> pattern;
+
+  /**
+   * Constructor of MergeFilterAndFilter.
+   */
+  public MergeFilterAndFilter(DSL dsl) {
+    this.dsl = dsl;
+    this.capture = Capture.newCapture();
+    this.pattern = typeOf(LogicalFilter.class)
+        .with(source().matching(typeOf(LogicalFilter.class).capturedAs(capture)));
+  }
+
+  @Override
+  public LogicalPlan apply(LogicalFilter filter,
+                           Captures captures) {
+    LogicalFilter childFilter = captures.get(capture);
+    return new LogicalFilter(
+        childFilter.getChild().get(0),
+        dsl.and(filter.getCondition(), childFilter.getCondition())
+    );
+  }
+}

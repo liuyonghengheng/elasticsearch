@@ -1,0 +1,24 @@
+/* Copyright © INFINI Ltd. All rights reserved.
+ * Web: https://infinilabs.com
+ * Email: hello#infini.ltd */
+
+esplugin {
+  description 'This Pinyin Analysis plugin is used to do conversion between Chinese characters and Pinyin, integrates NLP tools (https://github.com/NLPchina/nlp-lang).'
+  classname 'org.elasticsearch.plugin.analysis.pinyin.AnalysisPinyinPlugin'
+}
+
+tasks.named("dependencyLicenses").configure { enabled = false }
+tasks.named("dependenciesInfo").configure {enabled = false }
+//tasks.named("dependenciesGraph").configure {enabled = false }
+tasks.named("forbiddenApisMain").configure {enabled = false }
+tasks.named("forbiddenPatterns").configure {enabled = false }
+tasks.named("forbiddenApisTest").configure {enabled = false }
+tasks.named("javadoc").configure {enabled = false }
+//tasks.named("jarHell").configure {enabled = false}
+
+dependencies {
+  api "junit:junit:4.9"
+}
+
+// no unit tests
+test.enabled = false

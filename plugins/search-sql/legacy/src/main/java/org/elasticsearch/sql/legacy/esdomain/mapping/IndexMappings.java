@@ -1,0 +1,80 @@
+
+
+
+package org.elasticsearch.sql.legacy.esdomain.mapping;
+
+import static java.util.Collections.emptyMap;
+
+import java.util.Map;
+import java.util.Objects;
+import org.elasticsearch.cluster.metadata.MappingMetadata;
+import org.elasticsearch.cluster.metadata.Metadata;
+import org.elasticsearch.common.collect.ImmutableOpenMap;
+
+/**
+ * Index mappings in the cluster.
+ * <p>
+ * Sample:
+ * indexMappings: {
+ * 'accounts': typeMappings1,
+ * 'logs':     typeMappings2
+ * }
+ * <p>
+ * Difference between response of getMapping/clusterState and getFieldMapping:
+ * <p>
+ * 1) MappingMetadata:
+ * ((Map) ((Map) (mapping.get("bank").get("account").sourceAsMap().get("properties"))).get("balance")).get("type")
+ * <p>
+ * 2) FieldMetadata:
+ * ((Map) client.admin().indices().getFieldMappings(request).actionGet().mappings().get("bank")
+ * .get("account").get("balance").sourceAsMap().get("balance")).get("type")
+ */
+public class IndexMappings implements Mappings<TypeMappings> {
+
+    public static final IndexMappings EMPTY = new IndexMappings();
+
+    /**
+     * Mapping from Index name to mappings of all Types in it
+     */
+    private final Map<String, TypeMappings> indexMappings;
+
+    public IndexMappings() {
+        this.indexMappings = emptyMap();
+    }
+
+    public IndexMappings(Metadata metaData) {
+        this.indexMappings = buildMappings(metaData.indices(),
+                indexMetaData -> new TypeMappings(indexMetaData.getMappings()));
+    }
+
+    public IndexMappings(ImmutableOpenMap<String, ImmutableOpenMap<String, MappingMetadata>> mappings) {
+        this.indexMappings = buildMappings(mappings, TypeMappings::new);
+    }
+
+    @Override
+    public Map<String, TypeMappings> data() {
+        return indexMappings;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        IndexMappings that = (IndexMappings) o;
+        return Objects.equals(indexMappings, that.indexMappings);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(indexMappings);
+    }
+
+    @Override
+    public String toString() {
+        return "IndexMappings{" + indexMappings + '}';
+    }
+}

@@ -1,0 +1,30 @@
+/* Copyright © INFINI Ltd. All rights reserved.
+ * Web: https://infinilabs.com
+ * Email: hello#infini.ltd */
+
+esplugin {
+  description 'The FastTerms plugin allows to perform search on large terms over number field efficiently.'
+  classname 'com.infinilabs.index.mapper.xxhash.MapperXXHashPlugin'
+}
+
+
+tasks.named("dependencyLicenses").configure { enabled = false }
+tasks.named("dependenciesInfo").configure {enabled = false }
+//tasks.named("dependenciesGraph").configure {enabled = false }
+tasks.named("forbiddenApisMain").configure {enabled = false }
+tasks.named("forbiddenPatterns").configure {enabled = false }
+tasks.named("forbiddenApisTest").configure {enabled = false }
+tasks.named("javadoc").configure {enabled = false }
+//tasks.named("jarHell").configure {enabled = false}
+
+
+dependencies {
+  api "org.roaringbitmap:RoaringBitmap:0.9.10"
+  api "net.openhft:zero-allocation-hashing:0.16"
+  api "org.lz4:lz4-pure-java:1.8.0"
+  api "org.lz4:lz4-java:1.8.0"
+  api "net.jodah:expiringmap:0.5.10"
+}
+
+// no unit tests
+test.enabled = false

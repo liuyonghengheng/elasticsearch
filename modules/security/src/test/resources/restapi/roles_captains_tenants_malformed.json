@@ -1,0 +1,17 @@
+{
+  "cluster" : [ "cluster:monitor*" ],
+  "indices" : [ {
+    "names" : [ "sf" ],
+    "privileges" : [ "SECURITY_CRUD" ]
+  }, {
+    "names" : [ "pub" ],
+    "privileges" : [ "SECURITY_CRUD" ]
+  } ],
+  "tenantz_permissions" : [ {
+    "tenant_patterns" : [ "tenant2", "tenant4" ],
+    "privileges" : [ "kibana_all_write" ]
+  }, {
+    "tenant_patterns" : [ "tenant1", "tenant3" ],
+    "privileges" : [ "kibana_all_read" ]
+  } ]
+}

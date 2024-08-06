@@ -1,0 +1,1104 @@
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+/*
+ * Copyright 2015-2018 _floragunn_ GmbH
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/*
+ * Portions Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
+
+package com.infinilabs.security;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.security.AccessController;
+import java.security.MessageDigest;
+import java.security.PrivilegedAction;
+import java.security.Security;
+import java.util.*;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import com.infinilabs.security.auditlog.NullAuditLog;
+import com.infinilabs.security.configuration.*;
+import com.infinilabs.security.configuration.SecurityFlsDlsIndexSearcherWrapper;
+import com.infinilabs.security.http.SecurityHttpServerTransport;
+import com.infinilabs.security.ssl.SecuritySSLPlugin;
+import com.infinilabs.security.ssl.rest.SecuritySSLReloadCertsAction;
+import com.infinilabs.security.ssl.rest.SecuritySSLCertsInfoAction;
+
+import com.infinilabs.security.action.configupdate.ConfigUpdateAction;
+import com.infinilabs.security.action.configupdate.TransportConfigUpdateAction;
+import com.infinilabs.security.auditlog.AuditLog;
+import com.infinilabs.security.auditlog.AuditLogSslExceptionHandler;
+import com.infinilabs.security.auth.BackendRegistry;
+import com.infinilabs.security.compliance.ComplianceIndexingOperationListener;
+import com.infinilabs.security.filter.SecurityFilter;
+import com.infinilabs.security.filter.SecurityRestFilter;
+import com.infinilabs.security.http.SecurityNonSslHttpServerTransport;
+import com.infinilabs.security.http.XFFResolver;
+import com.infinilabs.security.privileges.PrivilegesEvaluator;
+import com.infinilabs.security.privileges.PrivilegesInterceptor;
+import com.infinilabs.security.resolver.IndexResolverReplacer;
+import com.infinilabs.security.rest.SecurityInfoAction;
+import com.infinilabs.security.securityconf.DynamicConfigFactory;
+import com.infinilabs.security.ssl.http.netty.ValidatingDispatcher;
+import com.infinilabs.security.ssl.transport.DefaultPrincipalExtractor;
+import com.infinilabs.security.ssl.transport.SecuritySSLNettyTransport;
+import com.infinilabs.security.ssl.util.SSLConfigConstants;
+import com.infinilabs.security.transport.DefaultInterClusterRequestEvaluator;
+import com.infinilabs.security.transport.InterClusterRequestEvaluator;
+import com.infinilabs.security.transport.SecurityInterceptor;
+import com.infinilabs.security.user.User;
+import com.infinilabs.security.util.Hex;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.lucene.search.QueryCachingPolicy;
+import org.apache.lucene.search.Weight;
+import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.ElasticsearchSecurityException;
+import org.elasticsearch.SpecialPermission;
+import org.elasticsearch.Version;
+import org.elasticsearch.action.ActionRequest;
+import org.elasticsearch.action.ActionResponse;
+import org.elasticsearch.action.search.SearchScrollAction;
+import org.elasticsearch.action.support.ActionFilter;
+import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
+import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.component.Lifecycle.State;
+import org.elasticsearch.common.component.LifecycleComponent;
+import org.elasticsearch.common.component.LifecycleListener;
+import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
+import org.elasticsearch.common.network.NetworkModule;
+import org.elasticsearch.common.network.NetworkService;
+import org.elasticsearch.common.settings.ClusterSettings;
+import org.elasticsearch.common.settings.IndexScopedSettings;
+import org.elasticsearch.common.settings.Setting;
+import org.elasticsearch.common.settings.Setting.Property;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.settings.SettingsFilter;
+import org.elasticsearch.common.util.BigArrays;
+import org.elasticsearch.common.util.PageCacheRecycler;
+import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.common.xcontent.NamedXContentRegistry;
+import org.elasticsearch.env.Environment;
+import org.elasticsearch.env.NodeEnvironment;
+import org.elasticsearch.http.HttpServerTransport;
+import org.elasticsearch.http.HttpServerTransport.Dispatcher;
+import org.elasticsearch.index.Index;
+import org.elasticsearch.index.IndexModule;
+import org.elasticsearch.index.cache.query.QueryCache;
+import org.elasticsearch.index.shard.SearchOperationListener;
+import org.elasticsearch.indices.SystemIndexDescriptor;
+import org.elasticsearch.indices.breaker.CircuitBreakerService;
+import org.elasticsearch.plugins.ClusterPlugin;
+import org.elasticsearch.plugins.MapperPlugin;
+import org.elasticsearch.repositories.RepositoriesService;
+import org.elasticsearch.rest.RestController;
+import org.elasticsearch.rest.RestHandler;
+import org.elasticsearch.rest.RestStatus;
+import org.elasticsearch.script.ScriptService;
+import org.elasticsearch.search.internal.InternalScrollSearchRequest;
+import org.elasticsearch.search.internal.ReaderContext;
+import org.elasticsearch.search.internal.SearchContext;
+import org.elasticsearch.search.query.QuerySearchResult;
+import org.elasticsearch.tasks.Task;
+import org.elasticsearch.threadpool.ThreadPool;
+import org.elasticsearch.transport.RemoteClusterService;
+import org.elasticsearch.transport.Transport;
+import org.elasticsearch.transport.Transport.Connection;
+import org.elasticsearch.transport.TransportChannel;
+import org.elasticsearch.transport.TransportInterceptor;
+import org.elasticsearch.transport.TransportRequest;
+import org.elasticsearch.transport.TransportRequestHandler;
+import org.elasticsearch.transport.TransportRequestOptions;
+import org.elasticsearch.transport.TransportResponse;
+import org.elasticsearch.transport.TransportResponseHandler;
+import org.elasticsearch.transport.TransportService;
+import org.elasticsearch.watcher.ResourceWatcherService;
+
+import com.infinilabs.security.action.whoami.TransportWhoAmIAction;
+import com.infinilabs.security.action.whoami.WhoAmIAction;
+import com.infinilabs.security.ssl.SslExceptionHandler;
+import com.infinilabs.security.support.ConfigConstants;
+import com.infinilabs.security.support.HeaderHelper;
+import com.infinilabs.security.support.ModuleInfo;
+import com.infinilabs.security.support.SecurityUtils;
+import com.infinilabs.security.support.ReflectionHelper;
+import com.infinilabs.security.support.WildcardMatcher;
+import com.google.common.collect.Lists;
+
+public final class SecurityPlugin extends SecuritySSLPlugin implements ClusterPlugin, MapperPlugin {
+
+    private static final String KEYWORD = ".keyword";
+    private static final Logger actionTrace = LogManager.getLogger("security_action_trace");
+
+    private final boolean dlsFlsAvailable;
+    private boolean sslCertReloadEnabled;
+    private volatile SecurityRestFilter securityRestHandler;
+    private volatile SecurityInterceptor odsi;
+    private volatile PrivilegesEvaluator evaluator;
+    private volatile ThreadPool threadPool;
+    private volatile ConfigurationRepository cr;
+    private volatile AdminDNs adminDns;
+    private volatile ClusterService cs;
+    private volatile AuditLog auditLog;
+    private volatile BackendRegistry backendRegistry;
+    private volatile SslExceptionHandler sslExceptionHandler;
+    private volatile Client localClient;
+    private final boolean disabled;
+    private final boolean advancedModulesEnabled;
+    private volatile SecurityFilter odsf;
+    private volatile IndexResolverReplacer irr;
+    private volatile NamedXContentRegistry namedXContentRegistry = null;
+    private volatile DlsFlsRequestValve dlsFlsValve = null;
+    private volatile Salt salt;
+
+    public static boolean isActionTraceEnabled() {
+        return actionTrace.isTraceEnabled();
+    }
+
+    public static void traceAction(String message) {
+        actionTrace.trace(message);
+    }
+
+    public static void traceAction(String message, Object p0) {
+        actionTrace.trace(message, p0);
+    }
+
+    @Override
+    public void close() throws IOException {
+        super.close();
+        if (auditLog != null) {
+            auditLog.close();
+        }
+    }
+
+    private final SslExceptionHandler evaluateSslExceptionHandler() {
+        if (client || disabled || SSLConfig.isSslOnlyMode()) {
+            return new SslExceptionHandler(){};
+        }
+
+        return Objects.requireNonNull(sslExceptionHandler);
+    }
+
+    private static boolean isDisabled(final Settings settings) {
+        return !settings.getAsBoolean(ConfigConstants.SECURITY_ENABLED, true);
+    }
+
+    /**
+     * SSL Cert Reload will be enabled only if security is not disabled and not in we are not using sslOnly mode.
+     * @param settings Elastic configuration settings
+     * @return true if ssl cert reload is enabled else false
+     */
+    private static boolean isSslCertReloadEnabled(final Settings settings) {
+        return settings.getAsBoolean(ConfigConstants.SECURITY_SSL_CERT_RELOAD_ENABLED, false);
+    }
+
+    public SecurityPlugin(final Settings settings, final Path configPath) {
+        super(settings, configPath, isDisabled(settings));
+
+        disabled = isDisabled(settings);
+        sslCertReloadEnabled = isSslCertReloadEnabled(settings);
+
+        if (disabled) {
+            this.dlsFlsAvailable = false;
+            this.advancedModulesEnabled = false;
+            this.sslCertReloadEnabled = false;
+            log.warn("Security disabled. This can expose your configuration (including passwords) to the public.");
+            return;
+        }
+
+        if (SSLConfig.isSslOnlyMode()) {
+            this.dlsFlsAvailable = false;
+            this.advancedModulesEnabled = false;
+            this.sslCertReloadEnabled = false;
+            log.warn("INFINI Elasticsearch Security plugin run in ssl only mode. No authentication or authorization is performed");
+            return;
+        }
+
+        final SecurityManager sm = System.getSecurityManager();
+
+        if (sm != null) {
+            sm.checkPermission(new SpecialPermission());
+        }
+
+        AccessController.doPrivileged(new PrivilegedAction<Object>() {
+            @Override
+            public Object run() {
+                if(Security.getProvider("BC") == null) {
+//                    Security.addProvider(new BouncyCastleProvider());
+                }
+                return null;
+            }
+        });
+
+        advancedModulesEnabled = settings.getAsBoolean(ConfigConstants.SECURITY_ADVANCED_MODULES_ENABLED, true);
+        ReflectionHelper.init(advancedModulesEnabled);
+
+        ReflectionHelper.registerMngtRestApiHandler(settings);
+
+        log.info("Clustername: {}", settings.get("cluster.name","elasticsearch"));
+
+        if (!transportSSLEnabled && !SSLConfig.isSslOnlyMode()) {
+            throw new IllegalStateException(SSLConfigConstants.SECURITY_SSL_TRANSPORT_ENABLED+" must be set to 'true'");
+        }
+
+        dlsFlsAvailable = !client && advancedModulesEnabled;
+
+        if(!client) {
+            final List<Path> filesWithWrongPermissions = AccessController.doPrivileged(new PrivilegedAction<List<Path>>() {
+                @Override
+                public List<Path> run() {
+                  final Path confPath = new Environment(settings, configPath).configFile().toAbsolutePath();
+                    if(Files.isDirectory(confPath, LinkOption.NOFOLLOW_LINKS)) {
+                        try (Stream<Path> s = Files.walk(confPath)) {
+                            return s.distinct().filter(p -> checkFilePermissions(p)).collect(Collectors.toList());
+                        } catch (Exception e) {
+                            log.error(e);
+                            return null;
+                        }
+                    }
+
+                    return Collections.emptyList();
+                }
+            });
+
+            if(filesWithWrongPermissions != null && filesWithWrongPermissions.size() > 0) {
+                for(final Path p: filesWithWrongPermissions) {
+                    if(Files.isDirectory(p, LinkOption.NOFOLLOW_LINKS)) {
+                        log.warn("Directory "+p+" has insecure file permissions (should be 0700)");
+                    } else {
+                        log.warn("File "+p+" has insecure file permissions (should be 0600)");
+                    }
+                }
+            }
+        }
+
+    }
+
+    private String sha256(Path p) {
+
+        if(!Files.isRegularFile(p, LinkOption.NOFOLLOW_LINKS)) {
+            return "";
+        }
+
+        if(!Files.isReadable(p)) {
+            log.debug("Unreadable file "+p+" found");
+            return "";
+        }
+
+        try {
+            MessageDigest digester = MessageDigest.getInstance("SHA256");
+            final String hash = Hex.toHexString(digester.digest(Files.readAllBytes(p)));
+            log.debug(hash +" :: "+p);
+            return hash;
+        } catch (Exception e) {
+            throw new ElasticsearchSecurityException("Unable to digest file "+p, e);
+        }
+    }
+
+    private boolean checkFilePermissions(final Path p) {
+
+        if (p == null) {
+            return false;
+        }
+
+
+        Set<PosixFilePermission> perms;
+
+        try {
+            perms = Files.getPosixFilePermissions(p, LinkOption.NOFOLLOW_LINKS);
+        } catch (Exception e) {
+            if(log.isDebugEnabled()) {
+                log.debug("Cannot determine posix file permissions for {} due to {}", p, e);
+            }
+            //ignore, can happen on windows
+            return false;
+        }
+
+        if(Files.isDirectory(p, LinkOption.NOFOLLOW_LINKS)) {
+            if (perms.contains(PosixFilePermission.OTHERS_EXECUTE)) {
+                // no x for others must be set
+                return true;
+            }
+        } else {
+            if (perms.contains(PosixFilePermission.OWNER_EXECUTE) || perms.contains(PosixFilePermission.GROUP_EXECUTE)
+                    || perms.contains(PosixFilePermission.OTHERS_EXECUTE)) {
+                // no x must be set
+                return true;
+            }
+        }
+
+
+        if (perms.contains(PosixFilePermission.OTHERS_READ) || perms.contains(PosixFilePermission.OTHERS_WRITE)) {
+            // no permissions for "others" allowed
+            return true;
+        }
+
+        //if (perms.contains(PosixFilePermission.GROUP_READ) || perms.contains(PosixFilePermission.GROUP_WRITE)) {
+        //    // no permissions for "group" allowed
+        //    return true;
+        //}
+
+        return false;
+    }
+
+
+    @Override
+    public List<RestHandler> getRestHandlers(Settings settings, RestController restController, ClusterSettings clusterSettings,
+            IndexScopedSettings indexScopedSettings, SettingsFilter settingsFilter,
+            IndexNameExpressionResolver indexNameExpressionResolver, Supplier<DiscoveryNodes> nodesInCluster) {
+
+        final List<RestHandler> handlers = new ArrayList<RestHandler>(1);
+
+        if (!client && !disabled) {
+
+            handlers.addAll(super.getRestHandlers(settings, restController, clusterSettings, indexScopedSettings, settingsFilter, indexNameExpressionResolver, nodesInCluster));
+
+            if(!SSLConfig.isSslOnlyMode()) {
+                handlers.add(new SecurityInfoAction(settings, restController, Objects.requireNonNull(evaluator), Objects.requireNonNull(threadPool)));
+                handlers.add(new SecuritySSLCertsInfoAction(settings, restController, odsks, Objects.requireNonNull(threadPool), Objects.requireNonNull(adminDns)));
+
+                if (sslCertReloadEnabled) {
+                    handlers.add(new SecuritySSLReloadCertsAction(settings, restController, odsks, Objects.requireNonNull(threadPool), Objects.requireNonNull(adminDns)));
+                }
+                Collection<RestHandler> apiHandler = ReflectionHelper
+                        .instantiateMngtRestApiHandler(settings, configPath, restController, localClient, adminDns, cr, cs, Objects.requireNonNull(principalExtractor),  evaluator, threadPool, Objects.requireNonNull(auditLog));
+                handlers.addAll(apiHandler);
+                log.debug("Added {} management rest handler(s)", apiHandler.size());
+            }
+        }
+
+        return handlers;
+    }
+
+    @Override
+    public UnaryOperator<RestHandler> getRestHandlerWrapper(final ThreadContext threadContext) {
+
+        if(client || disabled || SSLConfig.isSslOnlyMode()) {
+            return (rh) -> rh;
+        }
+
+        return (rh) -> securityRestHandler.wrap(rh, adminDns);
+    }
+
+    @Override
+    public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
+        List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> actions = new ArrayList<>(1);
+        if(!disabled && !SSLConfig.isSslOnlyMode()) {
+            actions.add(new ActionHandler<>(ConfigUpdateAction.INSTANCE, TransportConfigUpdateAction.class));
+            actions.add(new ActionHandler<>(WhoAmIAction.INSTANCE, TransportWhoAmIAction.class));
+        }
+        return actions;
+    }
+
+    @Override
+    public void onIndexModule(IndexModule indexModule) {
+        //called for every index!
+
+        if (!disabled && !client && !SSLConfig.isSslOnlyMode()) {
+            log.debug("Handle dlsFlsAvailable: "+dlsFlsAvailable+"/auditLog="+auditLog.getClass()+" for onIndexModule() of index "+indexModule.getIndex().getName());
+            if (dlsFlsAvailable) {
+
+                final ComplianceIndexingOperationListener ciol = ReflectionHelper.instantiateComplianceListener(Objects.requireNonNull(auditLog));
+                indexModule.addIndexOperationListener(ciol);
+
+                indexModule.setReaderWrapper(indexService -> new SecurityFlsDlsIndexSearcherWrapper(indexService, settings, adminDns, cs, auditLog, ciol, evaluator, salt));
+                indexModule.forceQueryCacheProvider((indexSettings,nodeCache)->new QueryCache() {
+
+                    @Override
+                    public Index index() {
+                        return indexSettings.getIndex();
+                    }
+
+                    @Override
+                    public void close() throws ElasticsearchException {
+                        clear("close");
+                    }
+
+                    @Override
+                    public void clear(String reason) {
+                        nodeCache.clearIndex(index().getName());
+                    }
+
+                    @Override
+                    public Weight doCache(Weight weight, QueryCachingPolicy policy) {
+                        final Map<String, Set<String>> allowedFlsFields = (Map<String, Set<String>>) HeaderHelper.deserializeSafeFromHeader(threadPool.getThreadContext(),
+                                ConfigConstants.SECURITY_FLS_FIELDS_HEADER);
+
+                        if(SecurityUtils.evalMap(allowedFlsFields, index().getName()) != null) {
+                            return weight;
+                        } else {
+
+                            final Map<String, Set<String>> maskedFieldsMap = (Map<String, Set<String>>) HeaderHelper.deserializeSafeFromHeader(threadPool.getThreadContext(),
+                                    ConfigConstants.SECURITY_MASKED_FIELD_HEADER);
+
+                            if(SecurityUtils.evalMap(maskedFieldsMap, index().getName()) != null) {
+                                return weight;
+                            } else {
+                                return nodeCache.doCache(weight, policy);
+                            }
+                        }
+
+                    }
+                });
+            } else {
+                indexModule.setReaderWrapper(
+                        indexService -> new SecurityIndexSearcherWrapper(indexService, settings, Objects.requireNonNull(adminDns), Objects.requireNonNull(evaluator)));
+            }
+
+            indexModule.addSearchOperationListener(new SearchOperationListener() {
+
+                @Override
+                public void onPreQueryPhase(SearchContext context) {
+                    if(advancedModulesEnabled) {
+                        dlsFlsValve.handleSearchContext(context, threadPool, namedXContentRegistry);
+                    }
+                }
+
+                @Override
+                public void onNewReaderContext(ReaderContext readerContext) {
+                    final boolean interClusterRequest = HeaderHelper.isInterClusterRequest(threadPool.getThreadContext());
+                    if (AuditLog.Origin.LOCAL.toString().equals(threadPool.getThreadContext().getTransient(ConfigConstants.SECURITY_ORIGIN))
+                            && (interClusterRequest || HeaderHelper.isDirectRequest(threadPool.getThreadContext()))
+
+                    ) {
+                        readerContext.putInContext("_security_scroll_auth_local", Boolean.TRUE);
+                    } else {
+                        readerContext.putInContext("_security_scroll_auth", threadPool.getThreadContext()
+                                .getTransient(ConfigConstants.SECURITY_USER));
+                    }
+                }
+
+                @Override
+                public void onNewScrollContext(ReaderContext readerContext) {
+                    final boolean interClusterRequest = HeaderHelper.isInterClusterRequest(threadPool.getThreadContext());
+                    if (AuditLog.Origin.LOCAL.toString().equals(threadPool.getThreadContext().getTransient(ConfigConstants.SECURITY_ORIGIN))
+                            && (interClusterRequest || HeaderHelper.isDirectRequest(threadPool.getThreadContext()))
+
+                    ) {
+                        readerContext.putInContext("_security_scroll_auth_local", Boolean.TRUE);
+                    } else {
+                        readerContext.putInContext("_security_scroll_auth", threadPool.getThreadContext()
+                                .getTransient(ConfigConstants.SECURITY_USER));
+                    }
+                }
+
+                @Override
+                public void validateReaderContext(ReaderContext readerContext, TransportRequest transportRequest) {
+                    if (transportRequest instanceof InternalScrollSearchRequest) {
+                        final Object _isLocal = readerContext.getFromContext("_security_scroll_auth_local");
+                        final Object _user = readerContext.getFromContext("_security_scroll_auth");
+                        if (_user != null && (_user instanceof User)) {
+                            final User scrollUser = (User) _user;
+                            final User currentUser = threadPool.getThreadContext()
+                                    .getTransient(ConfigConstants.SECURITY_USER);
+                            if (!scrollUser.equals(currentUser)) {
+                                auditLog.logMissingPrivileges(SearchScrollAction.NAME, transportRequest, null);
+                                log.error("Wrong user {} in reader context, expected {}", scrollUser, currentUser);
+                                throw new ElasticsearchSecurityException("Wrong user in reader context", RestStatus.FORBIDDEN);
+                            }
+                        } else if (_isLocal != Boolean.TRUE) {
+                            auditLog.logMissingPrivileges(SearchScrollAction.NAME, transportRequest, null);
+                            throw new ElasticsearchSecurityException("No user in reader context", RestStatus.FORBIDDEN);
+                        }
+                    }
+                }
+
+                @Override
+                public void onQueryPhase(SearchContext searchContext, long tookInNanos) {
+                    QuerySearchResult queryResult = searchContext.queryResult();
+                    assert queryResult != null;
+                    if (!queryResult.hasAggs()) {
+                        return;
+                    }
+
+                    final Map<String, Set<String>> maskedFieldsMap = (Map<String, Set<String>>) HeaderHelper.deserializeSafeFromHeader(threadPool.getThreadContext(),
+                            ConfigConstants.SECURITY_MASKED_FIELD_HEADER);
+                    final String maskedEval = SecurityUtils.evalMap(maskedFieldsMap, indexModule.getIndex().getName());
+                    if (maskedEval != null) {
+                        final Set<String> mf = maskedFieldsMap.get(maskedEval);
+                        if (mf != null && !mf.isEmpty()) {
+                            dlsFlsValve.onQueryPhase(queryResult);
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    @Override
+    public List<ActionFilter> getActionFilters() {
+        List<ActionFilter> filters = new ArrayList<>(1);
+        if (!client && !disabled && !SSLConfig.isSslOnlyMode()) {
+            filters.add(Objects.requireNonNull(odsf));
+        }
+        return filters;
+    }
+
+    @Override
+    public List<TransportInterceptor> getTransportInterceptors(NamedWriteableRegistry namedWriteableRegistry, ThreadContext threadContext) {
+        List<TransportInterceptor> interceptors = new ArrayList<TransportInterceptor>(1);
+
+        if (!client && !disabled && !SSLConfig.isSslOnlyMode()) {
+            interceptors.add(new TransportInterceptor() {
+
+                @Override
+                public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(String action, String executor,
+                        boolean forceExecution, TransportRequestHandler<T> actualHandler) {
+
+                    return new TransportRequestHandler<T>() {
+
+                        @Override
+                        public void messageReceived(T request, TransportChannel channel, Task task) throws Exception {
+                            odsi.getHandler(action, actualHandler).messageReceived(request, channel, task);
+                        }
+                    };
+
+                }
+
+                @Override
+                public AsyncSender interceptSender(AsyncSender sender) {
+
+                    return new AsyncSender() {
+
+                        @Override
+                        public <T extends TransportResponse> void sendRequest(Connection connection, String action,
+                                TransportRequest request, TransportRequestOptions options, TransportResponseHandler<T> handler) {
+                            odsi.sendRequestDecorate(sender, connection, action, request, options, handler);
+                        }
+                    };
+                }
+            });
+        }
+
+        return interceptors;
+    }
+
+    @Override
+    public Map<String, Supplier<Transport>> getTransports(Settings settings, ThreadPool threadPool, PageCacheRecycler pageCacheRecycler,
+            CircuitBreakerService circuitBreakerService, NamedWriteableRegistry namedWriteableRegistry, NetworkService networkService) {
+        Map<String, Supplier<Transport>> transports = new HashMap<String, Supplier<Transport>>();
+
+        if(SSLConfig.isSslOnlyMode()) {
+            return super.getTransports(settings, threadPool, pageCacheRecycler, circuitBreakerService, namedWriteableRegistry, networkService);
+        }
+
+        if (transportSSLEnabled) {
+            transports.put("com.infinilabs.security.ssl.http.netty.SecuritySSLNettyTransport",
+                    () -> new SecuritySSLNettyTransport(settings, Version.CURRENT, threadPool, networkService, pageCacheRecycler,
+                            namedWriteableRegistry, circuitBreakerService, odsks, evaluateSslExceptionHandler(), sharedGroupFactory, SSLConfig));
+        }
+        return transports;
+    }
+
+    @Override
+    public Map<String, Supplier<HttpServerTransport>> getHttpTransports(Settings settings, ThreadPool threadPool, BigArrays bigArrays,
+            PageCacheRecycler pageCacheRecycler, CircuitBreakerService circuitBreakerService, NamedXContentRegistry xContentRegistry,
+            NetworkService networkService, Dispatcher dispatcher, ClusterSettings clusterSettings) {
+
+        if(SSLConfig.isSslOnlyMode()) {
+            return super.getHttpTransports(settings, threadPool, bigArrays, pageCacheRecycler, circuitBreakerService, xContentRegistry,
+             networkService, dispatcher, clusterSettings);
+        }
+
+        if(!disabled) {
+            if (!client && httpSSLEnabled) {
+
+                final ValidatingDispatcher validatingDispatcher = new ValidatingDispatcher(threadPool.getThreadContext(), dispatcher,
+                        settings, configPath, evaluateSslExceptionHandler());
+                //TODO close odshst
+                final SecurityHttpServerTransport odshst = new SecurityHttpServerTransport(settings, networkService, bigArrays,
+                        threadPool, odsks, evaluateSslExceptionHandler(), xContentRegistry, validatingDispatcher, clusterSettings, sharedGroupFactory);
+
+                return Collections.singletonMap("com.infinilabs.security.http.SecurityHttpServerTransport",
+                        () -> odshst);
+            } else if (!client) {
+                return Collections.singletonMap("com.infinilabs.security.http.SecurityHttpServerTransport",
+                        () -> new SecurityNonSslHttpServerTransport(settings, networkService, bigArrays, threadPool, xContentRegistry, dispatcher, clusterSettings, sharedGroupFactory));
+            }
+        }
+        return Collections.emptyMap();
+    }
+
+
+
+    @Override
+    public Collection<Object> createComponents(Client localClient, ClusterService clusterService, ThreadPool threadPool,
+            ResourceWatcherService resourceWatcherService, ScriptService scriptService, NamedXContentRegistry xContentRegistry,
+            Environment environment, NodeEnvironment nodeEnvironment, NamedWriteableRegistry namedWriteableRegistry,
+            IndexNameExpressionResolver indexNameExpressionResolver, Supplier<RepositoriesService> repositoriesServiceSupplier) {
+
+        SSLConfig.registerClusterSettingsChangeListener(clusterService.getClusterSettings());
+        if(SSLConfig.isSslOnlyMode()) {
+            return super.createComponents(
+                    localClient,
+                    clusterService,
+                    threadPool,
+                    resourceWatcherService,
+                    scriptService,
+                    xContentRegistry,
+                    environment,
+                    nodeEnvironment,
+                    namedWriteableRegistry,
+                    indexNameExpressionResolver,
+                    repositoriesServiceSupplier
+            );
+        }
+
+        this.threadPool = threadPool;
+        this.cs = clusterService;
+        this.localClient = localClient;
+
+        final List<Object> components = new ArrayList<Object>();
+
+        if (client || disabled) {
+            return components;
+        }
+        final ClusterInfoHolder cih = new ClusterInfoHolder();
+        this.cs.addListener(cih);
+        this.salt = Salt.from(settings);
+        dlsFlsValve = ReflectionHelper.instantiateDlsFlsValve();
+
+        final IndexNameExpressionResolver resolver = new IndexNameExpressionResolver(threadPool.getThreadContext());
+        irr = new IndexResolverReplacer(resolver, clusterService, cih);
+        auditLog = ReflectionHelper.instantiateAuditLog(settings, configPath, localClient, threadPool, resolver, clusterService, dlsFlsAvailable, environment);
+
+        sslExceptionHandler = new AuditLogSslExceptionHandler(auditLog);
+
+        final String DEFAULT_INTERCLUSTER_REQUEST_EVALUATOR_CLASS = DefaultInterClusterRequestEvaluator.class.getName();
+        InterClusterRequestEvaluator interClusterRequestEvaluator = new DefaultInterClusterRequestEvaluator(settings);
+
+
+        final String className = settings.get(ConfigConstants.SECURITY_INTERCLUSTER_REQUEST_EVALUATOR_CLASS,
+                DEFAULT_INTERCLUSTER_REQUEST_EVALUATOR_CLASS);
+        log.debug("Using {} as intercluster request evaluator class", className);
+        if (!DEFAULT_INTERCLUSTER_REQUEST_EVALUATOR_CLASS.equals(className)) {
+            interClusterRequestEvaluator = ReflectionHelper.instantiateInterClusterRequestEvaluator(className, settings);
+        }
+
+        final PrivilegesInterceptor privilegesInterceptor = ReflectionHelper.instantiatePrivilegesInterceptorImpl(resolver, clusterService, localClient, threadPool);
+
+        adminDns = new AdminDNs(settings);
+
+        cr = ConfigurationRepository.create(settings, this.configPath, threadPool, localClient, clusterService, auditLog);
+
+        final XFFResolver xffResolver = new XFFResolver(threadPool);
+        backendRegistry = new BackendRegistry(settings, adminDns, xffResolver, auditLog, threadPool);
+
+        final CompatConfig compatConfig = new CompatConfig(environment);
+
+        evaluator = new PrivilegesEvaluator(clusterService, threadPool, cr, resolver, auditLog,
+                settings, privilegesInterceptor, cih, irr, advancedModulesEnabled);
+
+        odsf = new SecurityFilter(localClient, settings, evaluator, adminDns, dlsFlsValve, auditLog, threadPool, cs, compatConfig, irr, backendRegistry);
+
+        final String principalExtractorClass = settings.get(SSLConfigConstants.SECURITY_SSL_TRANSPORT_PRINCIPAL_EXTRACTOR_CLASS, null);
+
+        if(principalExtractorClass == null) {
+            principalExtractor = new DefaultPrincipalExtractor();
+        } else {
+            principalExtractor = ReflectionHelper.instantiatePrincipalExtractor(principalExtractorClass);
+        }
+
+        securityRestHandler = new SecurityRestFilter(backendRegistry, auditLog, threadPool,
+                principalExtractor, settings, configPath, compatConfig);
+
+        final DynamicConfigFactory dcf = new DynamicConfigFactory(cr, settings, configPath, localClient, threadPool, cih);
+        dcf.registerDCFListener(backendRegistry);
+        dcf.registerDCFListener(compatConfig);
+        dcf.registerDCFListener(irr);
+        dcf.registerDCFListener(xffResolver);
+        dcf.registerDCFListener(evaluator);
+        dcf.registerDCFListener(securityRestHandler);
+        if (!(auditLog instanceof NullAuditLog)) {
+            // Don't register if advanced modules is disabled in which case auditlog is instance of NullAuditLog
+            dcf.registerDCFListener(auditLog);
+        }
+
+        cr.setDynamicConfigFactory(dcf);
+
+        odsi = new SecurityInterceptor(settings, threadPool, backendRegistry, auditLog, principalExtractor,
+                interClusterRequestEvaluator, cs, Objects.requireNonNull(sslExceptionHandler), Objects.requireNonNull(cih));
+        components.add(principalExtractor);
+
+        // NOTE: We need to create DefaultInterClusterRequestEvaluator before creating ConfigurationRepository since the latter requires security index to be accessible which means
+        // communciation with other nodes is already up. However for the communication to be up, there needs to be trusted nodes_dn. Hence the base values from elasticsearch.yml
+        // is used to first establish trust between same cluster nodes and there after dynamic config is loaded if enabled.
+        if (DEFAULT_INTERCLUSTER_REQUEST_EVALUATOR_CLASS.equals(className)) {
+            DefaultInterClusterRequestEvaluator e = (DefaultInterClusterRequestEvaluator) interClusterRequestEvaluator;
+            e.subscribeForChanges(dcf);
+        }
+
+        components.add(adminDns);
+        components.add(cr);
+        components.add(xffResolver);
+        components.add(backendRegistry);
+        components.add(evaluator);
+        components.add(odsi);
+        components.add(dcf);
+
+
+        return components;
+
+    }
+
+    @Override
+    public Settings additionalSettings() {
+
+        if(disabled) {
+            return Settings.EMPTY;
+        }
+
+        final Settings.Builder builder = Settings.builder();
+
+        builder.put(super.additionalSettings());
+
+        if(!SSLConfig.isSslOnlyMode()){
+          builder.put(NetworkModule.TRANSPORT_TYPE_KEY, "com.infinilabs.security.ssl.http.netty.SecuritySSLNettyTransport");
+          builder.put(NetworkModule.HTTP_TYPE_KEY, "com.infinilabs.security.http.SecurityHttpServerTransport");
+        }
+        return builder.build();
+    }
+    @Override
+    public List<Setting<?>> getSettings() {
+        List<Setting<?>> settings = new ArrayList<Setting<?>>();
+        settings.addAll(super.getSettings());
+
+        settings.add(Setting.boolSetting(ConfigConstants.SECURITY_SSL_ONLY, false, Property.NodeScope, Property.Filtered));
+
+        // currently dual mode is supported only when ssl_only is enabled, but this stance would change in future
+        settings.add(SSLConfig.SSL_DUAL_MODE_SETTING);
+
+        // System index settings
+        settings.add(Setting.boolSetting(ConfigConstants.SECURITY_SYSTEM_INDICES_ENABLED_KEY, ConfigConstants.SECURITY_SYSTEM_INDICES_ENABLED_DEFAULT, Property.NodeScope, Property.Filtered, Property.Final));
+        settings.add(Setting.listSetting(ConfigConstants.SECURITY_SYSTEM_INDICES_KEY, ConfigConstants.SECURITY_SYSTEM_INDICES_DEFAULT, Function.identity(), Property.NodeScope, Property.Filtered, Property.Final));
+
+        if(!SSLConfig.isSslOnlyMode()) {
+            settings.add(Setting.listSetting(ConfigConstants.SECURITY_AUTHCZ_ADMIN_DN, Collections.emptyList(), Function.identity(), Property.NodeScope)); //not filtered here
+
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_CONFIG_INDEX_NAME, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.groupSetting(ConfigConstants.SECURITY_AUTHCZ_IMPERSONATION_DN+".", Property.NodeScope)); //not filtered here
+
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_CERT_OID, Property.NodeScope, Property.Filtered));
+
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_CERT_INTERCLUSTER_REQUEST_EVALUATOR_CLASS, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.listSetting(ConfigConstants.SECURITY_NODES_DN, Collections.emptyList(), Function.identity(), Property.NodeScope));//not filtered here
+
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_NODES_DN_DYNAMIC_CONFIG_ENABLED, false, Property.NodeScope));//not filtered here
+
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_ENABLE_SNAPSHOT_RESTORE_PRIVILEGE, ConfigConstants.SECURITY_DEFAULT_ENABLE_SNAPSHOT_RESTORE_PRIVILEGE,
+                    Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_CHECK_SNAPSHOT_RESTORE_WRITE_PRIVILEGES, ConfigConstants.SECURITY_DEFAULT_CHECK_SNAPSHOT_RESTORE_WRITE_PRIVILEGES,
+                    Property.NodeScope, Property.Filtered));
+
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_ENABLED, true, Property.NodeScope, Property.Filtered));
+
+            settings.add(Setting.intSetting(ConfigConstants.SECURITY_CACHE_TTL_MINUTES, 60, 0, Property.NodeScope, Property.Filtered));
+
+            //Security
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_ADVANCED_MODULES_ENABLED, true, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_ALLOW_DEFAULT_INIT_SECURITYINDEX, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_BACKGROUND_INIT_IF_SECURITYINDEX_NOT_EXIST, true, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.groupSetting(ConfigConstants.SECURITY_AUTHCZ_REST_IMPERSONATION_USERS+".", Property.NodeScope)); //not filtered here
+
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_ROLES_MAPPING_RESOLUTION, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_DISABLE_ENVVAR_REPLACEMENT, false, Property.NodeScope, Property.Filtered));
+
+            // Security - Audit
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_TYPE_DEFAULT, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.groupSetting(ConfigConstants.SECURITY_AUDIT_CONFIG_ROUTES + ".", Property.NodeScope));
+            settings.add(Setting.groupSetting(ConfigConstants.SECURITY_AUDIT_CONFIG_ENDPOINTS + ".",  Property.NodeScope));
+            settings.add(Setting.intSetting(ConfigConstants.SECURITY_AUDIT_THREADPOOL_SIZE, 10, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.intSetting(ConfigConstants.SECURITY_AUDIT_THREADPOOL_MAX_QUEUE_LEN, 100*1000, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_AUDIT_LOG_REQUEST_BODY, true, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_AUDIT_RESOLVE_INDICES, true, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_AUDIT_ENABLE_REST, true, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_AUDIT_ENABLE_TRANSPORT, true, Property.NodeScope, Property.Filtered));
+            final List<String> disabledCategories = new ArrayList<String>(2);
+            disabledCategories.add("AUTHENTICATED");
+            disabledCategories.add("GRANTED_PRIVILEGES");
+            settings.add(Setting.listSetting(ConfigConstants.SECURITY_AUDIT_CONFIG_DISABLED_TRANSPORT_CATEGORIES, disabledCategories, Function.identity(), Property.NodeScope)); //not filtered here
+            settings.add(Setting.listSetting(ConfigConstants.SECURITY_AUDIT_CONFIG_DISABLED_REST_CATEGORIES, disabledCategories, Function.identity(), Property.NodeScope)); //not filtered here
+            final List<String> ignoredUsers = new ArrayList<String>(2);
+            ignoredUsers.add("kibanaserver");
+            settings.add(Setting.listSetting(ConfigConstants.SECURITY_AUDIT_IGNORE_USERS, ignoredUsers, Function.identity(), Property.NodeScope)); //not filtered here
+            settings.add(Setting.listSetting(ConfigConstants.SECURITY_AUDIT_IGNORE_REQUESTS, Collections.emptyList(), Function.identity(), Property.NodeScope)); //not filtered here
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_AUDIT_RESOLVE_BULK_REQUESTS, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_AUDIT_EXCLUDE_SENSITIVE_HEADERS, true, Property.NodeScope, Property.Filtered));
+
+
+            // Security - Audit - Sink
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_ES_INDEX, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_ES_TYPE, Property.NodeScope, Property.Filtered));
+
+            // External ES
+            settings.add(Setting.listSetting(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_HTTP_ENDPOINTS, Lists.newArrayList("localhost:9200"), Function.identity(), Property.NodeScope)); //not filtered here
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_USERNAME, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_PASSWORD, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_ENABLE_SSL, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_VERIFY_HOSTNAMES, true, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_ENABLE_SSL_CLIENT_AUTH, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_PEMCERT_CONTENT, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_PEMCERT_FILEPATH, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_PEMKEY_CONTENT, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_PEMKEY_FILEPATH, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_PEMKEY_PASSWORD, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_PEMTRUSTEDCAS_CONTENT, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_PEMTRUSTEDCAS_FILEPATH, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_JKS_CERT_ALIAS, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.listSetting(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_ENABLED_SSL_CIPHERS, Collections.emptyList(), Function.identity(), Property.NodeScope));//not filtered here
+            settings.add(Setting.listSetting(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_EXTERNAL_ES_ENABLED_SSL_PROTOCOLS, Collections.emptyList(), Function.identity(), Property.NodeScope));//not filtered here
+
+            // Webhooks
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_WEBHOOK_URL, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_WEBHOOK_FORMAT, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_WEBHOOK_SSL_VERIFY, true, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_WEBHOOK_PEMTRUSTEDCAS_FILEPATH, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_WEBHOOK_PEMTRUSTEDCAS_CONTENT, Property.NodeScope, Property.Filtered));
+
+            // Log4j
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_LOG4J_LOGGER_NAME, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_AUDIT_CONFIG_DEFAULT_PREFIX + ConfigConstants.SECURITY_AUDIT_LOG4J_LEVEL, Property.NodeScope, Property.Filtered));
+
+
+            // Kerberos
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_KERBEROS_KRB5_FILEPATH, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_KERBEROS_ACCEPTOR_KEYTAB_FILEPATH, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_KERBEROS_ACCEPTOR_PRINCIPAL, Property.NodeScope, Property.Filtered));
+
+
+            // INFINI Elasticsearch Security - REST API
+            settings.add(Setting.listSetting(ConfigConstants.SECURITY_RESTAPI_ROLES_ENABLED, Collections.emptyList(), Function.identity(), Property.NodeScope)); //not filtered here
+            settings.add(Setting.groupSetting(ConfigConstants.SECURITY_RESTAPI_ENDPOINTS_DISABLED + ".", Property.NodeScope));
+
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_RESTAPI_PASSWORD_VALIDATION_REGEX, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_RESTAPI_PASSWORD_VALIDATION_ERROR_MESSAGE, Property.NodeScope, Property.Filtered));
+
+
+            // Compliance
+            settings.add(Setting.listSetting(ConfigConstants.SECURITY_COMPLIANCE_HISTORY_WRITE_WATCHED_INDICES, Collections.emptyList(), Function.identity(), Property.NodeScope)); //not filtered here
+            settings.add(Setting.listSetting(ConfigConstants.SECURITY_COMPLIANCE_HISTORY_READ_WATCHED_FIELDS, Collections.emptyList(), Function.identity(), Property.NodeScope)); //not filtered here
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_COMPLIANCE_HISTORY_WRITE_METADATA_ONLY, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_COMPLIANCE_HISTORY_READ_METADATA_ONLY, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_COMPLIANCE_HISTORY_WRITE_LOG_DIFFS, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_COMPLIANCE_HISTORY_EXTERNAL_CONFIG_ENABLED, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.listSetting(ConfigConstants.SECURITY_COMPLIANCE_HISTORY_READ_IGNORE_USERS, Collections.emptyList(), Function.identity(), Property.NodeScope)); //not filtered here
+            settings.add(Setting.listSetting(ConfigConstants.SECURITY_COMPLIANCE_HISTORY_WRITE_IGNORE_USERS, Collections.emptyList(), Function.identity(), Property.NodeScope)); //not filtered here
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_COMPLIANCE_DISABLE_ANONYMOUS_AUTHENTICATION, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.listSetting(ConfigConstants.SECURITY_COMPLIANCE_IMMUTABLE_INDICES, Collections.emptyList(), Function.identity(), Property.NodeScope)); //not filtered here
+            settings.add(Setting.simpleString(ConfigConstants.SECURITY_COMPLIANCE_SALT, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_COMPLIANCE_HISTORY_INTERNAL_CONFIG_ENABLED, false, Property.NodeScope, Property.Filtered));
+
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_FILTER_SECURITYINDEX_FROM_ALL_REQUESTS, false, Property.NodeScope,
+                    Property.Filtered));
+
+            //compat
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_UNSUPPORTED_DISABLE_INTERTRANSPORT_AUTH_INITIALLY, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_UNSUPPORTED_DISABLE_REST_AUTH_INITIALLY, false, Property.NodeScope, Property.Filtered));
+
+            // system integration
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_UNSUPPORTED_RESTORE_SECURITYINDEX_ENABLED, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_UNSUPPORTED_INJECT_USER_ENABLED, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_UNSUPPORTED_INJECT_ADMIN_USER_ENABLED, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_UNSUPPORTED_ALLOW_NOW_IN_DLS, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_UNSUPPORTED_RESTAPI_ALLOW_SECURITYCONFIG_MODIFICATION, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_UNSUPPORTED_LOAD_STATIC_RESOURCES, true, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_SSL_CERT_RELOAD_ENABLED, false, Property.NodeScope, Property.Filtered));
+            settings.add(Setting.boolSetting(ConfigConstants.SECURITY_UNSUPPORTED_ACCEPT_INVALID_CONFIG, false, Property.NodeScope, Property.Filtered));
+        }
+
+        return settings;
+    }
+
+    @Override
+    public List<String> getSettingsFilter() {
+        List<String> settingsFilter = new ArrayList<>();
+
+        if(disabled) {
+            return settingsFilter;
+        }
+
+        settingsFilter.add("security.*");
+        return settingsFilter;
+    }
+
+    @Override
+    public void onNodeStarted() {
+        log.info("Node started");
+        if(!SSLConfig.isSslOnlyMode() && !client && !disabled) {
+            cr.initOnNodeStart();
+        }
+        final Set<ModuleInfo> securityModules = ReflectionHelper.getModulesLoaded();
+        log.info("{} Security modules loaded so far: {}", securityModules.size(), securityModules);
+    }
+
+    //below is a hack because it seems not possible to access RepositoriesService from a non guice class
+    //the way of how deguice is organized is really a mess - hope this can be fixed in later versions
+    //TODO check if this could be removed
+
+    @Override
+    public Collection<Class<? extends LifecycleComponent>> getGuiceServiceClasses() {
+
+        if (client || disabled || SSLConfig.isSslOnlyMode()) {
+            return Collections.emptyList();
+        }
+
+        final List<Class<? extends LifecycleComponent>> services = new ArrayList<>(1);
+        services.add(GuiceHolder.class);
+        return services;
+    }
+
+    @Override
+    public Function<String, Predicate<String>> getFieldFilter() {
+        return index -> {
+            if (threadPool == null) {
+                return field -> true;
+            }
+            final Map<String, Set<String>> allowedFlsFields = (Map<String, Set<String>>) HeaderHelper
+                    .deserializeSafeFromHeader(threadPool.getThreadContext(), ConfigConstants.SECURITY_FLS_FIELDS_HEADER);
+
+            final String eval = SecurityUtils.evalMap(allowedFlsFields, index);
+
+            if (eval == null) {
+                return field -> true;
+            } else {
+
+                final Set<String> includesExcludes = allowedFlsFields.get(eval);
+                final Set<String> includesSet = new HashSet<>(includesExcludes.size());
+                final Set<String> excludesSet = new HashSet<>(includesExcludes.size());
+
+
+                for (final String incExc : includesExcludes) {
+                    final char firstChar = incExc.charAt(0);
+
+                    if (firstChar == '!' || firstChar == '~') {
+                        excludesSet.add(incExc.substring(1));
+                    } else {
+                        includesSet.add(incExc);
+                    }
+                }
+
+                if (!excludesSet.isEmpty()) {
+                    WildcardMatcher excludeMatcher = WildcardMatcher.from(excludesSet);
+                    return field -> !excludeMatcher.test(handleKeyword(field));
+                } else {
+                    WildcardMatcher includeMatcher = WildcardMatcher.from(includesSet);
+                    return field -> includeMatcher.test(handleKeyword(field));
+                }
+            }
+        };
+    }
+
+    @Override
+    public Collection<SystemIndexDescriptor> getSystemIndexDescriptors(Settings settings) {
+        final String indexPattern = settings.get(ConfigConstants.SECURITY_CONFIG_INDEX_NAME, ConfigConstants.SECURITY_DEFAULT_CONFIG_INDEX);
+        final SystemIndexDescriptor systemIndexDescriptor = new SystemIndexDescriptor(indexPattern, "Security Index");
+        return Collections.singletonList(systemIndexDescriptor);
+    }
+
+    private static String handleKeyword(final String field) {
+        if(field != null && field.endsWith(KEYWORD)) {
+            return field.substring(0, field.length()-KEYWORD.length());
+        }
+        return field;
+    }
+
+    public static class GuiceHolder implements LifecycleComponent {
+
+        private static RepositoriesService repositoriesService;
+        private static RemoteClusterService remoteClusterService;
+
+        @Inject
+        public GuiceHolder(final RepositoriesService repositoriesService,
+                final TransportService remoteClusterService) {
+            GuiceHolder.repositoriesService = repositoriesService;
+            GuiceHolder.remoteClusterService = remoteClusterService.getRemoteClusterService();
+        }
+
+        public static RepositoriesService getRepositoriesService() {
+            return repositoriesService;
+        }
+
+        public static RemoteClusterService getRemoteClusterService() {
+            return remoteClusterService;
+        }
+
+        @Override
+        public void close() {
+        }
+
+        @Override
+        public State lifecycleState() {
+            return null;
+        }
+
+        @Override
+        public void addLifecycleListener(LifecycleListener listener) {
+        }
+
+        @Override
+        public void removeLifecycleListener(LifecycleListener listener) {
+        }
+
+        @Override
+        public void start() {
+        }
+
+        @Override
+        public void stop() {
+        }
+
+    }
+}

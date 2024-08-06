@@ -1,0 +1,43 @@
+security.ssl.transport.enabled: true
+security.ssl.transport.keystore_filepath: "transport.keystore_filepath"
+security.ssl.transport.truststore_filepath: "transport.truststore_filepath"
+security.ssl.transport.skip_domain_verify: false
+security.ssl.transport.resolve_hostname: true
+security.ssl.transport.enable_openssl_if_available: true
+security.ssl.http.enabled: true
+security.ssl.http.keystore_filepath: "http.keystore_filepath"
+security.ssl.http.truststore_filepath: "http.truststore_filepath"
+security.ssl.http.enable_openssl_if_available: true
+security.ssl.http.clientauth_mode: OPTIONAL
+
+security:
+  audit:
+    type: webhook
+    config:
+      webhook:
+        url: https://localhost:8083
+        format: JSON
+        ssl:
+          verify: true
+          ca_file: dyn
+    endpoints:
+      endpoint1:
+        type: webhook
+        config:
+          webhook:
+            url: https://localhost:8083
+            format: JSON
+            ssl:
+              verify: true
+              ca_file: dyn
+      endpoint2:
+        type: webhook
+        config:
+          webhook:
+            url: https://localhost:8083
+            format: JSON
+            ssl:
+              verify: true
+              ca_file_content: dyn
+      fallback:
+        type: com.infinilabs.security.auditlog.helper.LoggingSink

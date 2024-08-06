@@ -1,0 +1,24 @@
+---
+_meta:
+  type: "user"
+  config_version: 2
+
+sr_user:
+  #password is: nagilum
+  hash: $2a$12$n5nubfWATfQjSYHiWtUyeOxMIxFInUHOAx8VMmGmxFNPGpaBmeB.m
+  external_roles:
+    - abc_ber
+  roles:
+    - xyz_sr
+    - xyz_sr_hidden
+    - xyz_sr_reserved
+    - xyz_sr_non_existent
+
+sr_impuser:
+  #password is: nagilum
+  hash: __imp_only_
+  external_roles:
+    - ert_ber
+  roles:
+    - xyz_impsr
+

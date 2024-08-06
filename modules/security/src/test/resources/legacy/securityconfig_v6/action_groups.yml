@@ -1,0 +1,136 @@
+SECURITY_UNLIMITED:
+  readonly: true
+  permissions:
+    - "*"
+
+###### INDEX LEVEL ######
+
+SECURITY_INDICES_ALL:
+  readonly: true
+  permissions:
+    - "indices:*"
+
+# for backward compatibility
+ALL:
+  readonly: true
+  permissions:
+    - INDICES_ALL
+
+SECURITY_MANAGE:
+  readonly: true
+  permissions:
+    - "indices:monitor/*"
+    - "indices:admin/*"
+
+SECURITY_CREATE_INDEX:
+  readonly: true
+  permissions:
+    - "indices:admin/create"
+    - "indices:admin/mapping/put"
+
+SECURITY_MANAGE_ALIASES:
+  readonly: true
+  permissions:
+    - "indices:admin/aliases*"
+
+# for backward compatibility
+MONITOR:
+  readonly: true
+  permissions:
+    - INDICES_MONITOR
+
+SECURITY_INDICES_MONITOR:
+  readonly: true
+  permissions:
+    - "indices:monitor/*"
+
+SECURITY_DATA_ACCESS:
+  readonly: true
+  permissions:
+    - "indices:data/*"
+    - CRUD
+
+SECURITY_WRITE:
+  readonly: true
+  permissions:
+    - "indices:data/write*"
+    - "indices:admin/mapping/put"
+
+SECURITY_READ:
+  readonly: true
+  permissions:
+    - "indices:data/read*"
+    - "indices:admin/mappings/fields/get*"
+
+SECURITY_DELETE:
+  readonly: true
+  permissions:
+    - "indices:data/write/delete*"
+
+SECURITY_CRUD:
+  readonly: true
+  permissions:
+    - READ
+    - WRITE
+
+SECURITY_SEARCH:
+  readonly: true
+  permissions:
+    - "indices:data/read/search*"
+    - "indices:data/read/msearch*"
+    - SUGGEST
+
+SECURITY_SUGGEST:
+  readonly: true
+  permissions:
+    - "indices:data/read/suggest*"
+
+SECURITY_INDEX:
+  readonly: true
+  permissions:
+    - "indices:data/write/index*"
+    - "indices:data/write/update*"
+    - "indices:admin/mapping/put"
+    - "indices:data/write/bulk*"
+
+SECURITY_GET:
+  readonly: true
+  permissions:
+    - "indices:data/read/get*"
+    - "indices:data/read/mget*"
+
+###### CLUSTER LEVEL ######
+
+SECURITY_CLUSTER_ALL:
+  readonly: true
+  permissions:
+    - "cluster:*"
+
+SECURITY_CLUSTER_MONITOR:
+  readonly: true
+  permissions:
+    - "cluster:monitor/*"
+
+SECURITY_CLUSTER_COMPOSITE_OPS_RO:
+  readonly: true
+  permissions:
+    - "indices:data/read/mget"
+    - "indices:data/read/msearch"
+    - "indices:data/read/mtv"
+    - "indices:admin/aliases/exists*"
+    - "indices:admin/aliases/get*"
+    - "indices:data/read/scroll"
+
+SECURITY_CLUSTER_COMPOSITE_OPS:
+  readonly: true
+  permissions:
+    - "indices:data/write/bulk"
+    - "indices:admin/aliases*"
+    - "indices:data/write/reindex"
+    - CLUSTER_COMPOSITE_OPS_RO
+
+SECURITY_MANAGE_SNAPSHOTS:
+  readonly: true
+  permissions:
+    - "cluster:admin/snapshot/*"
+    - "cluster:admin/repository/*"

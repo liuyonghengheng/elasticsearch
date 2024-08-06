@@ -1,0 +1,12 @@
+security:
+  audit:
+    type: com.infinilabs.security.auditlog.helper.SlowSink
+    endpoints:
+      endpoint1:
+        type: com.infinilabs.security.auditlog.helper.SlowSink
+    routes:
+      MISSING_PRIVILEGEs:
+        endpoints:
+          - endpoint1
+    fallback:
+      type: com.infinilabs.security.auditlog.helper.LoggingSink

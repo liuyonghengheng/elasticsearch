@@ -1,0 +1,5 @@
+security.audit.type: internal_elasticsearch
+security.audit.config.index: "myownindex"
+security.audit.config.type: "auditevents"
+security.audit.threadpool.size: 5
+security.audit.threadpool.max_queue_len: 200000

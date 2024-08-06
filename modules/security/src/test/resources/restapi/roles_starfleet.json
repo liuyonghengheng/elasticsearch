@@ -1,0 +1,10 @@
+{
+  "cluster" : [ "cluster:monitor*", "indices:data/read/scroll", "*bulk*" ],
+  "indices" : [ {
+    "names" : [ "sf" ],
+    "privileges" : [ "SECURITY_READ", "indices:*", "*bulk*" ]
+  }, {
+    "names" : [ "pub" ],
+    "privileges" : [ "SECURITY_READ" ]
+  } ]
+}

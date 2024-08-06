@@ -1,0 +1,11 @@
+---
+_meta:
+  type: "user"
+  config_version: 2
+_:
+  hash: "_"
+  reserved: false
+  hidden: false
+  external_roles: []
+  attributes: {}
+  description: "Migrated from v6"

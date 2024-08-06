@@ -1,0 +1,237 @@
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+/*
+ * Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License").
+ *  You may not use this file except in compliance with the License.
+ *  A copy of the License is located at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  or in the "license" file accompanying this file. This file is distributed
+ *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ *  express or implied. See the License for the specific language governing
+ *  permissions and limitations under the License.
+ */
+
+package com.infinilabs.security.dlic.rest.api;
+
+import com.infinilabs.security.DefaultObjectMapper;
+import com.infinilabs.security.auditlog.AuditLog;
+import com.infinilabs.security.configuration.AdminDNs;
+import com.infinilabs.security.configuration.ConfigurationRepository;
+import com.infinilabs.security.dlic.rest.validation.AbstractConfigurationValidator;
+import com.infinilabs.security.dlic.rest.validation.InternalUsersValidator;
+import com.infinilabs.security.privileges.PrivilegesEvaluator;
+import com.infinilabs.security.securityconf.Hashed;
+import com.infinilabs.security.securityconf.impl.CType;
+import com.infinilabs.security.securityconf.impl.SecurityDynamicConfiguration;
+import com.infinilabs.security.ssl.transport.PrincipalExtractor;
+import com.infinilabs.security.support.SecurityJsonNode;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
+import org.elasticsearch.action.index.IndexResponse;
+import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.rest.RestChannel;
+import org.elasticsearch.rest.RestController;
+import org.elasticsearch.rest.RestRequest;
+import org.elasticsearch.rest.RestRequest.Method;
+import org.elasticsearch.threadpool.ThreadPool;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.List;
+
+import com.google.common.collect.ImmutableList;
+
+import static com.infinilabs.security.dlic.rest.support.Utils.hash;
+
+public class InternalUsersApiAction extends PatchableResourceApiAction {
+    private static final List<Route> routes = ImmutableList.of(
+            // corrected mapping, introduced in INFINI Elasticsearch Security
+            new Route(Method.GET, "/_security/user/{name}"),
+            new Route(Method.GET, "/_security/user/"),
+            new Route(Method.DELETE, "/_security/user/{name}"),
+            new Route(Method.PUT, "/_security/user/{name}"),
+
+            new Route(Method.PATCH, "/_security/user/"),
+            new Route(Method.PATCH, "/_security/user/{name}")
+    );
+
+    @Inject
+    public InternalUsersApiAction(final Settings settings, final Path configPath, final RestController controller,
+                                  final Client client, final AdminDNs adminDNs, final ConfigurationRepository cl,
+                                  final ClusterService cs, final PrincipalExtractor principalExtractor, final PrivilegesEvaluator evaluator,
+                                  ThreadPool threadPool, AuditLog auditLog) {
+        super(settings, configPath, controller, client, adminDNs, cl, cs, principalExtractor, evaluator, threadPool,
+                auditLog);
+    }
+
+    @Override
+    public List<Route> routes() {
+        return routes;
+    }
+
+    @Override
+    protected Endpoint getEndpoint() {
+        return Endpoint.USER;
+    }
+
+    @Override
+    protected void handlePut(RestChannel channel, final RestRequest request, final Client client, final JsonNode content) throws IOException {
+
+        final String username = request.param("name");
+
+        if (username == null || username.length() == 0) {
+            badRequestResponse(channel, "No " + getResourceName() + " specified.");
+            return;
+        }
+
+        // TODO it might be sensible to consolidate this with the overridden method in
+        // order to minimize duplicated logic
+
+        final SecurityDynamicConfiguration<?> internalUsersConfiguration = load(getConfigName(), false);
+
+        if (!isWriteable(channel, internalUsersConfiguration, username)) {
+            return;
+        }
+
+        final ObjectNode contentAsNode = (ObjectNode) content;
+        final SecurityJsonNode securityJsonNode = new SecurityJsonNode(contentAsNode);
+
+        // Don't allow user to add non-existent role or a role for which role-mapping is hidden or reserved
+        final List<String> opendistroSecurityRoles = securityJsonNode.get("roles").asList();
+        if (opendistroSecurityRoles != null) {
+            for (final String role: opendistroSecurityRoles) {
+                if (!isValidRolesMapping(channel, role)) return;
+            }
+        }
+
+        // if password is set, it takes precedence over hash
+        final String plainTextPassword = securityJsonNode.get("password").asString();
+        final String origHash = securityJsonNode.get("hash").asString();
+        if (plainTextPassword != null && plainTextPassword.length() > 0) {
+            contentAsNode.remove("password");
+            contentAsNode.put("hash", hash(plainTextPassword.toCharArray()));
+        } else if (origHash != null && origHash.length() > 0) {
+            contentAsNode.remove("password");
+        } else if (plainTextPassword != null && plainTextPassword.isEmpty() && origHash == null) {
+            contentAsNode.remove("password");
+        }
+
+        final boolean userExisted = internalUsersConfiguration.exists(username);
+
+        // when updating an existing user password hash can be blank, which means no
+        // changes
+
+        // sanity checks, hash is mandatory for newly created users
+        if (!userExisted && securityJsonNode.get("hash").asString() == null) {
+            badRequestResponse(channel, "Please specify either 'hash' or 'password' when creating a new internal user.");
+            return;
+        }
+
+        // for existing users, hash is optional
+        if (userExisted && securityJsonNode.get("hash").asString() == null) {
+            // sanity check, this should usually not happen
+            final String hash = ((Hashed) internalUsersConfiguration.getCEntry(username)).getHash();
+            if (hash == null || hash.length() == 0) {
+                internalErrorResponse(channel,
+                    "Existing user " + username + " has no password, and no new password or hash was specified.");
+                return;
+            }
+            contentAsNode.put("hash", hash);
+        }
+
+        internalUsersConfiguration.remove(username);
+
+        // checks complete, create or update the user
+        internalUsersConfiguration.putCObject(username, DefaultObjectMapper.readTree(contentAsNode,  internalUsersConfiguration.getImplementingClass()));
+
+        saveAnUpdateConfigs(client, request, CType.USER, internalUsersConfiguration, new OnSucessActionListener<IndexResponse>(channel) {
+
+            @Override
+            public void onResponse(IndexResponse response) {
+                if (userExisted) {
+                    successResponse(channel, "'" + username + "' updated.");
+                } else {
+                    createdResponse(channel, "'" + username + "' created.");
+                }
+
+            }
+        });
+    }
+
+    @Override
+    protected void filter(SecurityDynamicConfiguration<?> builder) {
+        super.filter(builder);
+        // replace password hashes in addition. We must not remove them from the
+        // Builder since this would remove users completely if they
+        // do not have any addition properties like roles or attributes
+        builder.clearHashes();
+    }
+
+    @Override
+    protected AbstractConfigurationValidator postProcessApplyPatchResult(RestChannel channel, RestRequest request, JsonNode existingResourceAsJsonNode,
+                                                                         JsonNode updatedResourceAsJsonNode, String resourceName) {
+        AbstractConfigurationValidator retVal = null;
+        JsonNode passwordNode = updatedResourceAsJsonNode.get("password");
+
+        if (passwordNode != null) {
+            String plainTextPassword = passwordNode.asText();
+            try {
+                XContentBuilder builder = channel.newBuilder();
+                builder.startObject();
+                builder.field("password", plainTextPassword);
+                builder.endObject();
+                retVal = getValidator(request, BytesReference.bytes(builder), resourceName);
+            } catch (IOException e) {
+                log.error(e);
+            }
+
+            ((ObjectNode) updatedResourceAsJsonNode).remove("password");
+            ((ObjectNode) updatedResourceAsJsonNode).set("hash", new TextNode(hash(plainTextPassword.toCharArray())));
+            return retVal;
+        }
+
+        return null;
+    }
+
+    @Override
+    protected String getResourceName() {
+        return "user";
+    }
+
+    @Override
+    protected CType getConfigName() {
+        return CType.USER;
+    }
+
+    @Override
+    protected AbstractConfigurationValidator getValidator(RestRequest request, BytesReference ref, Object... params) {
+        return new InternalUsersValidator(request, isSuperAdmin(), ref, this.settings, params);
+    }
+}

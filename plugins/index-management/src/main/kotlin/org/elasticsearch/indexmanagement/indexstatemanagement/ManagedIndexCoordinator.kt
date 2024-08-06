@@ -1,0 +1,733 @@
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+package org.elasticsearch.indexmanagement.indexstatemanagement
+
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import org.apache.logging.log4j.LogManager
+import org.elasticsearch.ElasticsearchSecurityException
+import org.elasticsearch.ExceptionsHelper
+import org.elasticsearch.action.DocWriteRequest
+import org.elasticsearch.action.bulk.BackoffPolicy
+import org.elasticsearch.action.bulk.BulkRequest
+import org.elasticsearch.action.bulk.BulkResponse
+import org.elasticsearch.action.get.MultiGetRequest
+import org.elasticsearch.action.get.MultiGetResponse
+import org.elasticsearch.action.index.IndexRequest
+import org.elasticsearch.action.search.*
+import org.elasticsearch.action.support.master.AcknowledgedResponse
+import org.elasticsearch.action.update.UpdateRequest
+import org.elasticsearch.client.Client
+import org.elasticsearch.cluster.ClusterChangedEvent
+import org.elasticsearch.cluster.ClusterState
+import org.elasticsearch.cluster.ClusterStateListener
+import org.elasticsearch.cluster.block.ClusterBlockException
+import org.elasticsearch.cluster.metadata.IndexMetadata
+import org.elasticsearch.cluster.service.ClusterService
+import org.elasticsearch.common.Strings
+import org.elasticsearch.common.component.LifecycleListener
+import org.elasticsearch.common.settings.Settings
+import org.elasticsearch.common.unit.TimeValue
+import org.elasticsearch.index.Index
+import org.elasticsearch.index.IndexNotFoundException
+import org.elasticsearch.index.query.QueryBuilders
+import org.elasticsearch.indexmanagement.IndexManagementIndices
+import org.elasticsearch.indexmanagement.IndexManagementPlugin
+import org.elasticsearch.indexmanagement.IndexManagementPlugin.Companion.INDEX_MANAGEMENT_INDEX
+import org.elasticsearch.indexmanagement.indexstatemanagement.migration.ISMTemplateService
+import org.elasticsearch.indexmanagement.indexstatemanagement.model.ManagedIndexConfig
+import org.elasticsearch.indexmanagement.indexstatemanagement.model.Policy
+import org.elasticsearch.indexmanagement.indexstatemanagement.model.coordinator.ClusterStateManagedIndexConfig
+import org.elasticsearch.indexmanagement.indexstatemanagement.opensearchapi.mgetManagedIndexMetadata
+import org.elasticsearch.indexmanagement.indexstatemanagement.settings.LegacyOpenDistroManagedIndexSettings
+import org.elasticsearch.indexmanagement.indexstatemanagement.settings.ManagedIndexSettings
+import org.elasticsearch.indexmanagement.indexstatemanagement.settings.ManagedIndexSettings.Companion.AUTO_MANAGE
+import org.elasticsearch.indexmanagement.indexstatemanagement.settings.ManagedIndexSettings.Companion.COORDINATOR_BACKOFF_COUNT
+import org.elasticsearch.indexmanagement.indexstatemanagement.settings.ManagedIndexSettings.Companion.COORDINATOR_BACKOFF_MILLIS
+import org.elasticsearch.indexmanagement.indexstatemanagement.settings.ManagedIndexSettings.Companion.INDEX_STATE_MANAGEMENT_ENABLED
+import org.elasticsearch.indexmanagement.indexstatemanagement.settings.ManagedIndexSettings.Companion.JITTER
+import org.elasticsearch.indexmanagement.indexstatemanagement.settings.ManagedIndexSettings.Companion.JOB_INTERVAL
+import org.elasticsearch.indexmanagement.indexstatemanagement.settings.ManagedIndexSettings.Companion.METADATA_SERVICE_ENABLED
+import org.elasticsearch.indexmanagement.indexstatemanagement.settings.ManagedIndexSettings.Companion.METADATA_SERVICE_STATUS
+import org.elasticsearch.indexmanagement.indexstatemanagement.settings.ManagedIndexSettings.Companion.SWEEP_PERIOD
+import org.elasticsearch.indexmanagement.indexstatemanagement.settings.ManagedIndexSettings.Companion.TEMPLATE_MIGRATION_CONTROL
+import org.elasticsearch.indexmanagement.indexstatemanagement.transport.action.managedIndex.ManagedIndexAction
+import org.elasticsearch.indexmanagement.indexstatemanagement.transport.action.managedIndex.ManagedIndexRequest
+import org.elasticsearch.indexmanagement.indexstatemanagement.util.*
+import org.elasticsearch.indexmanagement.opensearchapi.*
+import org.elasticsearch.indexmanagement.spi.indexstatemanagement.model.ISMIndexMetadata
+import org.elasticsearch.indexmanagement.spi.indexstatemanagement.model.ManagedIndexMetaData
+import org.elasticsearch.indexmanagement.util.OpenForTesting
+import org.elasticsearch.rest.RestStatus
+import org.elasticsearch.search.builder.SearchSourceBuilder
+import org.elasticsearch.threadpool.Scheduler
+import org.elasticsearch.threadpool.ThreadPool
+import java.lang.Runnable
+import java.time.Instant
+
+/**
+ * Listens for cluster changes to pick up new indices to manage.
+ * Sweeps the cluster state and [INDEX_MANAGEMENT_INDEX] for [ManagedIndexConfig].
+ *
+ * This class listens for [ClusterChangedEvent] to pick up on [ManagedIndexConfig] to create or delete.
+ * Also sets up a background process that sweeps the cluster state for [ClusterStateManagedIndexConfig]
+ * and the [INDEX_MANAGEMENT_INDEX] for current managed index jobs. It will then compare these
+ * ManagedIndices to appropriately create or delete each [ManagedIndexConfig]. Each node that has
+ * the [IndexManagementPlugin] installed will have an instance of this class, but only the elected
+ * cluster manager node will set up the background sweep process and listen for [ClusterChangedEvent].
+ *
+ * We do not allow updating to a new policy through Coordinator as this can have bad side effects. If
+ * a user wants to update an existing [ManagedIndexConfig] to a new policy (or updated version of policy)
+ * then they must use the ChangePolicy API.
+ */
+@Suppress("TooManyFunctions", "ReturnCount", "NestedBlockDepth", "LongParameterList")
+@OpenForTesting
+class ManagedIndexCoordinator(
+    private val settings: Settings,
+    private val client: Client,
+    private val clusterService: ClusterService,
+    private val threadPool: ThreadPool,
+    indexManagementIndices: IndexManagementIndices,
+    private val metadataService: MetadataService,
+    private val templateService: ISMTemplateService,
+    private val indexMetadataProvider: IndexMetadataProvider
+) : ClusterStateListener,
+    CoroutineScope by CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineName("ManagedIndexCoordinator")),
+    LifecycleListener() {
+
+    private val logger = LogManager.getLogger(javaClass)
+    private val ismIndices = indexManagementIndices
+
+    private var scheduledFullSweep: Scheduler.Cancellable? = null
+    private var scheduledMoveMetadata: Scheduler.Cancellable? = null
+    private var scheduledTemplateMigration: Scheduler.Cancellable? = null
+
+    @Volatile private var lastFullSweepTimeNano = System.nanoTime()
+    @Volatile private var indexStateManagementEnabled = INDEX_STATE_MANAGEMENT_ENABLED.get(settings)
+    @Volatile private var metadataServiceEnabled = METADATA_SERVICE_ENABLED.get(settings)
+    @Volatile private var sweepPeriod = SWEEP_PERIOD.get(settings)
+    @Volatile private var retryPolicy =
+        BackoffPolicy.constantBackoff(COORDINATOR_BACKOFF_MILLIS.get(settings), COORDINATOR_BACKOFF_COUNT.get(settings))
+    @Volatile private var templateMigrationEnabled: Boolean = true
+    @Volatile private var templateMigrationEnabledSetting = TEMPLATE_MIGRATION_CONTROL.get(settings)
+    @Volatile private var jobInterval = JOB_INTERVAL.get(settings)
+    @Volatile private var jobJitter = JITTER.get(settings)
+
+    @Volatile private var isClusterManager = false
+    @Volatile private var onClusterManagerTimeStamp: Long = 0L
+
+    init {
+        clusterService.addListener(this)
+        clusterService.addLifecycleListener(this)
+        clusterService.clusterSettings.addSettingsUpdateConsumer(SWEEP_PERIOD) {
+            sweepPeriod = it
+            initBackgroundSweep()
+        }
+        clusterService.clusterSettings.addSettingsUpdateConsumer(JOB_INTERVAL) {
+            jobInterval = it
+        }
+        clusterService.clusterSettings.addSettingsUpdateConsumer(JITTER) {
+            jobJitter = it
+        }
+        clusterService.clusterSettings.addSettingsUpdateConsumer(INDEX_STATE_MANAGEMENT_ENABLED) {
+            indexStateManagementEnabled = it
+            if (!indexStateManagementEnabled) disable() else enable()
+        }
+        clusterService.clusterSettings.addSettingsUpdateConsumer(METADATA_SERVICE_STATUS) {
+            metadataServiceEnabled = it == 0
+            if (!metadataServiceEnabled) scheduledMoveMetadata?.cancel()
+            else initMoveMetadata()
+        }
+        clusterService.clusterSettings.addSettingsUpdateConsumer(TEMPLATE_MIGRATION_CONTROL) {
+            templateMigrationEnabled = it >= 0L
+            if (!templateMigrationEnabled) scheduledTemplateMigration?.cancel()
+            else initTemplateMigration(it)
+        }
+        clusterService.clusterSettings.addSettingsUpdateConsumer(COORDINATOR_BACKOFF_MILLIS, COORDINATOR_BACKOFF_COUNT) { millis, count ->
+            retryPolicy = BackoffPolicy.constantBackoff(millis, count)
+        }
+    }
+
+    private fun executorName(): String {
+        return ThreadPool.Names.MANAGEMENT
+    }
+
+    fun onClusterManager() {
+        onClusterManagerTimeStamp = System.currentTimeMillis()
+        logger.info("Cache cluster manager node onClusterManager time: $onClusterManagerTimeStamp")
+
+        // Init background sweep when promoted to being cluster manager
+        initBackgroundSweep()
+
+        initMoveMetadata()
+
+        initTemplateMigration(templateMigrationEnabledSetting)
+    }
+
+    fun offClusterManager() {
+        // Cancel background sweep when demoted from being cluster manager
+        scheduledFullSweep?.cancel()
+
+        scheduledMoveMetadata?.cancel()
+
+        scheduledTemplateMigration?.cancel()
+    }
+
+    override fun clusterChanged(event: ClusterChangedEvent) {
+        // Instead of using a LocalNodeMasterListener to track cluster manager changes, this service will
+        // track them here to avoid conditions where cluster manager listener events run after other
+        // listeners that depend on what happened in the cluster manager listener
+        if (this.isClusterManager != event.localNodeMaster()) {
+            this.isClusterManager = event.localNodeMaster()
+            if (this.isClusterManager) {
+                onClusterManager()
+            } else {
+                offClusterManager()
+            }
+        }
+
+        if (!isIndexStateManagementEnabled()) return
+
+        if (event.isNewCluster) return
+
+        if (!event.localNodeMaster()) return
+
+        if (!event.metadataChanged()) return
+
+        launch { sweepClusterChangedEvent(event) }
+    }
+
+    override fun afterStart() {
+        initBackgroundSweep()
+
+        initMoveMetadata()
+    }
+
+    override fun beforeStop() {
+        scheduledFullSweep?.cancel()
+
+        scheduledMoveMetadata?.cancel()
+    }
+
+    private fun enable() {
+        initBackgroundSweep()
+        indexStateManagementEnabled = true
+
+        initMoveMetadata()
+
+        // Calling initBackgroundSweep() beforehand runs a sweep ensuring that policies removed from indices
+        // and indices being deleted are accounted for prior to re-enabling jobs
+        launch {
+            try {
+                logger.debug("Re-enabling jobs for managed indices")
+                reenableJobs()
+            } catch (e: Exception) {
+                logger.error("Failed to re-enable jobs for managed indices", e)
+            }
+        }
+    }
+
+    private fun disable() {
+        scheduledFullSweep?.cancel()
+        indexStateManagementEnabled = false
+
+        scheduledMoveMetadata?.cancel()
+    }
+
+    private suspend fun reenableJobs() {
+        /*
+         * Iterate through all indices and create update requests to update the ManagedIndexConfig for indices that
+         * meet the following conditions:
+         *   1. Is being managed (has managed-index)
+         *   2. Does not have a completed Policy
+         *   3. Does not have a failed Policy
+         */
+        // If IM config doesn't exist skip
+        if (!ismIndices.indexManagementIndexExists()) return
+        val currentManagedIndexUuids = sweepManagedIndexJobs(client)
+        val metadataList = client.mgetManagedIndexMetadata(currentManagedIndexUuids)
+        val managedIndicesToEnableReq = mutableListOf<UpdateRequest>()
+        metadataList.forEach {
+            val metadata = it?.first
+            if (metadata != null && !(metadata.isPolicyCompleted || metadata.isFailed)) {
+                managedIndicesToEnableReq.add(updateEnableManagedIndexRequest(metadata.indexUuid))
+            }
+        }
+
+        updateManagedIndices(managedIndicesToEnableReq)
+    }
+
+    private fun isIndexStateManagementEnabled(): Boolean = indexStateManagementEnabled == true
+
+    /**
+     * create or clean job document and metadata
+     */
+    @OpenForTesting
+    suspend fun sweepClusterChangedEvent(event: ClusterChangedEvent) {
+        // indices delete event
+        var removeManagedIndexReq = emptyList<DocWriteRequest<*>>()
+        var indicesToClean = emptyList<Index>()
+        if (event.indicesDeleted().isNotEmpty()) {
+            val managedIndices = getManagedIndices(event.indicesDeleted().map { it.uuid })
+            val deletedIndices = event.indicesDeleted().map { it.name }
+            val allIndicesUuid = indexMetadataProvider.getMultiTypeISMIndexMetadata(indexNames = deletedIndices).map { (_, metadataMapForType) ->
+                metadataMapForType.values.map { it.indexUuid }
+            }.flatten().toSet()
+            // Check if the deleted index uuid is still part of any metadata service in the cluster and has an existing managed index job
+            indicesToClean = event.indicesDeleted().filter { it.uuid in managedIndices.keys && !allIndicesUuid.contains(it.uuid) }
+            removeManagedIndexReq = indicesToClean.map { deleteManagedIndexRequest(it.uuid) }
+        }
+
+        val updateMatchingIndexReq = createManagedIndexRequests(event.state(), event.indicesCreated())
+
+        updateManagedIndices(updateMatchingIndexReq + removeManagedIndexReq)
+
+        clearManagedIndexMetaData(indicesToClean.map { deleteManagedIndexMetadataRequest(it.uuid) })
+    }
+
+    /**
+     * build requests to create jobs for indices matching ISM templates
+     */
+    @Suppress("NestedBlockDepth")
+    private suspend fun createManagedIndexRequests(
+        clusterState: ClusterState,
+        indexNames: List<String>
+    ): List<DocWriteRequest<*>> {
+        val updateManagedIndexReqs = mutableListOf<DocWriteRequest<IndexRequest>>()
+        if (indexNames.isEmpty()) return updateManagedIndexReqs
+
+        val policiesWithTemplates = getPoliciesWithISMTemplates()
+        if (policiesWithTemplates.isEmpty()) return updateManagedIndexReqs
+
+        // We use the metadata provider to give us the correct uuid for the index when creating managed index for the index
+        val ismIndicesMetadata: Map<String, ISMIndexMetadata> = indexMetadataProvider.getISMIndexMetadataByType(indexNames = indexNames)
+        // Iterate over each unmanaged hot/warm index and if it matches an ISM template add a managed index config index request
+        indexNames.forEach { indexName ->
+            val ismIndexMetadata = ismIndicesMetadata[indexName]
+            // We try to find lookup name instead of using index name as datastream indices need the alias to match policy
+            val lookupNameIndexMetadata = findIndexLookupName(indexName, clusterState)
+            // logger.info("indexName {} lookupName {}", indexName, lookupNameIndexMetadata?.first)
+            if (lookupNameIndexMetadata != null && !indexMetadataProvider.isUnManageableIndex(lookupNameIndexMetadata.first) && ismIndexMetadata != null) {
+                val creationDate = ismIndexMetadata.indexCreationDate
+                val indexUuid = ismIndexMetadata.indexUuid
+                findMatchingPolicy(lookupNameIndexMetadata, creationDate, policiesWithTemplates)
+                    ?.let { policy ->
+                        logger.info("Index [$indexName] matched ILM policy template and will be managed by ${policy.id}")
+                        updateManagedIndexReqs.add(
+                            managedIndexConfigIndexRequest(
+                                indexName,
+                                indexUuid,
+                                policy.id,
+                                jobInterval,
+                                policy,
+                                jobJitter
+                            )
+                        )
+                    }
+            }
+        }
+
+        return updateManagedIndexReqs
+    }
+
+    private fun findIndexLookupName(indexName: String, clusterState: ClusterState): Pair<String, IndexMetadata>? {
+        if (clusterState.metadata.hasIndex(indexName)) {
+            val indexMetadata = clusterState.metadata.index(indexName)
+            val autoManage = if (AUTO_MANAGE.get(indexMetadata.settings)) {
+                true
+            } else {
+                LegacyOpenDistroManagedIndexSettings.AUTO_MANAGE.get(indexMetadata.settings)
+            }
+            if (autoManage) {
+                val isHiddenIndex =
+                    IndexMetadata.INDEX_HIDDEN_SETTING.get(indexMetadata.settings) || indexName.startsWith(".")
+                            && !indexName.startsWith(".infini")
+                val indexAbstraction = clusterState.metadata.indicesLookup[indexName]
+                val isDataStreamIndex = indexAbstraction?.parentDataStream != null
+
+                if (!isDataStreamIndex && isHiddenIndex) {
+                    return null
+                }
+
+                return when {
+                    isDataStreamIndex -> Pair(indexAbstraction?.parentDataStream?.name ?: "", indexMetadata)
+                    else ->  Pair(indexName, indexMetadata)
+                }
+            }
+        }
+
+        return null
+    }
+
+    /**
+     * Find a policy that has highest priority ilm template with matching index pattern to the index and is created before index creation date. If
+     * the policy has user, ensure that the user can manage the index if not find the one that can.
+     * */
+    private suspend fun findMatchingPolicy(pair: Pair<String, IndexMetadata>, creationDate: Long, policies: List<Policy>): Policy? {
+        val policyMap = mutableMapOf<String, Policy>()
+        policies.forEach { policy ->
+            policyMap[policy.id] = policy
+        }
+
+            val policyName = ManagedIndexSettings.POLICY_ID.get(pair.second.settings)
+            if (!Strings.isNullOrEmpty(policyName)) {
+                val policy = policyMap[policyName]
+                if (policy !=null
+                    // && canPolicyManagedIndex(policy, pair.first)
+                ){
+                    return  policy
+                }
+            }
+
+        logger.debug("Couldn't find any matching policy with appropriate permissions that can manage index ${pair.first}")
+        return null
+    }
+
+    private suspend fun canPolicyManagedIndex(policy: Policy, indexName: String): Boolean {
+        if (policy.user != null) {
+            try {
+                val request = ManagedIndexRequest().indices(indexName)
+                withClosableContext(IndexManagementSecurityContext("ApplyPolicyOnIndexCreation", settings, threadPool.threadContext, policy.user)) {
+                    val response: AcknowledgedResponse = client.suspendUntil { execute(ManagedIndexAction.INSTANCE, request, it) }
+                }
+            } catch (e: ElasticsearchSecurityException) {
+                logger.debug("Skipping applying policy ${policy.id} on $indexName as the policy user is missing permissions", e)
+                return false
+            } catch (e: Exception) {
+                // Ignore other exceptions
+            }
+        }
+
+        return true
+    }
+
+    private suspend fun getPoliciesWithISMTemplates(): List<Policy> {
+        val errorMessage = "Failed to get ISM policies with templates"
+        val searchRequest = SearchRequest()
+            .source(
+                SearchSourceBuilder().query(
+                    QueryBuilders.existsQuery(ISM_TEMPLATE_FIELD)
+                ).size(MAX_HITS)
+            )
+            .indices(INDEX_MANAGEMENT_INDEX)
+
+        return try {
+            val response: SearchResponse = client.suspendUntil { search(searchRequest, it) }
+            parseFromSearchResponse(response = response, parse = Policy.Companion::parse)
+        } catch (ex: IndexNotFoundException) {
+            emptyList()
+        } catch (ex: ClusterBlockException) {
+            logger.error(errorMessage)
+            emptyList()
+        } catch (e: SearchPhaseExecutionException) {
+            logger.error("$errorMessage: $e")
+            emptyList()
+        } catch (e: Exception) {
+            logger.error(errorMessage, e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Background sweep process that periodically sweeps for updates to ManagedIndices
+     *
+     * This background sweep will only be initialized if the local node is the elected cluster manager node.
+     * Creates a runnable that is executed as a coroutine in the shared pool of threads on JVM.
+     */
+    @OpenForTesting
+    fun initBackgroundSweep() {
+        // If ISM is disabled return early
+        if (!isIndexStateManagementEnabled()) return
+
+        // Do not setup background sweep if we're not the elected cluster manager node
+        if (!clusterService.state().nodes().isLocalNodeElectedMaster) return
+
+        // Cancel existing background sweep
+        scheduledFullSweep?.cancel()
+
+        // Setup an anti-entropy/self-healing background sweep, in case we fail to create a ManagedIndexConfig job
+        val scheduledSweep = Runnable {
+            val elapsedTime = getFullSweepElapsedTime()
+
+            // Rate limit to at most one full sweep per sweep period
+            // The schedule runs may wake up a few milliseconds early
+            // Delta will be giving some buffer on the schedule to allow waking up slightly earlier
+            val delta = sweepPeriod.millis - elapsedTime.millis
+            if (delta < BUFFER) { // give 20ms buffer.
+                launch {
+                    try {
+                        logger.debug("Performing background sweep of managed indices")
+                        sweep()
+                    } catch (e: Exception) {
+                        logger.error("Failed to sweep managed indices", e)
+                    }
+                }
+            }
+        }
+
+        scheduledFullSweep = threadPool.scheduleWithFixedDelay(scheduledSweep, sweepPeriod, executorName())
+    }
+
+    fun initMoveMetadata() {
+        if (!metadataServiceEnabled) return
+        if (!isIndexStateManagementEnabled()) return
+        if (!clusterService.state().nodes().isLocalNodeElectedMaster) return
+        scheduledMoveMetadata?.cancel()
+
+        if (metadataService.finishFlag) {
+            logger.info("Re-enable Metadata Service.")
+            metadataService.reenableMetadataService()
+        }
+
+        val scheduledJob = Runnable {
+            launch {
+                try {
+                    if (metadataService.finishFlag) {
+                        logger.info("Cancel background move metadata process.")
+                        scheduledMoveMetadata?.cancel()
+                    }
+
+                    logger.info("Performing move cluster state metadata.")
+                    metadataService.moveMetadata()
+                } catch (e: Exception) {
+                    logger.error("Failed to move cluster state metadata", e)
+                }
+            }
+        }
+
+        scheduledMoveMetadata = threadPool.scheduleWithFixedDelay(scheduledJob, TimeValue.timeValueMinutes(1), executorName())
+    }
+
+    fun initTemplateMigration(enableSetting: Long) {
+        if (!templateMigrationEnabled) return
+        if (!isIndexStateManagementEnabled()) return
+        if (!clusterService.state().nodes().isLocalNodeElectedMaster) return
+        scheduledTemplateMigration?.cancel()
+
+        // if service has finished, re-enable it
+        if (templateService.finishFlag) {
+            logger.info("Re-enable template migration service.")
+            templateService.reenableTemplateMigration()
+        }
+
+        val scheduledJob = Runnable {
+            launch {
+                try {
+                    if (templateService.finishFlag) {
+                        logger.info("ISM template migration process finished, cancel scheduled job.")
+                        scheduledTemplateMigration?.cancel()
+                        return@launch
+                    }
+
+                    logger.info("Performing ISM template migration.")
+                    if (enableSetting == 0L) {
+                        if (onClusterManagerTimeStamp != 0L)
+                            templateService.doMigration(Instant.ofEpochMilli(onClusterManagerTimeStamp))
+                        else {
+                            logger.error("No valid onClusterManager time cached, cancel ISM template migration job.")
+                            scheduledTemplateMigration?.cancel()
+                        }
+                    } else
+                        templateService.doMigration(Instant.ofEpochMilli(enableSetting))
+                } catch (e: Exception) {
+                    logger.error("Failed to migrate ISM template", e)
+                }
+            }
+        }
+
+        scheduledTemplateMigration = threadPool.scheduleWithFixedDelay(scheduledJob, TimeValue.timeValueMinutes(1), executorName())
+    }
+
+    private fun getFullSweepElapsedTime(): TimeValue =
+        TimeValue.timeValueNanos(System.nanoTime() - lastFullSweepTimeNano)
+
+    /**
+     * Sweeps the [INDEX_MANAGEMENT_INDEX] and cluster state.
+     *
+     * Sweeps the [INDEX_MANAGEMENT_INDEX] and cluster state for any [DocWriteRequest] that need to happen
+     * and executes them in batch as a bulk request.
+     */
+    @OpenForTesting
+    suspend fun sweep() {
+        // If IM config doesn't exist skip
+        if (!ismIndices.indexManagementIndexExists()) return
+
+        // Get all current managed indices uuids
+        val currentManagedIndexUuids = sweepManagedIndexJobs(client)
+
+        // get all indices in the cluster state
+        val currentIndices = indexMetadataProvider.getISMIndexMetadataByType(indexNames = listOf("*"))
+        val unManagedIndices = getUnManagedIndices(currentIndices, currentManagedIndexUuids.toHashSet())
+
+        // Get the matching policyIds for applicable indices
+        val updateMatchingIndicesReqs = createManagedIndexRequests(
+            clusterService.state(), unManagedIndices.map { (indexName, _) -> indexName }
+        )
+
+        // check all managed indices, if the index has already been deleted
+        val allIndicesUuids = indexMetadataProvider.getAllISMIndexMetadata().map { it.indexUuid }
+        val managedIndicesToDelete = getManagedIndicesToDelete(allIndicesUuids, currentManagedIndexUuids)
+        val deleteManagedIndexRequests = managedIndicesToDelete.map { deleteManagedIndexRequest(it) }
+
+        updateManagedIndices(updateMatchingIndicesReqs + deleteManagedIndexRequests)
+
+        // clean metadata of un-managed index
+        val indicesToDeleteMetadataFrom = unManagedIndices.map { (_, ismMetadata) -> ismMetadata.indexUuid } + managedIndicesToDelete
+        clearManagedIndexMetaData(indicesToDeleteMetadataFrom.map { deleteManagedIndexMetadataRequest(it) })
+
+        lastFullSweepTimeNano = System.nanoTime()
+    }
+
+    private fun getUnManagedIndices(allIndices: Map<String, ISMIndexMetadata>, managedIndexUuids: Set<String>): Map<String, ISMIndexMetadata> {
+        val unManagedIndices = mutableMapOf<String, ISMIndexMetadata>()
+        allIndices.forEach { (indexName, ismMetadata) ->
+            if (ismMetadata.indexUuid !in managedIndexUuids) {
+                unManagedIndices[indexName] = ismMetadata
+            }
+        }
+        return unManagedIndices
+    }
+
+    /**
+     * Sweeps the [INDEX_MANAGEMENT_INDEX] for ManagedIndices.
+     *
+     * Sweeps the [INDEX_MANAGEMENT_INDEX] for ManagedIndices and only fetches the index_uuid
+     *
+     * @return list of IndexUuid.
+     */
+    @OpenForTesting
+    suspend fun sweepManagedIndexJobs(client: Client): List<String> {
+        val managedIndexUuids = mutableListOf<String>()
+
+        // if # of documents below 10k, don't use scroll search
+        val countReq = getSweptManagedIndexSearchRequest(size = 0)
+        val countRes: SearchResponse = client.suspendUntil { search(countReq, it) }
+        val totalHits = countRes.hits.totalHits ?: return managedIndexUuids
+
+        if (totalHits.value >= MAX_HITS) {
+            val scrollIDsToClear = mutableSetOf<String>()
+            try {
+                val managedIndexSearchRequest = getSweptManagedIndexSearchRequest(scroll = true)
+                var response: SearchResponse = client.suspendUntil { search(managedIndexSearchRequest, it) }
+                var uuids = transformManagedIndexSearchRes(response)
+
+                while (uuids.isNotEmpty()) {
+                    managedIndexUuids.addAll(uuids)
+                    val scrollID = response.scrollId
+                    scrollIDsToClear.add(scrollID)
+                    val scrollRequest = SearchScrollRequest().scrollId(scrollID).scroll(TimeValue.timeValueMinutes(1))
+                    response = client.suspendUntil { searchScroll(scrollRequest, it) }
+                    uuids = transformManagedIndexSearchRes(response)
+                }
+            } finally {
+                if (scrollIDsToClear.isNotEmpty()) {
+                    val clearScrollRequest = ClearScrollRequest()
+                    clearScrollRequest.scrollIds(scrollIDsToClear.toList())
+                    val clearScrollResponse: ClearScrollResponse =
+                        client.suspendUntil { execute(ClearScrollAction.INSTANCE, clearScrollRequest, it) }
+                }
+            }
+            return managedIndexUuids
+        }
+
+        val response: SearchResponse = client.suspendUntil { search(getSweptManagedIndexSearchRequest(), it) }
+        return transformManagedIndexSearchRes(response)
+    }
+
+    fun transformManagedIndexSearchRes(response: SearchResponse): List<String> {
+        if (response.isTimedOut || response.failedShards > 0 || response.skippedShards > 0) {
+            val errorMsg = "Sweep managed indices failed. Timed out: ${response.isTimedOut} | " +
+                "Failed shards: ${response.failedShards} | Skipped shards: ${response.skippedShards}."
+            logger.error(errorMsg)
+            throw ISMCoordinatorSearchException(message = errorMsg)
+        }
+        return response.hits.map { it.id }
+    }
+
+    /**
+     * Get managed-index for indices
+     *
+     * @return map of IndexUuid to [ManagedIndexConfig]
+     */
+    private suspend fun getManagedIndices(indexUuids: List<String>): Map<String, ManagedIndexConfig?> {
+        if (indexUuids.isEmpty()) return emptyMap()
+
+        val result: MutableMap<String, ManagedIndexConfig?> = mutableMapOf()
+
+        val mReq = MultiGetRequest()
+        indexUuids.forEach { mReq.add(INDEX_MANAGEMENT_INDEX, it) }
+        val mRes: MultiGetResponse = client.suspendUntil { multiGet(mReq, it) }
+        val responses = mRes.responses
+        if (responses.first().isFailed) {
+            // config index may not initialised yet
+            logger.error("get managed-index failed: ${responses.first().failure.failure}")
+            return result
+        }
+        mRes.forEach {
+            if (it.response.isExists) {
+                result[it.id] = contentParser(it.response.sourceAsBytesRef).parseWithType(
+                    it.response.id, it.response.seqNo, it.response.primaryTerm, ManagedIndexConfig.Companion::parse
+                )
+            }
+        }
+        return result
+    }
+
+    @OpenForTesting
+    private suspend fun updateManagedIndices(requests: List<DocWriteRequest<*>>) {
+        var requestsToRetry = requests
+        if (requestsToRetry.isEmpty()) return
+
+        retryPolicy.retry(logger, listOf(RestStatus.TOO_MANY_REQUESTS)) {
+            val bulkRequest = BulkRequest().add(requestsToRetry)
+            val bulkResponse: BulkResponse = client.suspendUntil { bulk(bulkRequest, it) }
+            val failedResponses = (bulkResponse.items ?: arrayOf()).filter { it.isFailed }
+            requestsToRetry = failedResponses.filter { it.status() == RestStatus.TOO_MANY_REQUESTS }
+                .map { bulkRequest.requests()[it.itemId] }
+
+            if (requestsToRetry.isNotEmpty()) {
+                val retryCause = failedResponses.first { it.status() == RestStatus.TOO_MANY_REQUESTS }.failure.cause
+                throw ExceptionsHelper.convertToElastic(retryCause)
+            }
+        }
+    }
+
+    /**
+     * Removes the [ManagedIndexMetaData] from the given list of [Index]es.
+     */
+    @OpenForTesting
+    @Suppress("TooGenericExceptionCaught")
+    suspend fun clearManagedIndexMetaData(deleteRequests: List<DocWriteRequest<*>>) {
+        if (!ismIndices.indexManagementIndexExists()) return
+
+        try {
+            if (deleteRequests.isEmpty()) return
+
+            retryPolicy.retry(logger) {
+                val bulkRequest = BulkRequest().add(deleteRequests)
+                val bulkResponse: BulkResponse = client.suspendUntil { bulk(bulkRequest, it) }
+                bulkResponse.forEach {
+                    if (it.isFailed) logger.error(
+                        "Failed to clear ManagedIndexMetadata for " +
+                            "index uuid: [${it.id}], failureMessage: ${it.failureMessage}"
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to clear ManagedIndexMetadata ", e)
+        }
+    }
+
+    companion object {
+        const val MAX_HITS = 10_000
+        const val BUFFER = 20L
+    }
+}
+
+class ISMCoordinatorSearchException(message: String, cause: Throwable? = null) : Exception(message, cause)

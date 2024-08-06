@@ -1,0 +1,16 @@
+plugins {
+    id 'java'
+    id "io.freefair.lombok"
+}
+
+sourceCompatibility = '11'
+targetCompatibility = '11'
+
+
+dependencies {
+    compile "org.antlr:antlr4-runtime:4.7.1"
+    compile group: 'com.google.guava', name: 'guava', version: '31.0.1-jre'
+    compile  "org.apache.logging.log4j:log4j-core:${versions.log4j}"
+
+    testCompile "junit:junit:${versions.junit}"
+}

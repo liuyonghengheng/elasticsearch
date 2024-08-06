@@ -1,0 +1,3 @@
+{
+ "privileges": ["indices:data/read*"]
+}

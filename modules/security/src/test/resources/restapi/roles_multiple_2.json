@@ -1,0 +1,12 @@
+{
+  "cluster" : [ "cluster:monitor*" ],
+  "cluster" : [ "cluster:monitor*" ],
+  "indices" : [ {
+    "names" : [ "sf" ],
+    "privileges" : [ "SECURITY_CRUD" ]
+  }, {
+    "names" : [ "pub" ],
+    "privileges" : [ "SECURITY_CRUD" ]
+  } ],
+  "tenant_permissions" : [ ]
+}

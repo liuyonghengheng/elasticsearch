@@ -1,0 +1,28 @@
+---
+_meta:
+  type: "roles"
+  config_version: 2
+security_public:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "cluster:monitor/main"
+  indices: []
+  tenant_permissions: []
+security_superuser:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "cluster:monitor/main"
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "indices:data/read/search"
+    - "indices:admin/shards/search_shards"
+  tenant_permissions: []

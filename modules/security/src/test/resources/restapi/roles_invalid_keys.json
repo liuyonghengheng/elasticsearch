@@ -1,0 +1,11 @@
+{
+  "kluster_permissions" : [ "cluster:monitor*", "indices:data/read/scroll" ],
+  "indexx_permissions" : [ {
+    "names" : [ "sf" ],
+    "privileges" : [ "SECURITY_READ", "indices:*" ]
+  }, {
+    "names" : [ "pub" ],
+    "privileges" : [ "SECURITY_READ" ]
+  } ],
+  "tenant_permissions" : [ ]
+}

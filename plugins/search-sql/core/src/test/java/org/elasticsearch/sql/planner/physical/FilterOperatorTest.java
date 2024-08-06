@@ -1,0 +1,68 @@
+
+
+
+package org.elasticsearch.sql.planner.physical;
+
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.when;
+import static org.elasticsearch.sql.data.model.ExprValueUtils.LITERAL_MISSING;
+import static org.elasticsearch.sql.data.model.ExprValueUtils.LITERAL_NULL;
+import static org.elasticsearch.sql.data.type.ExprCoreType.INTEGER;
+
+import com.google.common.collect.ImmutableMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.elasticsearch.sql.data.model.ExprTupleValue;
+import org.elasticsearch.sql.data.model.ExprValue;
+import org.elasticsearch.sql.data.model.ExprValueUtils;
+import org.elasticsearch.sql.expression.DSL;
+
+@ExtendWith(MockitoExtension.class)
+class FilterOperatorTest extends PhysicalPlanTestBase {
+  @Mock
+  private PhysicalPlan inputPlan;
+
+  @Test
+  public void filterTest() {
+    FilterOperator plan = new FilterOperator(new TestScan(),
+        dsl.equal(DSL.ref("response", INTEGER), DSL.literal(404)));
+    List<ExprValue> result = execute(plan);
+    assertEquals(1, result.size());
+    assertThat(result, containsInAnyOrder(ExprValueUtils
+        .tupleValue(ImmutableMap
+            .of("ip", "209.160.24.63", "action", "GET", "response", 404, "referer",
+                "www.amazon.com"))));
+  }
+
+  @Test
+  public void nullValueShouldBeenIgnored() {
+    LinkedHashMap<String, ExprValue> value = new LinkedHashMap<>();
+    value.put("response", LITERAL_NULL);
+    when(inputPlan.hasNext()).thenReturn(true, false);
+    when(inputPlan.next()).thenReturn(new ExprTupleValue(value));
+
+    FilterOperator plan = new FilterOperator(inputPlan,
+        dsl.equal(DSL.ref("response", INTEGER), DSL.literal(404)));
+    List<ExprValue> result = execute(plan);
+    assertEquals(0, result.size());
+  }
+
+  @Test
+  public void missingValueShouldBeenIgnored() {
+    LinkedHashMap<String, ExprValue> value = new LinkedHashMap<>();
+    value.put("response", LITERAL_MISSING);
+    when(inputPlan.hasNext()).thenReturn(true, false);
+    when(inputPlan.next()).thenReturn(new ExprTupleValue(value));
+
+    FilterOperator plan = new FilterOperator(inputPlan,
+        dsl.equal(DSL.ref("response", INTEGER), DSL.literal(404)));
+    List<ExprValue> result = execute(plan);
+    assertEquals(0, result.size());
+  }
+}

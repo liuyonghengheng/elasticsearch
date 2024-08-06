@@ -1,0 +1,177 @@
+
+
+
+package org.elasticsearch.sql.search.storage.script.aggregation;
+
+import static java.util.Collections.emptyMap;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.elasticsearch.sql.data.type.ExprCoreType.INTEGER;
+import static org.elasticsearch.sql.data.type.ExprCoreType.STRING;
+import static org.elasticsearch.sql.expression.DSL.literal;
+import static org.elasticsearch.sql.expression.DSL.ref;
+import static org.elasticsearch.sql.search.data.type.ElasticsearchDataType.EASYSEARCH_TEXT_KEYWORD;
+
+import com.google.common.collect.ImmutableMap;
+import java.util.Map;
+import lombok.RequiredArgsConstructor;
+import org.apache.lucene.index.LeafReaderContext;
+import org.junit.jupiter.api.DisplayNameGeneration;
+import org.junit.jupiter.api.DisplayNameGenerator;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.elasticsearch.index.fielddata.ScriptDocValues;
+import org.elasticsearch.search.lookup.LeafDocLookup;
+import org.elasticsearch.search.lookup.LeafSearchLookup;
+import org.elasticsearch.search.lookup.SearchLookup;
+import org.elasticsearch.sql.expression.DSL;
+import org.elasticsearch.sql.expression.Expression;
+import org.elasticsearch.sql.expression.config.ExpressionConfig;
+
+@DisplayNameGeneration(DisplayNameGenerator.ReplaceUnderscores.class)
+@ExtendWith(MockitoExtension.class)
+class ExpressionAggregationScriptTest {
+
+  private final DSL dsl = new ExpressionConfig().dsl(new ExpressionConfig().functionRepository());
+
+  @Mock
+  private SearchLookup lookup;
+
+  @Mock
+  private LeafSearchLookup leafLookup;
+
+  @Mock
+  private LeafReaderContext context;
+
+  @Test
+  void can_execute_expression_with_integer_field() {
+    assertThat()
+        .docValues("age", 30L) // DocValue only supports long
+        .evaluate(
+            dsl.abs(ref("age", INTEGER)))
+        .shouldMatch(30);
+  }
+
+  @Test
+  void can_execute_expression_with_integer_field_with_boolean_result() {
+    assertThat()
+        .docValues("age", 30L) // DocValue only supports long
+        .evaluate(
+            dsl.greater(ref("age", INTEGER), literal(20)))
+        .shouldMatch(true);
+  }
+
+  @Test
+  void can_execute_expression_with_text_keyword_field() {
+    assertThat()
+        .docValues("name.keyword", "John")
+        .evaluate(
+            dsl.equal(ref("name", EASYSEARCH_TEXT_KEYWORD), literal("John")))
+        .shouldMatch(true);
+  }
+
+  @Test
+  void can_execute_expression_with_null_field() {
+    assertThat()
+        .docValues("age", null)
+        .evaluate(ref("age", INTEGER))
+        .shouldMatch(null);
+  }
+
+  @Test
+  void can_execute_expression_with_missing_field() {
+    assertThat()
+        .docValues("age", 30)
+        .evaluate(ref("name", STRING))
+        .shouldMatch(null);
+  }
+
+  @Test
+  void can_execute_parse_expression() {
+    assertThat()
+        .docValues("age_string", "age: 30")
+        .evaluate(DSL.parsed(DSL.ref("age_string", STRING), DSL.literal("age: (?<age>\\d+)"),
+            DSL.literal("age")))
+        .shouldMatch("30");
+  }
+
+  private ExprScriptAssertion assertThat() {
+    return new ExprScriptAssertion(lookup, leafLookup, context);
+  }
+
+  @RequiredArgsConstructor
+  private static class ExprScriptAssertion {
+    private final SearchLookup lookup;
+    private final LeafSearchLookup leafLookup;
+    private final LeafReaderContext context;
+    private Object actual;
+
+    ExprScriptAssertion docValues() {
+      return this;
+    }
+
+    ExprScriptAssertion docValues(String name, Object value) {
+      LeafDocLookup leafDocLookup = mockLeafDocLookup(
+          ImmutableMap.of(name, new FakeScriptDocValues<>(value)));
+
+      when(lookup.getLeafSearchLookup(any())).thenReturn(leafLookup);
+      when(leafLookup.doc()).thenReturn(leafDocLookup);
+      return this;
+    }
+
+    ExprScriptAssertion docValues(String name1, Object value1,
+                                  String name2, Object value2) {
+      LeafDocLookup leafDocLookup = mockLeafDocLookup(
+          ImmutableMap.of(
+              name1, new FakeScriptDocValues<>(value1),
+              name2, new FakeScriptDocValues<>(value2)));
+
+      when(lookup.getLeafSearchLookup(any())).thenReturn(leafLookup);
+      when(leafLookup.doc()).thenReturn(leafDocLookup);
+      return this;
+    }
+
+    ExprScriptAssertion evaluate(Expression expr) {
+      ExpressionAggregationScript script =
+          new ExpressionAggregationScript(expr, lookup, context, emptyMap());
+      actual = script.execute();
+      return this;
+    }
+
+    void shouldMatch(Object expected) {
+      assertEquals(expected, actual);
+    }
+
+    private LeafDocLookup mockLeafDocLookup(Map<String, ScriptDocValues<?>> docValueByNames) {
+      LeafDocLookup leafDocLookup = mock(LeafDocLookup.class);
+      when(leafDocLookup.get(anyString()))
+          .thenAnswer(invocation -> docValueByNames.get(invocation.<String>getArgument(0)));
+      return leafDocLookup;
+    }
+  }
+
+  @RequiredArgsConstructor
+  private static class FakeScriptDocValues<T> extends ScriptDocValues<T> {
+    private final T value;
+
+    @Override
+    public void setNextDocId(int docId) {
+      throw new UnsupportedOperationException("Fake script doc values doesn't implement this yet");
+    }
+
+    @Override
+    public T get(int index) {
+      return value;
+    }
+
+    @Override
+    public int size() {
+      return 1;
+    }
+  }
+}

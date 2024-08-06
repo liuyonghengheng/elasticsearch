@@ -1,0 +1,397 @@
+---
+_meta:
+  type: "role"
+  config_version: 2
+security_unittest_1:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "*"
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "*"
+
+security_role_starfleet_library:
+  reserved: true
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster: []
+  indices:
+    - names:
+        - "abc*"
+      query: null
+      field_security: null
+      field_mask: null
+      privileges:
+        - "ALL"
+
+
+security_hidden:
+  reserved: false
+  hidden: true
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+    - "SECURITY_CLUSTER_ALL"
+  indices:
+    - names:
+        - "*"
+      query: null
+      field_security: null
+      field_mask: null
+      privileges:
+        - "ALL"
+
+security_reserved:
+  reserved: true
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+    - "SECURITY_CLUSTER_ALL"
+  indices:
+    - names:
+        - "*"
+      query: null
+      field_security: null
+      field_mask: null
+      privileges:
+        - "ALL"
+security_internal:
+  reserved: false
+  hidden: true
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_ALL"
+  indices:
+  - names:
+    - "abc*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "ALL"
+
+security_role_klingons1:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster: []
+  indices:
+  - names:
+    - "klingonempire"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "READ_UT"
+
+security_role_klingons2:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster: []
+  indices:
+  - names:
+    - "klingonempire"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "READ_UT"
+
+security_kibana4:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "cluster:monitor/nodes/info"
+  - "cluster:monitor/health"
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "indices:data/read/search-"
+    - "indices:data/read/msearch"
+    - "indices:admin/get"
+    - "indices:admin/validate/query"
+    - "indices:admin/mappings/fields/get"
+  - names:
+    - "?kibana"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "indices:data/write/index"
+    - "indices:data/write/delete"
+    - "indices:data/write/update"
+    - "indices:admin/mapping/put"
+    - "indices:data/read/get"
+    - "indices:admin/refresh"
+    - "indices:admin/validate/query"
+    - "indices:data/read/search"
+    - "indices:admin/mappings/fields/get"
+    - "indices:admin/exists"
+    - "indices:data/read/mget"
+
+security_theindex_admin:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster: []
+  indices:
+  - names:
+    - "theindex"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "ALL"
+
+security_power_user:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_MONITOR"
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "ALL"
+
+security_transport_client:
+  reserved: true
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "cluster:monitor/nodes/liveness"
+  indices: []
+
+security_remote_marvel_agent:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "indices:admin/template/put"
+  - "indices:admin/template/get"
+  indices:
+  - names:
+    - "?marvel-es-*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "ALL"
+
+security_zdummy_all:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "cluster:*"
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "ALL"
+
+security_admin:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_ALL"
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "ALL"
+
+security_superuser:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "cluster:*"
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "ALL"
+
+security_marvel_user:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster: []
+  indices:
+  - names:
+    - "?marvel-es-*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "READ_UT"
+  - names:
+    - "?kibana"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "indices:data/read/get"
+    - "indices:admin/validate/query"
+    - "indices:data/read/search"
+    - "indices:admin/mappings/fields/get"
+    - "indices:admin/exists"
+    - "indices:data/read/mget"
+
+security_logstash:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "indices:admin/template/get"
+  - "indices:admin/template/put"
+  indices:
+  - names:
+    - "logstash-*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "indices:data/write/delete"
+    - "indices:data/write/update"
+    - "indices:data/read/scroll"
+    - "indices:data/write/bulk"
+    - "indices:data/read/search"
+    - "SECURITY_CREATE_INDEX"
+
+security_flsdls:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "*"
+  indices:
+  - names:
+    - "*"
+    query: "{\"term\" : {\"_type\" : \"legends\"}}"
+    field_security:
+    - "fieldx"
+    - "field2.b"
+    - "field3.m.*"
+    field_mask: null
+    privileges:
+    - "*"
+
+security_user:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster: []
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "READ_UT"
+
+security_kibana4_server:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "cluster:monitor/nodes/info"
+  - "cluster:monitor/health"
+  indices:
+  - names:
+    - "?kibana"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "indices:data/write/index"
+    - "indices:data/write/delete"
+    - "indices:data/write/update"
+    - "indices:admin/mapping/put"
+    - "indices:data/read/get"
+    - "indices:admin/refresh"
+    - "indices:admin/validate/query"
+    - "indices:data/read/search"
+    - "indices:admin/mappings/fields/get"
+    - "indices:admin/create"
+    - "indices:admin/exists"
+    - "indices:data/read/mget"
+
+security_role_starfleet:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "cluster:monitor*"
+  - "indices:data/read/scroll"
+  - "*bulk*"
+  indices:
+  - names:
+    - "sf"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "READ_UT"
+    - "*bulk*"
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "READ_UT"
+
+security_role_starfleet_captains:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "cluster:monitor*"
+  - "*bulk*"
+  indices:
+  - names:
+    - "sf"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "CRUD_UT"
+  - names:
+    - "public"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "CRUD_UT"
+
+security_rest_api_access:
+  reserved: true

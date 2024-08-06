@@ -1,0 +1,110 @@
+
+
+buildscript {
+    repositories {
+        mavenLocal()
+        maven { url "https://aws.oss.sonatype.org/content/repositories/snapshots" }
+        maven { url 'https://plugins.gradle.org/m2/' }
+        mavenCentral()
+    }
+   dependencies {
+        classpath 'com.github.jengelman.gradle.plugins:shadow:6.1.0'
+    }
+}
+
+plugins {
+    id 'java'
+    id 'maven'
+}
+apply plugin: 'com.github.johnrengelman.shadow'
+
+sourceCompatibility = '11'
+targetCompatibility = '11'
+
+repositories {
+    mavenLocal()
+    maven { url "https://aws.oss.sonatype.org/content/repositories/snapshots" }
+    mavenCentral()
+}
+
+dependencies {
+    implementation group: 'org.apache.httpcomponents', name: 'httpclient', version: '4.5.13'
+    implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: "2.13.4.2"
+    implementation group: 'com.amazonaws', name: 'aws-java-sdk-core', version: '1.12.1'
+
+//    testImplementation('org.junit.jupiter:junit-jupiter-api:5.3.1')
+//    testImplementation('org.junit.jupiter:junit-jupiter-params:5.3.1')
+//    testImplementation('com.github.tomakehurst:wiremock:3.0.0-beta-2')
+//    testImplementation('org.mockito:mockito-core:2.23.0')
+//    testImplementation('org.junit.jupiter:junit-jupiter-engine:5.3.1')
+//    testImplementation('org.junit-pioneer:junit-pioneer:0.3.0')
+//    testImplementation('org.eclipse.jetty:jetty-server:11.0.14')
+//
+//    // Enforce wiremock to use latest guava and json-smart
+//    testImplementation('com.google.guava:guava:31.1-jre')
+//    testImplementation('net.minidev:json-smart:2.4.9')
+//
+//    testRuntimeOnly('org.slf4j:slf4j-simple:1.7.25') // capture WireMock logging
+//
+//    // JDBC drivers for comparison test. Somehow Apache Derby throws security permission exception.
+//    testImplementation fileTree('/build/libs') {
+//        include '*.jar'
+//        builtBy 'compileJdbc'
+//    }
+//    testImplementation group: 'com.h2database', name: 'h2', version: '2.1.210'
+//    testImplementation group: 'org.xerial', name: 'sqlite-jdbc', version: '3.28.0'
+//    testImplementation group: 'com.google.code.gson', name: 'gson', version: '2.8.9'
+}
+
+//task compileJdbc(type: Exec) {
+//    if (DefaultNativePlatform.getCurrentOperatingSystem().isWindows()) {
+//        commandLine './gradlew.bat', 'build'
+//        commandLine './gradlew.bat', 'shadowJar'
+//    } else {
+//        commandLine 'gradlew', 'build'
+//        commandLine './gradlew', 'shadowJar'
+//    }
+//}
+
+
+
+tasks.withType(JavaCompile) {
+    options.compilerArgs << "-Xlint:deprecation" << "-Xlint:unchecked"
+}
+
+static def getShadowPath(String path) {
+    return 'org.elasticsearch.sql.jdbc.shadow.' + path
+}
+
+shadowJar {
+    baseName = 'sql-jdbc'
+    classifier = ''
+    exclude 'META-INF/maven/commons-*/**'
+    exclude 'META-INF/maven/org.apache.*/**'
+    exclude 'META-INF/maven/joda-time/**'
+    exclude 'META-INF/maven/com.fasterxml.*/**'
+    exclude 'META-INF/services/com.fasterxml.*'
+    exclude 'META-INF/services/org.apache.logging*/**'
+    exclude 'META-INF/maven/com.amazonaws/**'
+    exclude 'META-INF/maven/software.amazon.*/**'
+    exclude 'META-INF/LICENSE*'
+    exclude 'META-INF/NOTICE*'
+    exclude 'META-INF/DEPENDENCIES'
+
+    relocate 'com.amazonaws', getShadowPath('com.amazonaws')
+    relocate 'org.apache', getShadowPath('org.apache')
+    relocate 'org.joda', getShadowPath('org.joda')
+    relocate 'com.fasterxml', getShadowPath('com.fasterxml')
+    relocate 'software.amazon', getShadowPath('software.amazon')
+}
+
+assemble.dependsOn shadowJar
+
+
+configurations.all {
+    // fixes https://www.mend.io/vulnerability-database/CVE-2023-24998
+    resolutionStrategy.force 'commons-fileupload:commons-fileupload:1.5'
+}
+
+
+

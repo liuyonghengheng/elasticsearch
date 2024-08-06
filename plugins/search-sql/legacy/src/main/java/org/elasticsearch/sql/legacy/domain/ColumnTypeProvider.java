@@ -1,0 +1,79 @@
+
+
+
+package org.elasticsearch.sql.legacy.domain;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+import org.elasticsearch.sql.legacy.antlr.semantic.types.Type;
+import org.elasticsearch.sql.legacy.antlr.semantic.types.base.ElasticsearchDataType;
+import org.elasticsearch.sql.legacy.antlr.semantic.types.special.Product;
+import org.elasticsearch.sql.legacy.executor.format.Schema;
+
+/**
+ * The definition of column type provider
+ */
+public class ColumnTypeProvider {
+    private final List<Schema.Type> typeList;
+
+    private static final Map<ElasticsearchDataType, Schema.Type> TYPE_MAP =
+            new ImmutableMap.Builder<ElasticsearchDataType, Schema.Type>()
+                    .put(ElasticsearchDataType.SHORT, Schema.Type.SHORT)
+                    .put(ElasticsearchDataType.LONG, Schema.Type.LONG)
+                    .put(ElasticsearchDataType.INTEGER, Schema.Type.INTEGER)
+                    .put(ElasticsearchDataType.FLOAT, Schema.Type.FLOAT)
+                    .put(ElasticsearchDataType.DOUBLE, Schema.Type.DOUBLE)
+                    .put(ElasticsearchDataType.KEYWORD, Schema.Type.KEYWORD)
+                    .put(ElasticsearchDataType.TEXT, Schema.Type.TEXT)
+                    .put(ElasticsearchDataType.STRING, Schema.Type.TEXT)
+                    .put(ElasticsearchDataType.DATE, Schema.Type.DATE)
+                    .put(ElasticsearchDataType.BOOLEAN, Schema.Type.BOOLEAN)
+                    .put(ElasticsearchDataType.UNKNOWN, Schema.Type.DOUBLE)
+                    .build();
+    public static final Schema.Type COLUMN_DEFAULT_TYPE = Schema.Type.DOUBLE;
+
+    public ColumnTypeProvider(Type type) {
+        this.typeList = convertOutputColumnType(type);
+    }
+
+    public ColumnTypeProvider() {
+        this.typeList = new ArrayList<>();
+    }
+
+    /**
+     * Get the type of column by index.
+     *
+     * @param index column index.
+     * @return column type.
+     */
+    public Schema.Type get(int index) {
+        if (typeList.isEmpty()) {
+            return COLUMN_DEFAULT_TYPE;
+        } else {
+            return typeList.get(index);
+        }
+    }
+
+    private List<Schema.Type> convertOutputColumnType(Type type) {
+        if (type instanceof Product) {
+            List<Type> types = ((Product) type).getTypes();
+            return types.stream().map(t -> convertType(t)).collect(Collectors.toList());
+        } else if (type instanceof ElasticsearchDataType) {
+            return ImmutableList.of(convertType(type));
+        } else {
+            return ImmutableList.of(COLUMN_DEFAULT_TYPE);
+        }
+    }
+
+    private Schema.Type convertType(Type type) {
+        try {
+            return TYPE_MAP.getOrDefault(type, COLUMN_DEFAULT_TYPE);
+        } catch (Exception e) {
+            return COLUMN_DEFAULT_TYPE;
+        }
+    }
+}

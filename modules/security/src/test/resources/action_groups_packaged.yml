@@ -1,0 +1,178 @@
+---
+_meta:
+  type: "privilege"
+  config_version: 2
+SECURITY_CLUSTER_ALL:
+  reserved: false
+  hidden: false
+  privileges:
+  - "cluster:*"
+  type: "cluster"
+  description: "Migrated from v6"
+ALL:
+  reserved: false
+  hidden: false
+  privileges:
+  - "SECURITY_INDICES_ALL"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_CRUD:
+  reserved: false
+  hidden: false
+  privileges:
+  - "SECURITY_READ"
+  - "SECURITY_WRITE"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_SEARCH:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/read/search*"
+  - "indices:data/read/msearch*"
+  - "SECURITY_SUGGEST"
+  type: "index"
+  description: "Migrated from v6"
+MONITOR:
+  reserved: false
+  hidden: false
+  privileges:
+  - "SECURITY_INDICES_MONITOR"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_DATA_ACCESS:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/*"
+  - "SECURITY_CRUD"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_CREATE_INDEX:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:admin/create"
+  - "indices:admin/mapping/put"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_WRITE:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/write*"
+  - "indices:admin/mapping/put"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_MANAGE_ALIASES:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:admin/aliases*"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_READ:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/read*"
+  - "indices:admin/mappings/fields/get*"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_INDICES_ALL:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:*"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_DELETE:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/write/delete*"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_CLUSTER_COMPOSITE_OPS:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/write/bulk"
+  - "indices:admin/aliases*"
+  - "SECURITY_CLUSTER_COMPOSITE_OPS_RO"
+  type: "cluster"
+  description: "Migrated from v6"
+SECURITY_CLUSTER_COMPOSITE_OPS_RO:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/read/mget"
+  - "indices:data/read/msearch"
+  - "indices:data/read/mtv"
+  - "indices:data/read/coordinate-msearch*"
+  - "indices:admin/aliases/exists*"
+  - "indices:admin/aliases/get*"
+  type: "cluster"
+  description: "Migrated from v6"
+SECURITY_GET:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/read/get*"
+  - "indices:data/read/mget*"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_MANAGE:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:monitor/*"
+  - "indices:admin/*"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_CLUSTER_MONITOR:
+  reserved: false
+  hidden: false
+  privileges:
+  - "cluster:monitor/*"
+  type: "cluster"
+  description: "Migrated from v6"
+SECURITY_MANAGE_SNAPSHOTS:
+  reserved: false
+  hidden: false
+  privileges:
+  - "cluster:admin/snapshot/*"
+  - "cluster:admin/repository/*"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_INDEX:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/write/index*"
+  - "indices:data/write/update*"
+  - "indices:admin/mapping/put"
+  - "indices:data/write/bulk*"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_UNLIMITED:
+  reserved: false
+  hidden: false
+  privileges:
+  - "*"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_INDICES_MONITOR:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:monitor/*"
+  type: "index"
+  description: "Migrated from v6"
+SECURITY_SUGGEST:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/read/suggest*"
+  type: "index"
+  description: "Migrated from v6"

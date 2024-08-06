@@ -1,0 +1,126 @@
+---
+_meta:
+  type: "privilege"
+  config_version: 2
+SECURITY_CLUSTER_ALL:
+  reserved: false
+  hidden: false
+  privileges:
+  - "cluster:*"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"
+ALL:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:*"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"
+SECURITY_CRUD:
+  reserved: false
+  hidden: false
+  privileges:
+  - "SECURITY_READ"
+  - "SECURITY_WRITE"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"
+SECURITY_SEARCH:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/read/search*"
+  - "indices:data/read/msearch*"
+  - "SECURITY_SUGGEST"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"
+MONITOR:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:monitor/*"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"
+SECURITY_DATA_ACCESS:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/*"
+  - "indices:admin/mapping/put"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"
+SECURITY_CREATE_INDEX:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:admin/create"
+  - "indices:admin/mapping/put"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"
+SECURITY_WRITE:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/write*"
+  - "indices:admin/mapping/put"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"
+SECURITY_MANAGE_ALIASES:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:admin/aliases*"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"
+SECURITY_READ:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/read*"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"
+SECURITY_DELETE:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/write/delete*"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"
+SECURITY_GET:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/read/get*"
+  - "indices:data/read/mget*"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"
+SECURITY_MANAGE:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:monitor/*"
+  - "indices:admin/*"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"
+SECURITY_CLUSTER_MONITOR:
+  reserved: false
+  hidden: false
+  privileges:
+  - "cluster:monitor/*"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"
+SECURITY_INDEX:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/write/index*"
+  - "indices:data/write/update*"
+  - "indices:admin/mapping/put"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"
+SECURITY_SUGGEST:
+  reserved: false
+  hidden: false
+  privileges:
+  - "indices:data/read/suggest*"
+  type: "unknown"
+  description: "Migrated from v6 (legacy)"

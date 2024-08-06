@@ -1,0 +1,22 @@
+{
+  "cluster" : [ "cluster:monitor1*" ],
+  "indices" : [ {
+    "names" : [ "sf1" ],
+    "privileges" : [ "SECURITY_CRUD" ]
+  }, {
+    "names" : [ "pub1" ],
+    "privileges" : [ "SECURITY_CRUD" ]
+  } ],
+  "tenant_permissions" : [ ]
+}
+{
+  "cluster" : [ "cluster:monitor2*" ],
+  "indices" : [ {
+    "names" : [ "sf2" ],
+    "privileges" : [ "SECURITY_CRUD" ]
+  }, {
+    "names" : [ "pub2" ],
+    "privileges" : [ "SECURITY_CRUD" ]
+  } ],
+  "tenant_permissions" : [ ]
+}

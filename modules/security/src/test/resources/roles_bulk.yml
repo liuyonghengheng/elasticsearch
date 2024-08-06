@@ -1,0 +1,32 @@
+---
+_meta:
+  type: "role"
+  config_version: 2
+bulk:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "indices:data/write/bulk"
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "indices:data/write/index"
+    - "indices:admin/mapping/put"
+    - "indices:admin/create"
+    - "indices:data/write/bulk[s]"
+
+bulk_test_user_role:
+  reserved: false
+  hidden: false
+  cluster:
+    - "*"
+  indices:
+    - names:
+        - "test"
+      privileges:
+        - "*"

@@ -1,0 +1,255 @@
+
+
+
+package org.elasticsearch.sql.data.model;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.elasticsearch.sql.data.model.ExprValueUtils.integerValue;
+import static org.elasticsearch.sql.data.type.ExprCoreType.TIME;
+import static org.elasticsearch.sql.data.type.ExprCoreType.TIMESTAMP;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import org.junit.jupiter.api.Test;
+import org.elasticsearch.sql.exception.ExpressionEvaluationException;
+import org.elasticsearch.sql.exception.SemanticCheckException;
+
+public class DateTimeValueTest {
+
+  private static final int NANOS_PRECISION_MAX = 9;
+
+  @Test
+  public void timeValueInterfaceTest() {
+    ExprValue timeValue = new ExprTimeValue("01:01:01");
+
+    assertEquals(TIME, timeValue.type());
+    assertEquals(LocalTime.parse("01:01:01"), timeValue.timeValue());
+    assertEquals("01:01:01", timeValue.value());
+    assertEquals("TIME '01:01:01'", timeValue.toString());
+    assertThrows(ExpressionEvaluationException.class, () -> integerValue(1).timeValue(),
+        "invalid to get timeValue from value of type INTEGER");
+  }
+
+  @Test
+  public void timestampValueInterfaceTest() {
+    ExprValue timestampValue = new ExprTimestampValue("2020-07-07 01:01:01");
+
+    assertEquals(TIMESTAMP, timestampValue.type());
+    assertEquals(ZonedDateTime.of(LocalDateTime.parse("2020-07-07T01:01:01"),
+        ZoneId.of("UTC")).toInstant(), timestampValue.timestampValue());
+    assertEquals("2020-07-07 01:01:01", timestampValue.value());
+    assertEquals("TIMESTAMP '2020-07-07 01:01:01'", timestampValue.toString());
+    assertEquals(LocalDate.parse("2020-07-07"), timestampValue.dateValue());
+    assertEquals(LocalTime.parse("01:01:01"), timestampValue.timeValue());
+    assertEquals(LocalDateTime.parse("2020-07-07T01:01:01"), timestampValue.datetimeValue());
+    assertThrows(ExpressionEvaluationException.class, () -> integerValue(1).timestampValue(),
+        "invalid to get timestampValue from value of type INTEGER");
+  }
+
+  @Test
+  public void dateValueInterfaceTest() {
+    ExprValue dateValue = new ExprDateValue("2012-07-07");
+
+    assertEquals(LocalDate.parse("2012-07-07"), dateValue.dateValue());
+    assertEquals(LocalTime.parse("00:00:00"), dateValue.timeValue());
+    assertEquals(LocalDateTime.parse("2012-07-07T00:00:00"), dateValue.datetimeValue());
+    assertEquals(ZonedDateTime.of(LocalDateTime.parse("2012-07-07T00:00:00"),
+        ZoneId.systemDefault()).toInstant(), dateValue.timestampValue());
+    ExpressionEvaluationException exception =
+        assertThrows(ExpressionEvaluationException.class, () -> integerValue(1).dateValue());
+    assertEquals("invalid to get dateValue from value of type INTEGER",
+        exception.getMessage());
+  }
+
+  @Test
+  public void datetimeValueInterfaceTest() {
+    ExprValue datetimeValue = new ExprDatetimeValue("2020-08-17 19:44:00");
+
+    assertEquals(LocalDateTime.parse("2020-08-17T19:44:00"), datetimeValue.datetimeValue());
+    assertEquals(LocalDate.parse("2020-08-17"), datetimeValue.dateValue());
+    assertEquals(LocalTime.parse("19:44:00"), datetimeValue.timeValue());
+    assertEquals(ZonedDateTime.of(LocalDateTime.parse("2020-08-17T19:44:00"),
+        ZoneId.of("UTC")).toInstant(), datetimeValue.timestampValue());
+    assertEquals("DATETIME '2020-08-17 19:44:00'", datetimeValue.toString());
+    assertThrows(ExpressionEvaluationException.class, () -> integerValue(1).datetimeValue(),
+        "invalid to get datetimeValue from value of type INTEGER");
+  }
+
+  @Test
+  public void dateInUnsupportedFormat() {
+    SemanticCheckException exception =
+        assertThrows(SemanticCheckException.class, () -> new ExprDateValue("2020-07-07Z"));
+    assertEquals("date:2020-07-07Z in unsupported format, please use yyyy-MM-dd",
+        exception.getMessage());
+  }
+
+  @Test
+  public void timeInUnsupportedFormat() {
+    SemanticCheckException exception =
+        assertThrows(SemanticCheckException.class, () -> new ExprTimeValue("01:01:0"));
+    assertEquals("time:01:01:0 in unsupported format, please use HH:mm:ss[.SSSSSSSSS]",
+        exception.getMessage());
+  }
+
+  @Test
+  public void timestampInUnsupportedFormat() {
+    SemanticCheckException exception =
+        assertThrows(SemanticCheckException.class,
+            () -> new ExprTimestampValue("2020-07-07T01:01:01Z"));
+    assertEquals(
+        "timestamp:2020-07-07T01:01:01Z in unsupported format, "
+            + "please use yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]",
+        exception.getMessage());
+  }
+
+  @Test
+  public void datetimeInUnsupportedFormat() {
+    SemanticCheckException exception =
+        assertThrows(SemanticCheckException.class,
+            () -> new ExprDatetimeValue("2020-07-07T01:01:01Z"));
+    assertEquals(
+        "datetime:2020-07-07T01:01:01Z in unsupported format, "
+            + "please use yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]",
+        exception.getMessage());
+  }
+
+  @Test
+  public void stringDateTimeValue() {
+    ExprValue stringValue = new ExprStringValue("2020-08-17 19:44:00");
+
+    assertEquals(LocalDateTime.parse("2020-08-17T19:44:00"), stringValue.datetimeValue());
+    assertEquals(LocalDate.parse("2020-08-17"), stringValue.dateValue());
+    assertEquals(LocalTime.parse("19:44:00"), stringValue.timeValue());
+    assertEquals("\"2020-08-17 19:44:00\"", stringValue.toString());
+
+    SemanticCheckException exception =
+        assertThrows(SemanticCheckException.class,
+            () -> new ExprStringValue("2020-07-07T01:01:01Z").datetimeValue());
+    assertEquals(
+        "datetime:2020-07-07T01:01:01Z in unsupported format, "
+            + "please use yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]",
+        exception.getMessage());
+  }
+
+  @Test
+  public void stringDateValue() {
+    ExprValue stringValue = new ExprStringValue("2020-08-17");
+
+    assertEquals(LocalDateTime.parse("2020-08-17T00:00:00"), stringValue.datetimeValue());
+    assertEquals(LocalDate.parse("2020-08-17"), stringValue.dateValue());
+    assertEquals("\"2020-08-17\"", stringValue.toString());
+
+    SemanticCheckException exception =
+        assertThrows(SemanticCheckException.class,
+            () -> new ExprStringValue("2020-07-07Z").dateValue());
+    assertEquals("date:2020-07-07Z in unsupported format, please use yyyy-MM-dd",
+        exception.getMessage());
+  }
+
+  @Test
+  public void stringTimeValue() {
+    ExprValue stringValue = new ExprStringValue("19:44:00");
+
+    assertEquals(LocalTime.parse("19:44:00"), stringValue.timeValue());
+    assertEquals("\"19:44:00\"", stringValue.toString());
+
+    SemanticCheckException exception =
+        assertThrows(SemanticCheckException.class,
+            () -> new ExprStringValue("01:01:0").timeValue());
+    assertEquals("time:01:01:0 in unsupported format, please use HH:mm:ss[.SSSSSSSSS]",
+        exception.getMessage());
+  }
+
+  @Test
+  public void timeWithVariableNanoPrecision() {
+    String timeWithNanosFormat = "10:11:12.%s";
+
+    // Check all lengths of nanosecond precision, up to max precision accepted
+    StringBuilder nanos = new StringBuilder();
+    for (int nanosPrecision = 1; nanosPrecision <= NANOS_PRECISION_MAX; nanosPrecision++) {
+      nanos.append(nanosPrecision);
+      String timeWithNanos = String.format(timeWithNanosFormat, nanos);
+
+      ExprValue timeValue = new ExprTimeValue(timeWithNanos);
+      assertEquals(LocalTime.parse(timeWithNanos), timeValue.timeValue());
+    }
+  }
+
+  @Test
+  public void timestampWithVariableNanoPrecision() {
+    String dateValue = "2020-08-17";
+    String timeWithNanosFormat = "10:11:12.%s";
+
+    // Check all lengths of nanosecond precision, up to max precision accepted
+    StringBuilder nanos = new StringBuilder();
+    for (int nanoPrecision = 1; nanoPrecision <= NANOS_PRECISION_MAX; nanoPrecision++) {
+      nanos.append(nanoPrecision);
+      String timeWithNanos = String.format(timeWithNanosFormat, nanos);
+
+      String timestampString = String.format("%s %s", dateValue, timeWithNanos);
+      ExprValue timestampValue = new ExprTimestampValue(timestampString);
+
+      assertEquals(LocalDate.parse(dateValue), timestampValue.dateValue());
+      assertEquals(LocalTime.parse(timeWithNanos), timestampValue.timeValue());
+      String localDateTime = String.format("%sT%s", dateValue, timeWithNanos);
+      assertEquals(LocalDateTime.parse(localDateTime), timestampValue.datetimeValue());
+    }
+  }
+
+  @Test
+  public void datetimeWithVariableNanoPrecision() {
+    String dateValue = "2020-08-17";
+    String timeWithNanosFormat = "10:11:12.%s";
+
+    // Check all lengths of nanosecond precision, up to max precision accepted
+    StringBuilder nanos = new StringBuilder();
+    for (int nanoPrecision = 1; nanoPrecision <= NANOS_PRECISION_MAX; nanoPrecision++) {
+      nanos.append(nanoPrecision);
+      String timeWithNanos = String.format(timeWithNanosFormat, nanos);
+
+      String datetimeString = String.format("%s %s", dateValue, timeWithNanos);
+      ExprValue datetimeValue = new ExprDatetimeValue(datetimeString);
+
+      assertEquals(LocalDate.parse(dateValue), datetimeValue.dateValue());
+      assertEquals(LocalTime.parse(timeWithNanos), datetimeValue.timeValue());
+      String localDateTime = String.format("%sT%s", dateValue, timeWithNanos);
+      assertEquals(LocalDateTime.parse(localDateTime), datetimeValue.datetimeValue());
+    }
+  }
+
+  @Test
+  public void timestampOverMaxNanoPrecision() {
+    SemanticCheckException exception =
+        assertThrows(SemanticCheckException.class,
+            () -> new ExprTimestampValue("2020-07-07 01:01:01.1234567890"));
+    assertEquals(
+        "timestamp:2020-07-07 01:01:01.1234567890 in unsupported format, "
+                + "please use yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]",
+        exception.getMessage());
+  }
+
+  @Test
+  public void datetimeOverMaxNanoPrecision() {
+    SemanticCheckException exception =
+        assertThrows(SemanticCheckException.class,
+            () -> new ExprDatetimeValue("2020-07-07 01:01:01.1234567890"));
+    assertEquals(
+        "datetime:2020-07-07 01:01:01.1234567890 in unsupported format, "
+                + "please use yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]",
+        exception.getMessage());
+  }
+
+  @Test
+  public void timeOverMaxNanoPrecision() {
+    SemanticCheckException exception =
+        assertThrows(SemanticCheckException.class,
+            () -> new ExprTimeValue("01:01:01.1234567890"));
+    assertEquals(
+        "time:01:01:01.1234567890 in unsupported format, please use HH:mm:ss[.SSSSSSSSS]",
+        exception.getMessage());
+  }
+}

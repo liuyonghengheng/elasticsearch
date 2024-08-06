@@ -1,0 +1,19 @@
+---
+_meta:
+  type: "roles"
+  config_version: 2
+security_superuser:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "*"
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "*"
+  tenant_permissions: []

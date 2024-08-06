@@ -1,0 +1,236 @@
+---
+_meta:
+  type: "role_mapping"
+  config_version: 2
+security_perf_wc_in:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "perf_wc_in"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_aaa:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "user_aaa"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_dls_multi2:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "dept_manager_multi"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_masked:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "user_masked"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_regex:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "regex"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_midsized_deals:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "dept_manager"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_dls_multi1:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "dept_manager_multi"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_deals_without_amount:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "dept_manager_fls"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_perf_wc_ex:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "perf_wc_ex"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_masked_custom:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "user_masked_custom"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_perf_named_only:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "perf_named_only"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_fls_fields_wc:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "fls_fields_wc"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_bbb:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "user_bbb"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_fls_fields:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "fls_fields"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_dls_without_field_perm:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "dept_manager_fls_dls"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_perf_named_ex:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "perf_named_ex"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_deals_without_amount_reversed_fields:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "dept_manager_fls_reversed_fields"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_human_resources_trainee:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "human_resources_trainee"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_masked_nowc:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "user_masked_nowc"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_masked_nowc1:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "user_masked_nowc1"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_superuser:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "admin"
+  - "user_combined"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_public:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "*"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_logstash:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "security_logstash"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_prop_replace:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "prop_replace"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_combined:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "user_combined"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_date_math:
+  users:
+    - date_math
+security_fls_exists:
+  users:
+    - fls_exists

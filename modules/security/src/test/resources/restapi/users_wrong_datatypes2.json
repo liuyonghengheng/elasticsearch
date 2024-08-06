@@ -1,0 +1,7 @@
+{
+  "password": 123,
+  "external_roles": [
+    "role1",
+    "role2"
+  ]
+}

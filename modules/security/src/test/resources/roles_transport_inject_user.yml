@@ -1,0 +1,13 @@
+---
+_meta:
+  type: "role_mapping"
+  config_version: 2
+security_superuser:
+  reserved: false
+  hidden: false
+  external_roles: ["injecttest"]
+  hosts: []
+  users:
+    - "nagilum"
+  and_external_roles: []
+  description: "Migrated from v6"

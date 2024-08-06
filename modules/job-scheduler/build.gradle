@@ -1,0 +1,23 @@
+esplugin {
+  description 'INFINI Elasticsearch Job Scheduler Plugin'
+  classname 'org.elasticsearch.jobscheduler.JobSchedulerPlugin'
+}
+
+tasks.named("dependencyLicenses").configure { enabled = false }
+tasks.named("dependenciesInfo").configure {enabled = false }
+//tasks.named("dependenciesGraph").configure {enabled = false }
+tasks.named("forbiddenApisMain").configure {enabled = false }
+tasks.named("forbiddenPatterns").configure {enabled = false }
+tasks.named("forbiddenApisTest").configure {enabled = false }
+tasks.named("javadoc").configure {enabled = false }
+
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  //api project(':client:rest-high-level')
+  api "com.cronutils:cron-utils:9.2.0"
+
+}

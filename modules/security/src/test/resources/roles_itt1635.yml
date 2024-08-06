@@ -1,0 +1,49 @@
+---
+_meta:
+  type: "roles"
+  config_version: 2
+esb_1:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_COMPOSITE_OPS"
+  indices:
+  - names:
+    - "esb-prod-1"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "*"
+  tenant_permissions: []
+esb_5:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_COMPOSITE_OPS"
+  indices:
+  - names:
+    - "esb-prod-5"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "*"
+  tenant_permissions: []
+esb_3:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_COMPOSITE_OPS"
+  indices:
+  - names:
+    - "esb-prod-3"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "*"
+  tenant_permissions: []

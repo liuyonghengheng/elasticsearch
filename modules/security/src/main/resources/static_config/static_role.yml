@@ -1,0 +1,57 @@
+---
+_meta:
+  type: "role"
+  config_version: 2
+
+superuser:
+  reserved: true
+  hidden: false
+  static: true
+  description: "Allow full access to all indices and all cluster APIs"
+  cluster:
+    - "*"
+  indices:
+    - names:
+        - "*"
+      privileges:
+        - "*"
+
+all_access:
+  reserved: true
+  hidden: false
+  static: true
+  description: "Allow full access to all indices and all cluster APIs"
+  cluster:
+    - "*"
+  indices:
+    - names:
+        - "*"
+      privileges:
+        - "*"
+
+readall_and_monitor:
+  reserved: true
+  hidden: false
+  static: true
+  description: "Provide the minimum permissions for to readall indices and monitor the cluster"
+  cluster:
+    - "cluster_monitor"
+    - "cluster_composite_ops_ro"
+  indices:
+    - names:
+        - "*"
+      privileges:
+        - "read"
+
+readall:
+  reserved: true
+  hidden: false
+  static: true
+  description: "Provide the minimum permissions for to readall indices"
+  cluster:
+    - "cluster_composite_ops_ro"
+  indices:
+    - names:
+        - "*"
+      privileges:
+        - "read"

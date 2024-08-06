@@ -1,0 +1,18 @@
+
+
+
+package org.elasticsearch.sql.legacy.query.planner.resource.monitor;
+
+/**
+ * Interface for different monitor component
+ */
+public interface Monitor {
+
+    /**
+     * Is resource being monitored exhausted.
+     *
+     * @return true if yes
+     */
+    boolean isHealthy();
+
+}

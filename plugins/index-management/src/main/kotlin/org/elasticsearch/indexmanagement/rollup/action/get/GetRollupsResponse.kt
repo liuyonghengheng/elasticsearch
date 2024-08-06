@@ -1,0 +1,70 @@
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+package org.elasticsearch.indexmanagement.rollup.action.get
+
+import org.elasticsearch.action.ActionResponse
+import org.elasticsearch.common.io.stream.StreamInput
+import org.elasticsearch.common.io.stream.StreamOutput
+import org.elasticsearch.common.xcontent.ToXContent
+import org.elasticsearch.common.xcontent.ToXContentObject
+import org.elasticsearch.common.xcontent.XContentBuilder
+import org.elasticsearch.indexmanagement.indexstatemanagement.util.XCONTENT_WITHOUT_TYPE_AND_USER
+import org.elasticsearch.indexmanagement.rollup.model.Rollup
+import org.elasticsearch.indexmanagement.rollup.model.Rollup.Companion.ROLLUP_TYPE
+import org.elasticsearch.indexmanagement.util._ID
+import org.elasticsearch.indexmanagement.util._PRIMARY_TERM
+import org.elasticsearch.indexmanagement.util._SEQ_NO
+import org.elasticsearch.rest.RestStatus
+import java.io.IOException
+
+class GetRollupsResponse : ActionResponse, ToXContentObject {
+    val rollups: List<Rollup>
+    val totalRollups: Int
+    val status: RestStatus
+
+    constructor(
+        rollups: List<Rollup>,
+        totalRollups: Int,
+        status: RestStatus
+    ) : super() {
+        this.rollups = rollups
+        this.totalRollups = totalRollups
+        this.status = status
+    }
+
+    @Throws(IOException::class)
+    constructor(sin: StreamInput) : this(
+        rollups = sin.readList(::Rollup),
+        totalRollups = sin.readInt(),
+        status = sin.readEnum(RestStatus::class.java)
+    )
+
+    @Throws(IOException::class)
+    override fun writeTo(out: StreamOutput) {
+        out.writeCollection(rollups)
+        out.writeInt(totalRollups)
+        out.writeEnum(status)
+    }
+
+    @Throws(IOException::class)
+    override fun toXContent(builder: XContentBuilder, params: ToXContent.Params): XContentBuilder {
+        return builder.startObject()
+            .field("total_rollups", totalRollups)
+            .startArray("rollups")
+            .apply {
+                for (rollup in rollups) {
+                    this.startObject()
+                        .field(_ID, rollup.id)
+                        .field(_SEQ_NO, rollup.seqNo)
+                        .field(_PRIMARY_TERM, rollup.primaryTerm)
+                        .field(ROLLUP_TYPE, rollup, XCONTENT_WITHOUT_TYPE_AND_USER)
+                        .endObject()
+                }
+            }
+            .endArray()
+            .endObject()
+    }
+}

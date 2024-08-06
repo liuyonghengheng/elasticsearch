@@ -1,0 +1,15 @@
+{
+  "cluster": [
+    "SECURITY_UNLIMITED"
+  ],
+  "indices": [{
+    "names": [
+      "*"
+    ],
+    "field_security": [],
+    "field_mask": [],
+    "privileges": [
+      "SECURITY_UNLIMITED"
+    ]
+  }]
+}

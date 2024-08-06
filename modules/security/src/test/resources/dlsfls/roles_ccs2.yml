@@ -1,0 +1,44 @@
+---
+_meta:
+  type: "roles"
+  config_version: 2
+security_human_resources_trainee:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "*"
+  indices:
+  - names:
+    - "humanresources"
+    query: "{ \"bool\": { \"must_not\": { \"match\": { \"Salary\": \"salary1\"  }}}}"
+    field_security:
+    - "FirstName"
+    - "LastName*"
+    - "Salary*"
+    - "XXX"
+    - "CCSRules"
+    field_mask: null
+    privileges:
+    - "SECURITY_READ"
+    - "indices:admin/shards/search_shards"
+  - names:
+    - "?kibana"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "ALL"
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "indices:data/read/field_caps"
+  tenant_permissions:
+  - tenant_patterns:
+    - "human_resources"
+    - "performance_data"
+    privileges:
+    - "kibana_all_read"

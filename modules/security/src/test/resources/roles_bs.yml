@@ -1,0 +1,57 @@
+---
+_meta:
+  type: "roles"
+  config_version: 2
+public:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_COMPOSITE_OPS"
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "indices:admin/mapping/put"
+    - "indices:admin/create"
+    - "indices:data/write/bulk[s]"
+  tenant_permissions: []
+security_superuser:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "*"
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "ALL"
+  tenant_permissions: []
+role_klingons1:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster: []
+  indices:
+  - names:
+    - "test"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "*"
+  - names:
+    - "lorem"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "indices:data/write/index"
+  tenant_permissions: []

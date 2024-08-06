@@ -1,0 +1,43 @@
+
+
+
+package org.elasticsearch.sql.legacy.utils;
+
+import static org.elasticsearch.sql.legacy.utils.Util.toSqlExpr;
+
+import com.alibaba.druid.sql.SQLUtils;
+import com.alibaba.druid.sql.ast.expr.SQLQueryExpr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.elasticsearch.sql.legacy.rewriter.identifier.AnonymizeSensitiveDataRule;
+
+/**
+ * Utility class to mask sensitive information in incoming SQL queries
+ */
+public class QueryDataAnonymizer {
+
+    private static final Logger LOG = LogManager.getLogger(QueryDataAnonymizer.class);
+
+    /**
+     * This method is used to anonymize sensitive data in SQL query.
+     * Sensitive data includes index names, column names etc.,
+     * which in druid parser are parsed to SQLIdentifierExpr instances
+     * @param query entire sql query string
+     * @return sql query string with all identifiers replaced with "***"
+     */
+    public static String anonymizeData(String query) {
+        String resultQuery;
+        try {
+            AnonymizeSensitiveDataRule rule = new AnonymizeSensitiveDataRule();
+            SQLQueryExpr sqlExpr = (SQLQueryExpr) toSqlExpr(query);
+            rule.rewrite(sqlExpr);
+            resultQuery = SQLUtils.toMySqlString(sqlExpr).replaceAll("0", "number")
+                    .replaceAll("false", "boolean_literal")
+                    .replaceAll("[\\n][\\t]+", " ");
+        } catch (Exception e) {
+            LOG.debug("Caught an exception when anonymizing sensitive data");
+            resultQuery = query;
+        }
+        return resultQuery;
+    }
+}

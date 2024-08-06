@@ -1,0 +1,33 @@
+---
+_meta:
+  type: "role_mapping"
+  config_version: 2
+security_superuser:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "admin"
+  - "admin2"
+  - "CN=spock,OU=client,O=client,L=Test,C=DE"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_public:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "*"
+  and_external_roles: []
+  description: "Migrated from v6"
+security_worf:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "worf"
+  and_external_roles: []
+  description: "Migrated from v6"

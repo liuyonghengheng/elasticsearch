@@ -1,0 +1,68 @@
+---
+_meta:
+  type: "role_mapping"
+  config_version: 2
+security_unittest_1:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+  - "CN=spock,OU=client,O=client,L=Test,C=DE"
+  and_external_roles: []
+  description: "Migrated from v6"
+
+security_hidden:
+  reserved: false
+  hidden: true
+  external_roles:
+  - "hidden*"
+  hosts: []
+  users: []
+  and_external_roles: []
+  description: "Migrated from v6"
+
+security_reserved:
+  reserved: true
+  hidden: false
+  external_roles:
+  - "reserved*"
+  hosts: []
+  users: ["nagilum"]
+  and_external_roles: []
+  description: "Migrated from v6"
+
+security_role_starfleet_library:
+  reserved: true
+  hidden: false
+  external_roles:
+  - "starfleet*"
+  - "ambassador"
+  hosts: []
+  users: []
+  and_external_roles: []
+  description: "Migrated from v6"
+security_role_vulcans_admin:
+  reserved: false
+  hidden: false
+  external_roles:
+  - "vulcanadmin"
+  hosts: []
+  users: []
+  and_external_roles: []
+  description: "Migrated from v6"
+security_role_klingons1:
+  reserved: false
+  hidden: false
+  external_roles:
+  - "klingon"
+  hosts: []
+  users: []
+  and_external_roles: []
+  description: "Migrated from v6"
+
+superuser:
+  reserved: false
+  external_roles:
+    - "admin"
+  description: "Maps admin to superuser"

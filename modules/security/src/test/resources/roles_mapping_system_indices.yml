@@ -1,0 +1,14 @@
+---
+_meta:
+  type: "role_mapping"
+  config_version: 2
+
+security_superuser:
+  reserved: false
+  hidden: false
+  external_roles: []
+  hosts: []
+  users:
+    - "admin_superuser"
+  and_external_roles: []
+  description: "Full index permissions"

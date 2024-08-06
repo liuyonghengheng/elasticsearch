@@ -1,0 +1,465 @@
+---
+_meta:
+  type: "roles"
+  config_version: 2
+security_own_index:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_COMPOSITE_OPS"
+  indices:
+  - names:
+    - "${username}"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_INDICES_ALL"
+  tenant_permissions: []
+security_kibana_testindex:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_COMPOSITE_OPS_RO"
+  indices:
+  - names:
+    - "test*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_READ"
+    - "indices:admin/mappings/fields/get*"
+  - names:
+    - ".kibana"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_INDICES_ALL"
+  tenant_permissions:
+  - tenant_patterns:
+    - "test_tenant_rw"
+    privileges:
+    - "kibana_all_write"
+  - tenant_patterns:
+    - "test_tenant_ro"
+    privileges:
+    - "kibana_all_read"
+security_human_resources:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_COMPOSITE_OPS"
+  indices:
+  - names:
+    - "humanresources"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "*"
+  - names:
+    - "?kibana"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "ALL"
+  tenant_permissions:
+  - tenant_patterns:
+    - "human_resources"
+    - "performance_data"
+    - "management"
+    - "PerFormance    ___Reviews/&%%/&&/"
+    - "PerFormance ___Reviews%%%!!!"
+    privileges:
+    - "kibana_all_write"
+  - tenant_patterns:
+    - "business_intelligence"
+    privileges:
+    - "kibana_all_read"
+security_human_resources_trainee:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_COMPOSITE_OPS_RO"
+  indices:
+  - names:
+    - "humanresources"
+    query: "{ \"bool\": { \"must_not\": { \"match\": { \"Designation\": \"CEO\"  }}}}"
+    field_security:
+    - "Designation"
+    - "FirstName"
+    - "LastName"
+    - "Salary"
+    field_mask: null
+    privileges:
+    - "SECURITY_CRUD"
+  - names:
+    - "?kibana"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "ALL"
+  tenant_permissions:
+  - tenant_patterns:
+    - "human_resources"
+    - "performance_data"
+    - "business_intelligence"
+    privileges:
+    - "kibana_all_read"
+security_readonly_and_monitor:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_MONITOR"
+  - "SECURITY_CLUSTER_COMPOSITE_OPS_RO"
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_INDICES_ALL"
+  tenant_permissions: []
+security_kibana:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "MONITOR"
+  - "SECURITY_CLUSTER_COMPOSITE_OPS_RO"
+  indices:
+  - names:
+    - "?kibana"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_READ"
+    - "SECURITY_DELETE"
+    - "SECURITY_MANAGE"
+    - "SECURITY_INDEX"
+  - names:
+    - "?kibana-6"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_READ"
+    - "SECURITY_DELETE"
+    - "SECURITY_MANAGE"
+    - "SECURITY_INDEX"
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "indices:data/read/field_caps*"
+  tenant_permissions: []
+security_manage_snapshots:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_MANAGE_SNAPSHOTS"
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "indices:data/write/index"
+    - "indices:admin/create"
+  tenant_permissions: []
+security_kibana_server:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_MONITOR"
+  - "SECURITY_CLUSTER_COMPOSITE_OPS"
+  indices:
+  - names:
+    - "?kibana"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_INDICES_ALL"
+  tenant_permissions: []
+security_public:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "cluster:monitor/main"
+  - "SECURITY_CLUSTER_COMPOSITE_OPS_RO"
+  indices: []
+  tenant_permissions: []
+security_superuser:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_UNLIMITED"
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_UNLIMITED"
+  tenant_permissions:
+  - tenant_patterns:
+    - "adm_tenant"
+    - "test_tenant_ro"
+    privileges:
+    - "kibana_all_write"
+security_logstash:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "indices:admin/template/get"
+  - "indices:admin/template/put"
+  - "SECURITY_CLUSTER_MONITOR"
+  - "SECURITY_CLUSTER_COMPOSITE_OPS"
+  indices:
+  - names:
+    - "logstash-*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_CRUD"
+    - "SECURITY_CREATE_INDEX"
+  - names:
+    - "*beat*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_CRUD"
+    - "SECURITY_CREATE_INDEX"
+  tenant_permissions: []
+security_ua:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "*"
+  indices:
+  - names:
+    - "indexa*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "*"
+  - names:
+    - "permitnotexistentindex"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "*"
+  - names:
+    - "?kibana"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "ALL"
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "indices:data/read/field_caps"
+  tenant_permissions: []
+security_finance:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_COMPOSITE_OPS_RO"
+  indices:
+  - names:
+    - "finance"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "*"
+  - names:
+    - "humanresources"
+    query: null
+    field_security:
+    - "Designation"
+    - "FirstName"
+    - "LastName"
+    - "Salary"
+    field_mask: null
+    privileges:
+    - "SECURITY_READ"
+  - names:
+    - "?kibana"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "ALL"
+  tenant_permissions:
+  - tenant_patterns:
+    - "finance"
+    - "finance_management"
+    - "performance_data"
+    - "management"
+    - "business_intelligence"
+    privileges:
+    - "kibana_all_write"
+  - tenant_patterns:
+    - "human_resources"
+    privileges:
+    - "kibana_all_read"
+security_readonly_dlsfls:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_COMPOSITE_OPS_RO"
+  indices:
+  - names:
+    - "/\\S*/"
+    query: "{\"term\" : {\"_type\" : \"legends\"}}"
+    field_security:
+    - "aaa"
+    - "bbb"
+    field_mask: null
+    privileges:
+    - "SECURITY_READ"
+  tenant_permissions: []
+security_finance_trainee:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_COMPOSITE_OPS_RO"
+  indices:
+  - names:
+    - "finance"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_CRUD"
+  - names:
+    - "?kibana"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "ALL"
+  tenant_permissions:
+  - tenant_patterns:
+    - "finance"
+    privileges:
+    - "kibana_all_read"
+security_role_starfleet:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_COMPOSITE_OPS"
+  indices:
+  - names:
+    - "sf"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_READ"
+    - "SECURITY_INDICES_ALL"
+  - names:
+    - "pub*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_READ"
+  tenant_permissions:
+  - tenant_patterns:
+    - "enterprise_tenant"
+    - "test_tenant_ro"
+    privileges:
+    - "kibana_all_write"
+security_readall:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "SECURITY_CLUSTER_COMPOSITE_OPS_RO"
+  indices:
+  - names:
+    - "*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_READ"
+  tenant_permissions: []
+security_ub:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "*"
+  indices:
+  - names:
+    - "indexb"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "*"
+  tenant_permissions: []
+security_role_starfleet_captains:
+  reserved: false
+  hidden: false
+  description: "Migrated from v6 (all types mapped)"
+  cluster:
+  - "cluster:monitor*"
+  - "SECURITY_CLUSTER_COMPOSITE_OPS"
+  indices:
+  - names:
+    - "sf"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_CRUD"
+  - names:
+    - "pub*"
+    query: null
+    field_security: null
+    field_mask: null
+    privileges:
+    - "SECURITY_CRUD"
+  tenant_permissions:
+  - tenant_patterns:
+    - "command_tenant"
+    privileges:
+    - "kibana_all_write"

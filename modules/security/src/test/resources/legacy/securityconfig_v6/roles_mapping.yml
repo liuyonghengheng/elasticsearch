@@ -1,0 +1,34 @@
+# In this file users, backendroles and hosts can be mapped to INFINI Elasticsearch Security roles.
+# Permissions for INFINI Elasticsearch Security roles are configured in security_role.yml
+
+security_superuser:
+  readonly: true
+  backendroles:
+    - admin
+
+security_logstash:
+  backendroles:
+    - logstash
+
+security_kibana_server:
+  readonly: true
+  users:
+    - kibanaserver
+
+security_kibana_user:
+  backendroles:
+    - kibanauser
+
+security_readall:
+  readonly: true
+  backendroles:
+    - readall
+
+security_manage_snapshots:
+  readonly: true
+  backendroles:
+    - snapshotrestore
+
+security_own_index:
+  users:
+    - '*'

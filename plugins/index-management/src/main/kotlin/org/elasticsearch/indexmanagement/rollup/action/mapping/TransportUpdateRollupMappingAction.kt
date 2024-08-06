@@ -1,0 +1,140 @@
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+package org.elasticsearch.indexmanagement.rollup.action.mapping
+
+import org.apache.logging.log4j.LogManager
+import org.elasticsearch.action.ActionListener
+import org.elasticsearch.action.admin.indices.mapping.put.PutMappingRequest
+import org.elasticsearch.action.support.ActionFilters
+import org.elasticsearch.action.support.master.TransportMasterNodeAction
+import org.elasticsearch.action.support.master.AcknowledgedResponse
+import org.elasticsearch.client.Client
+import org.elasticsearch.cluster.ClusterState
+import org.elasticsearch.cluster.block.ClusterBlockException
+import org.elasticsearch.cluster.block.ClusterBlockLevel
+import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver
+import org.elasticsearch.cluster.service.ClusterService
+import org.elasticsearch.common.bytes.BytesReference
+import org.elasticsearch.common.inject.Inject
+import org.elasticsearch.common.io.stream.StreamInput
+import org.elasticsearch.common.io.stream.Writeable
+import org.elasticsearch.common.xcontent.XContentFactory
+import org.elasticsearch.common.xcontent.XContentHelper
+import org.elasticsearch.common.xcontent.XContentType
+import org.elasticsearch.indexmanagement.indexstatemanagement.util.XCONTENT_WITHOUT_TYPE
+import org.elasticsearch.indexmanagement.rollup.util.RollupFieldValueExpressionResolver
+import org.elasticsearch.indexmanagement.util.IndexUtils.Companion._META
+import org.elasticsearch.indexmanagement.util._DOC
+import org.elasticsearch.threadpool.ThreadPool
+import org.elasticsearch.transport.TransportService
+import java.lang.Exception
+
+class TransportUpdateRollupMappingAction @Inject constructor(
+    threadPool: ThreadPool,
+    clusterService: ClusterService,
+    transportService: TransportService,
+    actionFilters: ActionFilters,
+    indexNameExpressionResolver: IndexNameExpressionResolver,
+    val client: Client
+) : TransportMasterNodeAction<UpdateRollupMappingRequest, AcknowledgedResponse>(
+    UpdateRollupMappingAction.INSTANCE.name(),
+    transportService,
+    clusterService,
+    threadPool,
+    actionFilters,
+    Writeable.Reader { UpdateRollupMappingRequest(it) },
+    indexNameExpressionResolver
+) {
+
+    private val log = LogManager.getLogger(javaClass)
+
+    override fun checkBlock(request: UpdateRollupMappingRequest, state: ClusterState): ClusterBlockException? {
+        val targetIndexResolvedName = RollupFieldValueExpressionResolver.resolve(request.rollup, request.rollup.targetIndex)
+        return state.blocks.indicesBlockedException(ClusterBlockLevel.METADATA_WRITE, arrayOf(targetIndexResolvedName))
+    }
+
+    @Suppress("ReturnCount", "LongMethod")
+    override fun masterOperation(
+        request: UpdateRollupMappingRequest,
+        state: ClusterState,
+        listener: ActionListener<AcknowledgedResponse>
+    ) {
+        val targetIndexResolvedName = RollupFieldValueExpressionResolver.resolve(request.rollup, request.rollup.targetIndex)
+        val index = state.metadata.index(targetIndexResolvedName)
+        if (index == null) {
+            log.debug("Could not find index [$index]")
+            return listener.onFailure(IllegalStateException("Could not find index [$index]"))
+        }
+        val mappings = index.mapping()
+        if (mappings == null) {
+            log.debug("Could not find mapping for index [$index]")
+            return listener.onFailure(IllegalStateException("Could not find mapping for index [$index]"))
+        }
+        val source = mappings.sourceAsMap
+        if (source == null) {
+            log.debug("Could not find source for index mapping [$index]")
+            return listener.onFailure(IllegalStateException("Could not find source for index mapping [$index]"))
+        }
+
+        val rollup = XContentHelper.convertToMap(
+            BytesReference.bytes(request.rollup.toXContent(XContentFactory.jsonBuilder(), XCONTENT_WITHOUT_TYPE)),
+            false,
+            XContentType.JSON
+        ).v2()
+        val metaMappings = mutableMapOf<String, Any>()
+        // TODO: Clean this up
+        val meta = source[_META]
+        if (meta == null) {
+            // TODO: Is schema_version always present?
+            log.debug("Could not find meta mappings for index [$index], creating meta mappings")
+            val rollupJobEntries = mapOf<String, Any>(request.rollup.id to rollup)
+            val rollups = mapOf<String, Any>("rollups" to rollupJobEntries)
+            metaMappings[_META] = rollups
+        } else {
+            val rollups = (meta as Map<*, *>)["rollups"]
+            if (rollups == null) {
+                log.debug("Could not find meta rollup mappings for index [$index], creating meta rollup mappings")
+                val rollupJobEntries = mapOf<String, Any>(request.rollup.id to rollup)
+                val updatedRollups = mapOf<String, Any>("rollups" to rollupJobEntries)
+                metaMappings[_META] = updatedRollups
+            } else {
+                if ((rollups as Map<*, *>).containsKey(request.rollup.id)) {
+                    log.debug("Meta rollup mappings already contain rollup ${request.rollup.id} for index [$index]")
+                    return listener.onFailure(
+                        IllegalStateException("Meta rollup mappings already contain rollup ${request.rollup.id} for index [$index]")
+                    )
+                }
+
+                // In this case rollup mappings exists and there is no entry for request.rollup.id
+                val rollupJobEntries = rollups.toMutableMap()
+                rollupJobEntries[request.rollup.id] = rollup
+                val updatedRollups = mapOf<String, Any>("rollups" to rollupJobEntries)
+                metaMappings[_META] = updatedRollups
+            }
+        }
+
+        // TODO: Does schema_version get overwritten?
+        //val putMappingRequest = PutMappingRequest(targetIndexResolvedName).source(metaMappings)
+        val putMappingRequest = PutMappingRequest(targetIndexResolvedName).type(_DOC).source(metaMappings)
+
+        client.admin().indices().putMapping(
+            putMappingRequest,
+            object : ActionListener<AcknowledgedResponse> {
+                override fun onResponse(response: AcknowledgedResponse) {
+                    listener.onResponse(response)
+                }
+
+                override fun onFailure(e: Exception) {
+                    listener.onFailure(e)
+                }
+            }
+        )
+    }
+
+    override fun read(sin: StreamInput): AcknowledgedResponse = AcknowledgedResponse(sin)
+
+    override fun executor(): String = ThreadPool.Names.SAME
+}
