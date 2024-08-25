@@ -27,6 +27,8 @@ public class SegmentsCopyInfo {
 
     public final Map<String, StoreFileMetadata> filesMetadata;
 
+    public long refreshedCheckpoint;
+
     public SegmentsCopyInfo(
         List<String> files,
         Map<String, StoreFileMetadata> filesMetadata,
@@ -36,7 +38,8 @@ public class SegmentsCopyInfo {
 //        Set<String> completedMergeFiles,
         long primaryTerm,
         SegmentInfos infos,
-        IndexWriter indexWriter) {
+        IndexWriter indexWriter,
+        long refreshedCheckpoint) {
 //        assert completedMergeFiles != null;
         this.files = files;
         this.filesMetadata = filesMetadata;
@@ -48,6 +51,7 @@ public class SegmentsCopyInfo {
         this.primaryTerm = primaryTerm;
         this.infos = infos;
         this.indexWriter = indexWriter;
+        this.refreshedCheckpoint = refreshedCheckpoint;
     }
 
     @Override

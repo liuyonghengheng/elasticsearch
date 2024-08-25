@@ -340,48 +340,6 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
 
     }
 
-    public void renameTempFiles(Map<String, String> tempFileMap) throws IOException {
-        // this works just like a lucene commit - we rename all temp files and once we successfully
-        // renamed all the segments we rename the commit to ensure we don't leave half baked commits behind.
-        final Map.Entry<String, String>[] entries = tempFileMap.entrySet().toArray(new Map.Entry[0]);
-        ArrayUtil.timSort(entries, (o1, o2) -> {
-            String left = o1.getValue();
-            String right = o2.getValue();
-            if (left.startsWith(IndexFileNames.SEGMENTS) || right.startsWith(IndexFileNames.SEGMENTS)) {
-                if (left.startsWith(IndexFileNames.SEGMENTS) == false) {
-                    return -1;
-                } else if (right.startsWith(IndexFileNames.SEGMENTS) == false) {
-                    return 1;
-                }
-            }
-            return left.compareTo(right);
-        });
-        metadataLock.writeLock().lock();
-        // we make sure that nobody fetches the metadata while we do this rename operation here to ensure we don't
-        // get exceptions if files are still open.
-        try {
-            for (Map.Entry<String, String> entry : entries) {
-                String tempFile = entry.getKey();
-                String origFile = entry.getValue();
-                // first, go and delete the existing ones
-                try {
-                    directory.deleteFile(origFile);
-                } catch (FileNotFoundException | NoSuchFileException e) {
-                } catch (Exception ex) {
-                    logger.debug(() -> new ParameterizedMessage("failed to delete file [{}]", origFile), ex);
-                }
-                // now, rename the files... and fail it it won't work
-                directory.rename(tempFile, origFile);
-                final String remove = tempFileMap.remove(tempFile);
-                assert remove != null;
-            }
-            directory.syncMetaData();
-        } finally {
-            metadataLock.writeLock().unlock();
-        }
-
-    }
-
     /**
      * Checks and returns the status of the existing index in this store.
      *

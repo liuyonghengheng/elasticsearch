@@ -97,23 +97,45 @@ public class SegmentsCopySourceService extends AbstractLifecycleComponent implem
             // primary shard状态不对，停止已有的任务，删除, 并返回！
             return;
         }
-        if (sourceShardCopyState.isCopying.get()) {
+        // TODO:整体需要设置！
+        if (sourceShardCopyState.getIsCopying()) {
             //正在运行直接跳过
+            logger.error("source check!!!!!!!!!!!!!!!!!!!!!!!!!! segments copy is running can not start a new task!\n"+
+                "                                             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            return;
+        }
+        if(sourceShardCopyState.pollLatestSci() == null){
+            // 跳过
             return;
         }
         ShardRouting primaryRouting = indexShard.routingEntry();
         ReplicationGroup replicationGroup = indexShard.getReplicationGroup();
-        SegmentsCopyInfo sci = sourceShardCopyState.getLatest();
+        if(replicationGroup.getReplicationTargets().size()<=1){
+            //跳过
+            return;
+        }
         for (final ShardRouting replicaRouting : replicationGroup.getReplicationTargets()) {
+//            if (replicaRouting.isSameAllocation(primaryRouting) == false && replicaRouting.started()) {
             if (replicaRouting.isSameAllocation(primaryRouting) == false) {
                 RemoteTargetShardCopyState target =
-                    sourceShardCopyState.initRemoteTargetShardCopyState(shardId, replicaRouting);
+                    sourceShardCopyState.initRemoteTargetShardCopyState(shardId, replicaRouting, sourceShardCopyState.getRequestSeqNoGenerator());
                 if(target == null){
-                    //TODO 需要处理吗？
+                    //跳过
                     continue;
                 }
+                sourceShardCopyState.setIsCopying(true);
                 ongoingCopies.addTargetShardCopyState(target);
-                sourceShardCopyState.copyToOneReplica(target, sci, ActionListener.wrap(() -> ongoingCopies.removeTarget(target)));
+                sourceShardCopyState.incrRnningReplicas();
+                sourceShardCopyState.copyToOneReplica(target,
+                    ActionListener.wrap(
+                        r -> {
+                            sourceShardCopyState.decrRnningReplicas();
+                            ongoingCopies.removeTarget(target);},
+                        e -> {
+                            logger.error("replica [{}] segments copy failed and finish! ", replicaRouting, e);
+                            sourceShardCopyState.decrRnningReplicas();
+                            ongoingCopies.removeTarget(target);}
+                    ));
             }
         }
     }
@@ -261,11 +283,11 @@ public class SegmentsCopySourceService extends AbstractLifecycleComponent implem
                         indexService.getIndexSettings()
                             .getSettings().getAsMemory("index.datasycn.segment.chunk_size", "10M").bytesAsInt(),
                         indexService.getIndexSettings()
-                            .getSettings().getAsInt("index.datasycn.segment.shard.max_concurrent_file_chunks", 1),
+                            .getSettings().getAsInt("index.datasycn.segment.shard.max_concurrent_file_chunks", 4),
                         indexService.getIndexSettings()
-                            .getSettings().getAsLong("index.datasycn.segment.shard.internal_action_timeout", 500L),
+                            .getSettings().getAsLong("index.datasycn.segment.shard.internal_action_timeout", 10000L),
                         indexService.getIndexSettings()
-                            .getSettings().getAsLong("index.datasycn.segment.timeout", 500L),
+                            .getSettings().getAsLong("index.datasycn.segment.timeout", 10000L),
                         indexShard.getThreadPool());
                     shardCopyStates.put(shardId, ss);
                     return true;

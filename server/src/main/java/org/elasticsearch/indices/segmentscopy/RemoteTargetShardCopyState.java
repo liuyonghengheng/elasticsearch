@@ -61,7 +61,7 @@ public class RemoteTargetShardCopyState implements TargetShardCopyState{
     public final ThreadPool threadPool;
     public ShardRouting replicaRouting;
     private  int chunkSizeInBytes;
-    private  int maxConcurrentFileChunks = 2;
+    private  int maxConcurrentFileChunks = 4;
     private  long timeout;
     private  long internalActionTimeout;
     private final DiscoveryNode localNode;
@@ -74,13 +74,13 @@ public class RemoteTargetShardCopyState implements TargetShardCopyState{
     private final boolean retriesSupported;
     private volatile boolean isCancelled = false;
     private final AtomicBoolean finished = new AtomicBoolean();
-    private final AtomicLong requestSeqNoGenerator = new AtomicLong(0);
+    private final AtomicLong requestSeqNoGenerator;
 
     private Set<String> currFileNames;
     // last time this status was accessed
     private volatile long lastAccessTime = System.nanoTime();
     public RemoteTargetShardCopyState(ShardId shardId, ThreadPool threadPool, TransportService transportService, DiscoveryNode localNode,
-                                      DiscoveryNode targetNode, Long internalActionTimeout, Consumer<Long> onSourceThrottle) {
+                                      DiscoveryNode targetNode, AtomicLong requestSeqNoGenerator, Long internalActionTimeout, Consumer<Long> onSourceThrottle) {
         this.shardId = shardId;
         this.threadPool = threadPool;
 //        this.threadPool = transportService.getThreadPool();
@@ -89,6 +89,7 @@ public class RemoteTargetShardCopyState implements TargetShardCopyState{
         this.targetNode = targetNode;
         this.onSourceThrottle = onSourceThrottle;
         this.internalActionTimeout = internalActionTimeout;
+        this.requestSeqNoGenerator = requestSeqNoGenerator;
         this.fileChunkRequestOptions = TransportRequestOptions.builder()
             .withType(TransportRequestOptions.Type.COPY)
             .withTimeout(internalActionTimeout)//超时时间
@@ -117,6 +118,7 @@ public class RemoteTargetShardCopyState implements TargetShardCopyState{
             scs.version,
             scs.gen,
             scs.primaryTerm,
+            scs.refreshedCheckpoint,
             scs.infosBytes,
             scs.files,
             new ArrayList<>()
@@ -181,6 +183,7 @@ public class RemoteTargetShardCopyState implements TargetShardCopyState{
 
             @Override
             protected void handleError(StoreFileMetadata md, Exception e) throws Exception {
+                logger.error("send send send send send send send files error {} mata {}", e, md.name());
                 handleErrorOnSendFiles(store, e, new StoreFileMetadata[]{md});
             }
 
@@ -189,7 +192,7 @@ public class RemoteTargetShardCopyState implements TargetShardCopyState{
                 IOUtils.close(currentInput, () -> currentInput = null);
             }
         };
-//        resources.add(multiFileSender); TODO:why
+//        resources.add(multiFileSender);
         multiFileSender.start();
     }
 
@@ -262,6 +265,21 @@ public class RemoteTargetShardCopyState implements TargetShardCopyState{
         executeRetryableAction(action, request, fileChunkRequestOptions, ActionListener.map(listener, r -> null), reader);
     }
 
+    @Override
+    public void cleanFiles(long globalCheckpoint, Map<String, StoreFileMetadata> sourceMetadata, ActionListener<Void> listener) {
+        final String action = SegmentsCopyTargetService.Actions.CLEAN_FILES;
+        final long requestSeqNo = requestSeqNoGenerator.getAndIncrement();
+        final CopyCleanFilesRequest request =
+            new CopyCleanFilesRequest(requestSeqNo, shardId, sourceMetadata, globalCheckpoint);
+        final TransportRequestOptions options =
+            //TODO:这里需要添加配置
+//            TransportRequestOptions.builder().withTimeout(recoverySettings.internalActionTimeout()).build();
+            TransportRequestOptions.builder().withTimeout(timeValueMillis(10000)).build();
+        final Writeable.Reader<TransportResponse.Empty> reader = in -> TransportResponse.Empty.INSTANCE;
+        final ActionListener<TransportResponse.Empty> responseListener = ActionListener.map(listener, r -> null);
+        executeRetryableAction(action, request, options, responseListener, reader);
+    }
+
     private <T extends TransportResponse> void executeRetryableAction(String action, CopyTransportRequest request,
                                                                       TransportRequestOptions options, ActionListener<T> actionListener,
                                                                       Writeable.Reader<T> reader) {
@@ -282,7 +300,7 @@ public class RemoteTargetShardCopyState implements TargetShardCopyState{
 
             @Override
             public boolean shouldRetry(Exception e) {
-                logger.error("[{}] failed to copy file chunk", shardId,e);
+                logger.error("[{}] [{}] failed to copy segments", action, shardId,e);
                 return retriesSupported && retryableException(e);
             }
         };

@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.mockito.Mockito.*;
 
@@ -101,7 +102,7 @@ public class SegmentsCopySourceServiceTests extends IndexShardTestCase {
         // 执行
         SourceShardCopyState sourceShardCopyState = segmentsCopySourceService.getShardCopyStates().get(0);
 
-        SegmentsCopyInfo sci = sourceShardCopyState.getLatest();
+        SegmentsCopyInfo sci = sourceShardCopyState.pollLatestSci();
 
         sci.files.stream().forEach(name -> System.out.println(name));
 
@@ -158,7 +159,8 @@ public class SegmentsCopySourceServiceTests extends IndexShardTestCase {
         System.out.println("before update segments info:"+"replica cnt:"+cnt);
         // 更新segments info 和index reader
         localTargetShardCopyState.setCurrSegmentsCopyInfo(sci);
-        localTargetShardCopyState.updateSegmentsInfo(replicaDirectory);
+//        localTargetShardCopyState.updateSegmentsInfo(replicaDirectory);
+        localTargetShardCopyState.updateSegmentsInfo(replicaShard.store());
         // 验证数据量已经变化，说明拷贝成功
         ElasticsearchDirectoryReader searcher = localTargetShardCopyState.mgr.acquire();
         cnt = searcher.getDelegate().getDocCount("_id");
@@ -190,7 +192,7 @@ public class SegmentsCopySourceServiceTests extends IndexShardTestCase {
 
         // 获取更新的segments 信息
         sourceShardCopyState = segmentsCopySourceService.getShardCopyStates().get(0);
-        sci = sourceShardCopyState.getLatest();
+        sci = sourceShardCopyState.pollLatestSci();
 
         sci.files.stream().forEach(name -> System.out.println(name));
 
@@ -219,7 +221,8 @@ public class SegmentsCopySourceServiceTests extends IndexShardTestCase {
         System.out.println("before update segments info:"+"replica cnt:"+cnt);
         // 更新segments info 和index reader
         localTargetShardCopyState.setCurrSegmentsCopyInfo(sci);
-        localTargetShardCopyState.updateSegmentsInfo(replicaDirectory);
+//        localTargetShardCopyState.updateSegmentsInfo(replicaDirectory);
+        localTargetShardCopyState.updateSegmentsInfo(replicaShard.store());
         // 验证数据量已经变化，说明拷贝成功
         searcher = localTargetShardCopyState.mgr.acquire();
         cnt = searcher.getDelegate().getDocCount("_id");
@@ -311,7 +314,7 @@ public class SegmentsCopySourceServiceTests extends IndexShardTestCase {
         // 执行
         SourceShardCopyState sourceShardCopyState = segmentsCopySourceService.getShardCopyStates().get(0);
 
-        SegmentsCopyInfo sci = sourceShardCopyState.getLatest();
+        SegmentsCopyInfo sci = sourceShardCopyState.pollLatestSci();
 //        sourceShardCopyState.copyToOneReplica(sourceShard.shardId(), targetShard.routingEntry(), sci);
 
         final TransportService transportService = mock(TransportService.class);
@@ -319,7 +322,7 @@ public class SegmentsCopySourceServiceTests extends IndexShardTestCase {
 //        when(transportService).thenReturn(null);
 
         final RemoteTargetShardCopyState remoteTargetShardCopyState = new RemoteTargetShardCopyState(
-            primaryShard.shardId(), transportService.getThreadPool(), transportService, pNode, rNode, 10000L,null);
+            primaryShard.shardId(), transportService.getThreadPool(), transportService, pNode, rNode, new AtomicLong(0),10000L,null);
 
         // 发送 segments info
 //        remoteTargetShardCopyState.sendSegmentsInfo(sci, 10000L, null);

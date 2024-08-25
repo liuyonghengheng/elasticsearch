@@ -133,7 +133,7 @@ public class LocalCheckpointTracker {
         bitSet.set(offset);
         if (seqNo == checkPoint.get() + 1) {//如果已经比checkPoint大了，则可以更新checkpoint了
             updateCheckpoint(checkPoint, bitSetMap);
-        } //物理复制时，如果是replica ，不能在这里更新localcheckpoint
+        } //TODO: 物理复制时，如果是replica ，不能在这里更新localcheckpoint?
     }
 
     /**

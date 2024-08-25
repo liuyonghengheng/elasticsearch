@@ -83,7 +83,6 @@ import org.elasticsearch.index.translog.TranslogConfig;
 import org.elasticsearch.index.translog.TranslogCorruptedException;
 import org.elasticsearch.index.translog.TranslogDeletionPolicy;
 import org.elasticsearch.index.translog.TranslogStats;
-import org.elasticsearch.indices.segmentscopy.SourceShardCopyState;
 import org.elasticsearch.search.suggest.completion.CompletionStats;
 import org.elasticsearch.threadpool.ThreadPool;
 
@@ -190,8 +189,6 @@ public class InternalEngine extends Engine {
     @Nullable
     private volatile String forceMergeUUID;
 
-    private SourceShardCopyState sourceShardCopyState;
-
     public InternalEngine(EngineConfig engineConfig) {
         this(engineConfig, IndexWriter.MAX_DOCS, LocalCheckpointTracker::new);
     }
@@ -252,12 +249,8 @@ public class InternalEngine extends Engine {
                     throw e;
                 }
             }
-            sourceShardCopyState = new SourceShardCopyState(engineConfig.getShardId());
             externalReaderManager = createReaderManager(new RefreshWarmerListener(logger, isClosed, engineConfig));
             internalReaderManager = externalReaderManager.internalReaderManager;
-//            externalReaderManager.setIndexWriter(indexWriter);
-//            externalReaderManager.setSegmentsCopyState(null);
-//            externalReaderManager.setSegmentsCopyStateQueue(sourceShardCopyState);
             this.internalReaderManager = internalReaderManager;
             this.externalReaderManager = externalReaderManager;
             internalReaderManager.addListener(versionMap);
@@ -396,132 +389,6 @@ public class InternalEngine extends Engine {
             reference.decRef();
         }
     }
-
-//    @SuppressForbidden(reason = "reference counting is required here")
-//    private static final class ExternalReaderManager extends ReferenceManager<ElasticsearchDirectoryReader> {
-//        private final BiConsumer<ElasticsearchDirectoryReader, ElasticsearchDirectoryReader> refreshListener;
-//        private final ElasticsearchReaderManager internalReaderManager;
-//        private boolean isWarmedUp; //guarded by refreshLock
-//        private IndexWriter indexWriter;
-//        private SourceShardCopyState sourceShardCopyState;
-//        private SegmentsCopyState segmentsCopyState;
-//
-//
-//        ExternalReaderManager(ElasticsearchReaderManager internalReaderManager,
-//                              BiConsumer<ElasticsearchDirectoryReader,
-//                                  ElasticsearchDirectoryReader> refreshListener) throws IOException {
-//            this.refreshListener = refreshListener;
-//            this.internalReaderManager = internalReaderManager;
-//            this.current = internalReaderManager.acquire(); // steal the reference without warming up
-//        }
-//
-//        @Override
-//        protected ElasticsearchDirectoryReader refreshIfNeeded(ElasticsearchDirectoryReader referenceToRefresh) throws IOException {
-//            // we simply run a blocking refresh on the internal reference manager and then steal it's reader
-//            // it's a save operation since we acquire the reader which incs it's reference but then down the road
-//            // steal it by calling incRef on the "stolen" reader
-//            internalReaderManager.maybeRefreshBlocking();
-//            final ElasticsearchDirectoryReader newReader = internalReaderManager.acquire();
-//            if (isWarmedUp == false || newReader != referenceToRefresh) {
-//                boolean success = false;
-//                try {
-//                    refreshListener.accept(newReader, isWarmedUp ? referenceToRefresh : null);
-//                    isWarmedUp = true;
-//                    success = true;
-//                } finally {
-//                    if (success == false) {
-//                        internalReaderManager.release(newReader);
-//                    }
-//                }
-//            }
-//            // nothing has changed - both ref managers share the same instance so we can use reference equality
-//            if (referenceToRefresh == newReader) {
-//                internalReaderManager.release(newReader);
-//                return null;
-//            } else {
-//                return newReader; // steal the reference
-//            }
-//        }
-//
-//        @Override
-//        protected boolean tryIncRef(ElasticsearchDirectoryReader reference) {
-//            return reference.tryIncRef();
-//        }
-//
-//        @Override
-//        protected int getRefCount(ElasticsearchDirectoryReader reference) {
-//            return reference.getRefCount();
-//        }
-//
-//        @Override
-//        protected void decRef(ElasticsearchDirectoryReader reference) throws IOException {
-//            reference.decRef();
-//        }
-//
-//        @Override
-//        protected void afterMaybeRefresh() throws IOException {
-//            SegmentInfos newInfos;
-//            ElasticsearchDirectoryReader searcher = null;
-//            try {
-//                searcher = this.acquire();
-//                newInfos = ((StandardDirectoryReader) searcher.getDelegate()).getSegmentInfos();
-//            } finally {
-//                if (searcher != null) {
-//                    this.release(searcher);
-//                }
-//            }
-//            if(newInfos == null){
-//                // no change
-//                System.out.println("new infos is null ,skip switch to new infos");
-//            }else if (segmentsCopyState == null){
-//                indexWriter.incRefDeleter(newInfos);
-//                segmentsCopyState = new SegmentsCopyState(
-//                    newInfos.getVersion(),
-//                    newInfos.getGeneration(),
-//                    null,
-//                    null,
-//                    newInfos.getGeneration(),
-//                    newInfos);
-//                sourceShardCopyState.add(segmentsCopyState);
-//            }else if (newInfos.getVersion() == segmentsCopyState.infos.getVersion()) {
-//                // no change
-//                System.out.println(
-//                    "top: skip switch to infos: version="
-//                        + segmentsCopyState.infos.getVersion()
-//                        + " is unchanged: "
-//                        + segmentsCopyState.infos.toString());
-//            }else{
-//                SegmentInfos oldInfos = segmentsCopyState.infos;
-//                indexWriter.incRefDeleter(newInfos); // 标记这些文件都是在用的，不能删除！
-//                if (oldInfos != null) {
-//                    indexWriter.decRefDeleter(oldInfos);
-//                }
-//                segmentsCopyState = new SegmentsCopyState(
-//                    newInfos.getVersion(),
-//                    newInfos.getGeneration(),
-//                    null,
-//                    null,
-//                    newInfos.getGeneration(),
-//                    newInfos);
-//                sourceShardCopyState.add(segmentsCopyState);
-//            }
-//
-//            super.afterMaybeRefresh();
-//        }
-//
-//        public void setIndexWriter(IndexWriter indexWriter) {
-//            this.indexWriter = indexWriter;
-//        }
-//
-//        public void setSegmentsCopyState(SegmentsCopyState segmentsCopyState) {
-//            this.segmentsCopyState = segmentsCopyState;
-//        }
-//
-//        public void setSegmentsCopyStateQueue(SourceShardCopyState sourceShardCopyState) {
-//            this.sourceShardCopyState = sourceShardCopyState;
-//        }
-//
-//    }
 
     @Override
     final boolean assertSearcherIsWarmedUp(String source, SearcherScope scope) {

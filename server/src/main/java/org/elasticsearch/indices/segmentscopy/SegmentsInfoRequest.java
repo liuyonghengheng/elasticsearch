@@ -19,6 +19,7 @@ public class SegmentsInfoRequest extends CopyTransportRequest {
     byte [] infosBytes;
     List<String> fileNames;
     List<Long> fileSizes;
+    Long refreshedCheckpoint;
 
     public SegmentsInfoRequest(StreamInput in) throws IOException {
         super(in);
@@ -27,6 +28,7 @@ public class SegmentsInfoRequest extends CopyTransportRequest {
         segmentInfoVersion = in.readVLong();
         segmentInfoGen = in.readVLong();
         primaryTerm = in.readVLong();
+        refreshedCheckpoint = in.readVLong();
 //        int size = in.readVInt();
 //        infosBytes = new byte[size];
 //        in.readBytes(infosBytes, 0, size);
@@ -46,13 +48,14 @@ public class SegmentsInfoRequest extends CopyTransportRequest {
     }
 
     public SegmentsInfoRequest(long requestSeqNo, ShardId shardId, DiscoveryNode sourceNode, Long segmentInfoVersion, Long segmentInfoGen,
-                               Long primaryTerm, byte [] infosBytes, List<String> fileNames, List<Long> fileSizes) {
+                               Long primaryTerm, Long refreshedCheckpoint, byte [] infosBytes, List<String> fileNames, List<Long> fileSizes) {
         super(requestSeqNo);
         this.shardId = shardId;
         this.sourceNode =  sourceNode;
         this.segmentInfoVersion = segmentInfoVersion;
         this.segmentInfoGen = segmentInfoGen;
         this.primaryTerm = primaryTerm;
+        this.refreshedCheckpoint = refreshedCheckpoint;
         this.infosBytes=infosBytes;
         this.fileNames = fileNames;
         this.fileSizes = fileSizes;
@@ -70,6 +73,7 @@ public class SegmentsInfoRequest extends CopyTransportRequest {
         out.writeVLong(segmentInfoVersion);
         out.writeVLong(segmentInfoGen);
         out.writeVLong(primaryTerm);
+        out.writeVLong(refreshedCheckpoint);
 //        out.writeVInt(infosBytes.length);
 //        out.writeBytes(infosBytes, 0, infosBytes.length);
         out.writeByteArray(infosBytes);

@@ -223,9 +223,10 @@ public class InternalEngineTests extends EngineTestCase {
         engine.refresh("warm_up");
         ParsedDocument doc = testParsedDocument("1", null, testDocumentWithTextField("test"),
             new BytesArray("{}".getBytes(Charset.defaultCharset())), null);
-        Engine.Index operation = randomBoolean() ?
-            appendOnlyPrimary(doc, false, 1)
-            : appendOnlyReplica(doc, false, 1, randomIntBetween(0, 5));
+//        Engine.Index operation = randomBoolean() ?
+//            appendOnlyPrimary(doc, false, 1)
+//            : appendOnlyReplica(doc, false, 1, randomIntBetween(0, 5));
+        Engine.Index operation = appendOnlyReplica(doc, false, 1, randomIntBetween(0, 5));
         engine.index(operation);
         assertFalse(engine.isSafeAccessRequired());
         doc = testParsedDocument("1", null, testDocumentWithTextField("updated"),

@@ -121,10 +121,15 @@ public class DataCopyEngine extends Engine {
     private final Translog translog;
     private final ElasticsearchConcurrentMergeScheduler mergeScheduler;
 
-    private final IndexWriter indexWriter;
+//    private final IndexWriter indexWriter;
+    private IndexWriter indexWriter;
 
-    private final ExternalReaderManager externalReaderManager;
-    private final ElasticsearchReaderManager internalReaderManager;
+    private final CopyReadElasticsearchReaderManager externalReaderCopyManager;
+//    private final ExternalReaderManager externalReaderManager;
+//    private final ElasticsearchReaderManager internalReaderManager;
+
+    private ExternalReaderManager externalReaderManager;
+    private ElasticsearchReaderManager internalReaderManager;
 
     private final Lock flushLock = new ReentrantLock();
     private final ReentrantLock optimizeLock = new ReentrantLock();
@@ -191,6 +196,11 @@ public class DataCopyEngine extends Engine {
     private volatile String forceMergeUUID;
 
     private final SourceShardCopyState sourceShardCopyState;
+    private AtomicBoolean isPrimary = new AtomicBoolean(false);
+
+    private LastRefreshedSegmentsInfoListener lastRefreshedSegmentsInfoListener;
+
+    private AtomicLong lastRefreshedCheckpointCopy = new AtomicLong();
 
 //    private SegmentsCopyStateQueue segmentsCopyStateQueue = new SegmentsCopyStateQueue();
     public DataCopyEngine(EngineConfig engineConfig) {
@@ -215,6 +225,8 @@ public class DataCopyEngine extends Engine {
         ElasticsearchReaderManager internalReaderManager = null;
         EngineMergeScheduler scheduler = null;
         boolean success = false;
+
+        this.externalReaderCopyManager = createReaderManager(new RefreshWarmerListener(logger, isClosed, engineConfig));
         try {
             this.lastDeleteVersionPruneTimeMSec = engineConfig.getThreadPool().relativeTimeInMillis();
             mergeScheduler = scheduler = new EngineMergeScheduler(engineConfig.getShardId(), engineConfig.getIndexSettings());
@@ -256,10 +268,9 @@ public class DataCopyEngine extends Engine {
             sourceShardCopyState = new SourceShardCopyState(engineConfig.getShardId());
             externalReaderManager = createReaderManager(engineConfig.getPrimaryTermSupplier(), new InternalEngine.RefreshWarmerListener(logger, isClosed, engineConfig));
             internalReaderManager = externalReaderManager.internalReaderManager;
-            externalReaderManager.setIndexWriter(indexWriter);
-            externalReaderManager.setSegmentsCopyInfo(null);
-            externalReaderManager.setSourceShardCopyState(sourceShardCopyState);
-            internalReaderManager = externalReaderManager.internalReaderManager;
+//            externalReaderManager.setIndexWriter(indexWriter);
+//            externalReaderManager.setSegmentsCopyInfo(null);
+//            externalReaderManager.setSourceShardCopyState(sourceShardCopyState);
             this.internalReaderManager = internalReaderManager;
             this.externalReaderManager = externalReaderManager;
             internalReaderManager.addListener(versionMap);
@@ -268,6 +279,7 @@ public class DataCopyEngine extends Engine {
             pendingTranslogRecovery.set(true);
             for (ReferenceManager.RefreshListener listener: engineConfig.getExternalRefreshListener()) {
                 this.externalReaderManager.addListener(listener);
+                this.externalReaderCopyManager.addListener(listener);
             }
             for (ReferenceManager.RefreshListener listener: engineConfig.getInternalRefreshListener()) {
                 this.internalReaderManager.addListener(listener);
@@ -286,6 +298,13 @@ public class DataCopyEngine extends Engine {
             }
             completionStatsCache = new CompletionStatsCache(() -> acquireSearcher("completion_stats"));
             this.externalReaderManager.addListener(completionStatsCache);
+
+            this.externalReaderCopyManager.addListener(versionMap);
+            this.externalReaderCopyManager.addListener(completionStatsCache);
+            this.lastRefreshedSegmentsInfoListener = new LastRefreshedSegmentsInfoListener(engineConfig.getPrimaryTermSupplier(),
+                localCheckpointTracker.getProcessedCheckpoint());
+            this.externalReaderManager.addListener(this.lastRefreshedSegmentsInfoListener);
+            this.lastRefreshedCheckpointCopy.set(localCheckpointTracker.getProcessedCheckpoint());
             success = true;
         } finally {
             if (success == false) {
@@ -297,6 +316,57 @@ public class DataCopyEngine extends Engine {
             }
         }
         logger.trace("created new InternalEngine");
+    }
+
+    public void setCurrentInfos(SegmentInfos si) throws IOException {
+        if(isPrimary.get()){
+            return;
+        }
+        externalReaderCopyManager.setCurrentInfos(si);
+    }
+
+    public void setIsPrimary(boolean isPrimary) {
+        this.isPrimary.set(isPrimary);
+    }
+
+    public void setLastRefreshedCheckpointCopy(Long lastRefreshedCheckpointCopy) {
+        this.lastRefreshedCheckpointCopy.set(lastRefreshedCheckpointCopy);
+    }
+
+    public void closeIndexWriter(){
+        try {
+            indexWriter.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void enableWriteEngine(){
+        try {
+            // 所有和indexwriter相关的都要重新设置
+            // TODO:liuyongheng 这里可以看一下，能不能将indexwriter的 锁去掉，
+            // 或者能不能将segments copy过程中的锁去掉
+            // 这样的话就不需要像这样完全重新设置
+            this.indexWriter = createWriter();
+            this.externalReaderManager = createReaderManager(engineConfig.getPrimaryTermSupplier(), new InternalEngine.RefreshWarmerListener(logger, isClosed, engineConfig));;
+            this.internalReaderManager = externalReaderManager.internalReaderManager;
+
+            this.internalReaderManager.addListener(versionMap);
+            for (ReferenceManager.RefreshListener listener: engineConfig.getInternalRefreshListener()) {
+                this.internalReaderManager.addListener(listener);
+            }
+            this.internalReaderManager.addListener(lastRefreshedCheckpointListener);
+
+            this.externalReaderManager.addListener(completionStatsCache);
+            this.externalReaderManager.addListener(this.lastRefreshedSegmentsInfoListener);
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void disableReadEngine(){
+
     }
 
     private LocalCheckpointTracker createLocalCheckpointTracker(
@@ -343,7 +413,7 @@ public class DataCopyEngine extends Engine {
      * and old segments can be released in the same way previous version did this (as a side-effect of _refresh)
      *///这也能避免segment饥饿，（例如一个内部的reader一直持有旧的segment 由于没有索引操作发生或者所有的刷新操作都发生在外部的reader manager，）但是当有这个特殊的实现时，一个外部的刷新会马上反映在这个内部的reader上，并且可以以与以前版本相同的方式释放旧段
     @SuppressForbidden(reason = "reference counting is required here")
-    private static final class ExternalReaderManager extends ReferenceManager<ElasticsearchDirectoryReader> {
+    private final class ExternalReaderManager2 extends ReferenceManager<ElasticsearchDirectoryReader> {
         private final BiConsumer<ElasticsearchDirectoryReader, ElasticsearchDirectoryReader> refreshListener;
         private final ElasticsearchReaderManager internalReaderManager;
         private boolean isWarmedUp; //guarded by refreshLock
@@ -352,8 +422,8 @@ public class DataCopyEngine extends Engine {
         private SegmentsCopyInfo segmentsCopyInfo;
         private LongSupplier primaryTermSupplier;
         Map<String, StoreFileMetadata> lastFileMetaData;
-        Logger logger = LogManager.getLogger(ExternalReaderManager.class);
-        ExternalReaderManager(ElasticsearchReaderManager internalReaderManager,
+        Logger logger = LogManager.getLogger(ExternalReaderManager2.class);
+        ExternalReaderManager2(ElasticsearchReaderManager internalReaderManager,
                               BiConsumer<ElasticsearchDirectoryReader, ElasticsearchDirectoryReader> refreshListener,
                               LongSupplier primaryTermSupplier) throws IOException {
             this.refreshListener = refreshListener;
@@ -452,7 +522,9 @@ public class DataCopyEngine extends Engine {
                     infosBytes,
                     primaryTermSupplier.getAsLong(),
                     newInfos,
-                    indexWriter);
+                    indexWriter,
+                    lastRefreshedCheckpointListener.pendingCheckpoint
+                );
                 sourceShardCopyState.add(segmentsCopyInfo);
                 try {
                     SourceShardCopyState.blockingQueue.put(sourceShardCopyState.getShardId());
@@ -475,7 +547,7 @@ public class DataCopyEngine extends Engine {
 //                if (oldInfos != null) {
 //                    indexWriter.decRefDeleter(oldInfos);
 //                }
-                // 获取文件列表
+                // 获取文件列表 //                files.addAll(newInfos.files(false));
                 List<String> files = new ArrayList<>();
                 Map<String, StoreFileMetadata> filesMetadata = new HashMap<>();
                 for (SegmentCommitInfo info : newInfos) {
@@ -501,7 +573,8 @@ public class DataCopyEngine extends Engine {
                     infosBytes,
                     primaryTermSupplier.getAsLong(),
                     newInfos,
-                    indexWriter);
+                    indexWriter,
+                    lastRefreshedCheckpointListener.pendingCheckpoint);
                 sourceShardCopyState.add(segmentsCopyInfo);
                 try {
                     SourceShardCopyState.blockingQueue.put(sourceShardCopyState.getShardId());
@@ -579,6 +652,254 @@ public class DataCopyEngine extends Engine {
         }
     }
 
+    public final class LastRefreshedSegmentsInfoListener implements ReferenceManager.RefreshListener {
+        final AtomicLong refreshedCheckpoint;
+        private long pendingCheckpoint;
+        private SegmentsCopyInfo segmentsCopyInfo;
+        private LongSupplier primaryTermSupplier;
+        Map<String, StoreFileMetadata> lastFileMetaData;
+        Logger logger = LogManager.getLogger(ExternalReaderManager.class);
+
+        public LastRefreshedSegmentsInfoListener(LongSupplier primaryTermSupplier, long initialLocalCheckpoint) {
+            this.primaryTermSupplier = primaryTermSupplier;
+            this.refreshedCheckpoint = new AtomicLong(initialLocalCheckpoint);
+        }
+        @Override
+        public void beforeRefresh() throws IOException {
+            // all changes until this point should be visible after refresh
+            pendingCheckpoint = localCheckpointTracker.getProcessedCheckpoint();
+        }
+
+        @Override
+        public void afterRefresh(boolean b) throws IOException {
+            if(!b){
+                return;
+            }
+            updateRefreshedCheckpoint(pendingCheckpoint);
+            SegmentInfos newInfos;
+            ElasticsearchDirectoryReader searcher = null;
+            Directory dir;
+            try {
+                searcher = internalReaderManager.acquire();
+                newInfos = ((StandardDirectoryReader) searcher.getDelegate()).getSegmentInfos();
+                dir = searcher.directory();
+            } finally {
+                if (searcher != null) {
+                    internalReaderManager.release(searcher);
+                }
+            }
+            logger.error("ExternalReaderManager：new infos is {}", newInfos);
+            if(newInfos == null){
+                // no change
+                System.out.println("new infos is null ,skip switch to new infos");
+            }else if (segmentsCopyInfo == null){
+                // 标记这些文件都是在用的，标记为不能删除！
+                indexWriter.incRefDeleter(newInfos);
+                // 获取文件列表
+                List<String> files = new ArrayList<>();
+                Map<String, StoreFileMetadata> filesMetadata = new HashMap<>();
+                for (SegmentCommitInfo info : newInfos) {
+                    for (String fileName : info.files()) {
+                        files.add(fileName);
+                        StoreFileMetadata metadata = readLocalFileMetaData(fileName, dir, info.info.getVersion());
+                        filesMetadata.put(fileName, metadata);
+                    }
+                }
+                // Serialize the SegmentInfos.
+                ByteBuffersDataOutput buffer = new ByteBuffersDataOutput();
+                try (ByteBuffersIndexOutput tmpIndexOutput =
+                         new ByteBuffersIndexOutput(buffer, "temporary", "temporary")) {
+                    newInfos.write(tmpIndexOutput);
+                }
+                byte[] infosBytes = buffer.toArrayCopy();
+                long x = lastRefreshedCheckpointListener.pendingCheckpoint;
+
+                segmentsCopyInfo = new SegmentsCopyInfo(
+                    files,
+                    filesMetadata,
+                    newInfos.getVersion(),
+                    newInfos.getGeneration(),
+                    infosBytes,
+                    primaryTermSupplier.getAsLong(),
+                    newInfos,
+                    indexWriter,
+                    refreshedCheckpoint.get());
+                sourceShardCopyState.add(segmentsCopyInfo);
+                try {
+                    SourceShardCopyState.blockingQueue.put(sourceShardCopyState.getShardId());
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                System.out.println("ERROR: ExternalReaderManager source: get segments infos");
+            }else if (newInfos.getVersion() == segmentsCopyInfo.infos.getVersion()) {
+                // no change
+                System.out.println(
+                    "top: skip switch to infos: version="
+                        + segmentsCopyInfo.infos.getVersion()
+                        + " is unchanged: "
+                        + segmentsCopyInfo.infos.toString());
+            }else{
+                SegmentInfos oldInfos = segmentsCopyInfo.infos;
+                // 标记这些文件都是在用的，标记为不能删除！
+                indexWriter.incRefDeleter(newInfos);
+                // 获取文件列表 //                files.addAll(newInfos.files(false));
+                List<String> files = new ArrayList<>();
+                Map<String, StoreFileMetadata> filesMetadata = new HashMap<>();
+                for (SegmentCommitInfo info : newInfos) {
+                    for (String fileName : info.files()) {
+                        files.add(fileName);
+                        StoreFileMetadata metadata = readLocalFileMetaData(fileName, dir, info.info.getVersion());
+                        filesMetadata.put(fileName, metadata);
+                    }
+                }
+                // TODO:liuyongheng segmentsinfos 文件也要同步！
+                // 另外 一种方式： 将lastCommittedSegmentInfos传递过去，然后修改translog？
+//                String fileName = lastCommittedSegmentInfos.getSegmentsFileName();
+//                StoreFileMetadata metadata = readLocalFileMetaData(fileName, dir, lastCommittedSegmentInfos.getCommitLuceneVersion());
+//                filesMetadata.put(fileName, metadata);
+//                files.add(fileName);
+                // Serialize the SegmentInfos.
+                ByteBuffersDataOutput buffer = new ByteBuffersDataOutput();
+                try (ByteBuffersIndexOutput tmpIndexOutput =
+                         new ByteBuffersIndexOutput(buffer, "temporary", "temporary")) {
+                    newInfos.write(tmpIndexOutput);
+                }
+                byte[] infosBytes = buffer.toArrayCopy();
+
+                segmentsCopyInfo = new SegmentsCopyInfo(
+                    files,
+                    filesMetadata,
+                    newInfos.getVersion(),
+                    newInfos.getGeneration(),
+                    infosBytes,
+                    primaryTermSupplier.getAsLong(),
+                    newInfos,
+                    indexWriter,
+                    refreshedCheckpoint.get());
+                sourceShardCopyState.add(segmentsCopyInfo);
+                try {
+                    SourceShardCopyState.blockingQueue.put(sourceShardCopyState.getShardId());
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
+
+        public StoreFileMetadata readLocalFileMetaData(String fileName, Directory dir, Version version) throws IOException {
+            Map<String, StoreFileMetadata> cache = lastFileMetaData;
+            StoreFileMetadata result;
+            if (cache != null) {
+                // We may already have this file cached from the last NRT point:
+                result = cache.get(fileName);
+            } else {
+                result = null;
+            }
+            if (result == null) {
+                // Pull from the filesystem
+                String checksum;
+                final BytesRefBuilder fileHash = new BytesRefBuilder();
+                long length;
+                try (IndexInput in = dir.openInput(fileName, IOContext.DEFAULT)) {
+                    try {
+                        length = in.length();
+                        if (length < CodecUtil.footerLength()) {
+                            // truncated files trigger IAE if we seek negative... these files are really corrupted though
+                            throw new CorruptIndexException("Can't retrieve checksum from file: " + fileName + " file length must be >= " +
+                                CodecUtil.footerLength() + " but was: " + in.length(), in);
+                        }
+//                    if (readFileAsHash) {
+//                        // additional safety we checksum the entire file we read the hash for...
+//                        final Store.VerifyingIndexInput verifyingIndexInput = new Store.VerifyingIndexInput(in);
+//                        hashFile(fileHash, new InputStreamIndexInput(verifyingIndexInput, length), length);
+//                        checksum = digestToString(verifyingIndexInput.verify());
+//                    } else {
+//                        checksum = digestToString(CodecUtil.retrieveChecksum(in));
+//                    }
+                        // 不检测hash
+                        checksum = digestToString(CodecUtil.retrieveChecksum(in));
+                    } catch (Exception ex) {
+//                        logger.debug(() -> new ParameterizedMessage("Can retrieve checksum from file [{}]", fileName), ex);
+                        throw ex;
+                    }
+                } catch (@SuppressWarnings("unused") FileNotFoundException | NoSuchFileException e) {
+//                if (VERBOSE_FILES) {
+//                    message("file " + fileName + ": will copy [file does not exist]");
+//                }
+                    return null;
+                }
+
+                // NOTE: checksum is redundant w/ footer, but we break it out separately because when the bits
+                // cross the wire we need direct access to
+                // checksum when copying to catch bit flips:
+                result = new StoreFileMetadata(fileName, length, checksum, version);
+            }
+            return result;
+        }
+
+        void updateRefreshedCheckpoint(long checkpoint) {
+            refreshedCheckpoint.updateAndGet(curr -> Math.max(curr, checkpoint));
+            assert refreshedCheckpoint.get() >= checkpoint : refreshedCheckpoint.get() + " < " + checkpoint;
+        }
+    }
+
+    @SuppressForbidden(reason = "reference counting is required here")
+    private static final class ExternalReaderManager extends ReferenceManager<ElasticsearchDirectoryReader> {
+        private final BiConsumer<ElasticsearchDirectoryReader, ElasticsearchDirectoryReader> refreshListener;
+        private final ElasticsearchReaderManager internalReaderManager;
+        private boolean isWarmedUp; //guarded by refreshLock
+
+        ExternalReaderManager(ElasticsearchReaderManager internalReaderManager,
+                              BiConsumer<ElasticsearchDirectoryReader, ElasticsearchDirectoryReader> refreshListener) throws IOException {
+            this.refreshListener = refreshListener;
+            this.internalReaderManager = internalReaderManager;
+            this.current = internalReaderManager.acquire(); // steal the reference without warming up
+        }
+
+        @Override
+        protected ElasticsearchDirectoryReader refreshIfNeeded(ElasticsearchDirectoryReader referenceToRefresh) throws IOException {
+            // we simply run a blocking refresh on the internal reference manager and then steal it's reader
+            // it's a save operation since we acquire the reader which incs it's reference but then down the road
+            // steal it by calling incRef on the "stolen" reader
+            internalReaderManager.maybeRefreshBlocking();
+            final ElasticsearchDirectoryReader newReader = internalReaderManager.acquire();
+            if (isWarmedUp == false || newReader != referenceToRefresh) {
+                boolean success = false;
+                try {
+                    refreshListener.accept(newReader, isWarmedUp ? referenceToRefresh : null);
+                    isWarmedUp = true;
+                    success = true;
+                } finally {
+                    if (success == false) {
+                        internalReaderManager.release(newReader);
+                    }
+                }
+            }
+            // nothing has changed - both ref managers share the same instance so we can use reference equality
+            if (referenceToRefresh == newReader) {
+                internalReaderManager.release(newReader);
+                return null;
+            } else {
+                return newReader; // steal the reference
+            }
+        }
+
+        @Override
+        protected boolean tryIncRef(ElasticsearchDirectoryReader reference) {
+            return reference.tryIncRef();
+        }
+
+        @Override
+        protected int getRefCount(ElasticsearchDirectoryReader reference) {
+            return reference.getRefCount();
+        }
+
+        @Override
+        protected void decRef(ElasticsearchDirectoryReader reference) throws IOException {
+            reference.decRef();
+        }
+    }
+
+
     @Override
     final boolean assertSearcherIsWarmedUp(String source, SearcherScope scope) {
         if (scope == SearcherScope.EXTERNAL) {
@@ -598,9 +919,17 @@ public class DataCopyEngine extends Engine {
     public int restoreLocalHistoryFromTranslog(TranslogRecoveryRunner translogRecoveryRunner) throws IOException {
         try (ReleasableLock ignored = readLock.acquire()) {
             ensureOpen();
-            final long localCheckpoint = localCheckpointTracker.getProcessedCheckpoint();
+//            final long localCheckpoint = localCheckpointTracker.getProcessedCheckpoint();
+            final long localCheckpoint = lastRefreshedCheckpointCopy.get();
             try (Translog.Snapshot snapshot = getTranslog().newSnapshot(localCheckpoint + 1, Long.MAX_VALUE)) {
+                if(!isPrimary.get()){
+                    enableWriteEngine();
+                    isPrimary.set(true);// TODO:liuyongheng 恢复失败的情况下需要复原，但是这里并没有listener，不好弄，先加个 catch处理一下
+                }
                 return translogRecoveryRunner.run(this, snapshot);
+            }catch (IOException ex){
+                isPrimary.set(false);
+                throw ex;
             }
         }
     }
@@ -796,7 +1125,18 @@ public class DataCopyEngine extends Engine {
     /** Returns how many bytes we are currently moving from indexing buffer to segments on disk */
     @Override
     public long getWritingBytes() {
+        if(isPrimary.get()){
+            return getWritingBytesPrimary();
+        }
+        return getWritingBytesReplica();
+    }
+
+    public long getWritingBytesPrimary() {
         return indexWriter.getFlushingBytes() + versionMap.getRefreshingBytes();
+    }
+
+    public long getWritingBytesReplica(){
+        return 0L;
     }
 
     /**
@@ -820,8 +1160,9 @@ public class DataCopyEngine extends Engine {
                 internalReaderManager = new ElasticsearchReaderManager(directoryReader,
                     new RamAccountingRefreshListener(engineConfig.getCircuitBreakerService()));
                 lastCommittedSegmentInfos = store.readLastCommittedSegmentsInfo();
-                DataCopyEngine.ExternalReaderManager externalReaderManager =
-                    new DataCopyEngine.ExternalReaderManager(internalReaderManager, externalRefreshListener, primaryTermSupplier);
+//                DataCopyEngine.ExternalReaderManager externalReaderManager =
+//                    new DataCopyEngine.ExternalReaderManager(internalReaderManager, externalRefreshListener, primaryTermSupplier);
+                ExternalReaderManager externalReaderManager = new ExternalReaderManager(internalReaderManager, externalRefreshListener);
                 success = true;
                 return externalReaderManager;
             } catch (IOException e) {
@@ -836,6 +1177,51 @@ public class DataCopyEngine extends Engine {
         } finally {
             if (success == false) { // release everything we created on a failure
                 IOUtils.closeWhileHandlingException(internalReaderManager, indexWriter);
+            }
+        }
+    }
+
+    private CopyReadElasticsearchReaderManager createReaderManager(RefreshWarmerListener externalRefreshListener) throws EngineException {
+        boolean success = false;
+        ElasticsearchReaderManager internalReaderManager = null;
+        try {
+            try {
+                String segmentsFileName = SegmentInfos.getLastCommitSegmentsFileName(store.directory());
+                SegmentInfos infos;
+                if (segmentsFileName == null) {
+                    // No index here yet:
+                    infos = new SegmentInfos(Version.LATEST.major);
+                } else {
+                    infos = SegmentInfos.readCommit(store.directory(), segmentsFileName);
+                    Collection<String> indexFiles = infos.files(false);
+
+//                    lastCommitFiles.add(segmentsFileName);
+//                    lastCommitFiles.addAll(indexFiles);
+//
+//                    // Always protect the last commit:
+//                    deleter.incRef(lastCommitFiles);
+//
+//                    lastNRTFiles.addAll(indexFiles);
+//                    deleter.incRef(lastNRTFiles);
+                }
+
+                final ElasticsearchDirectoryReader directoryReader =
+                    ElasticsearchDirectoryReader.wrap(DirectoryReader.open(store.directory()), shardId);
+                internalReaderManager = new ElasticsearchReaderManager(directoryReader,
+                    new RamAccountingRefreshListener(engineConfig.getCircuitBreakerService()));
+
+                CopyReadElasticsearchReaderManager externalReaderManager = new CopyReadElasticsearchReaderManager(directoryReader, externalRefreshListener);
+                externalReaderManager.setCurrentInfos(infos);
+                lastCommittedSegmentInfos = infos;
+                success = true;
+                return externalReaderManager;
+            } catch (IOException e) {
+                maybeFailEngine("start", e);
+                throw new EngineCreationFailureException(shardId, "failed to open reader on writer", e);
+            }
+        } finally {
+            if (success == false) { // release everything we created on a failure
+                IOUtils.closeWhileHandlingException(internalReaderManager);
             }
         }
     }
@@ -1062,8 +1448,9 @@ public class DataCopyEngine extends Engine {
     }
 
     @Override
-    public IndexResult index(Index index) throws IOException {
-        if(index.origin() == Operation.Origin.PRIMARY){
+    public IndexResult index(Index index) throws IOException {// TODO:liuyongheng  LOCAL_RESET 不确定，还得确认一下这一块的逻辑
+        if(isPrimary.get() || index.origin() == Operation.Origin.PRIMARY || index.origin() == Operation.Origin.LOCAL_TRANSLOG_RECOVERY
+            || index.origin() == Operation.Origin.LOCAL_RESET){
             return indexPrimary(index);
         }else{
             return indexReplica(index);
@@ -1163,25 +1550,18 @@ public class DataCopyEngine extends Engine {
         try (ReleasableLock releasableLock = readLock.acquire()) {
             ensureOpen();
             assert assertIncomingSequenceNumber(index.origin(), index.seqNo());
-            int reservedDocs = 0;
             try (Releasable ignored = versionMap.acquireLock(index.uid().bytes());
                  Releasable indexThrottle = doThrottle ? throttle.acquireThrottle() : () -> {}) {
                 lastWriteNanos = index.startTime();
                 final IndexingStrategy plan = indexingStrategyForOperation(index);
-                reservedDocs = plan.reservedDocs;
 
-                final IndexResult indexResult;
-                if (plan.earlyResultOnPreFlightError.isPresent()) {
-                    assert index.origin() == Operation.Origin.PRIMARY : index.origin();
-                    indexResult = plan.earlyResultOnPreFlightError.get();
-                    assert indexResult.getResultType() == Result.Type.FAILURE : indexResult.getResultType();
-                } else {
-                    // register sequence number
-                    markSeqNoAsSeen(index.seqNo());
-                    assert index.seqNo() >= 0 : "ops should have an assigned seq no.; origin: " + index.origin();
-                    indexResult = new IndexResult(
-                        plan.versionForIndexing, index.primaryTerm(), index.seqNo(), plan.currentNotFoundOrDeleted);
-                }
+                // register sequence number
+                markSeqNoAsSeen(index.seqNo());
+                assert index.seqNo() >= 0 : "ops should have an assigned seq no.; origin: " + index.origin();
+                final IndexResult indexResult = new IndexResult(
+                    plan.versionForIndexing, index.primaryTerm(), index.seqNo(), plan.currentNotFoundOrDeleted);
+                // 这里的逻辑一定是replica在执行，replica的恢复都是从primary过来，所以都可以记录到translog，
+                // 即使重复写入，影响也不大！
                 if (index.origin().isFromTranslog() == false) {//如果doc操作本来就是来自translog，则不需要再次写入translog了
                     final Translog.Location location;//写入translog
                     if (indexResult.getResultType() == Result.Type.SUCCESS) {
@@ -1201,7 +1581,9 @@ public class DataCopyEngine extends Engine {
                     versionMap.maybePutIndexUnderLock(index.uid().bytes(),//这里的uid就_id
                         new IndexVersionValue(translogLocation, plan.versionForIndexing, index.seqNo(), index.primaryTerm()));
                 }
-                localCheckpointTracker.markSeqNoAsProcessedOnReplicaCopy(indexResult.getSeqNo());
+                // TODO: 这里确认一下以前的逻辑
+//                localCheckpointTracker.markSeqNoAsProcessedOnReplicaCopy(indexResult.getSeqNo());
+                localCheckpointTracker.markSeqNoAsProcessed(indexResult.getSeqNo());
                 if (indexResult.getTranslogLocation() == null) {
                     // the op is coming from the translog (and is hence persisted already) or it does not have a sequence number
                     assert index.origin().isFromTranslog() || indexResult.getSeqNo() == SequenceNumbers.UNASSIGNED_SEQ_NO;
@@ -1210,8 +1592,6 @@ public class DataCopyEngine extends Engine {
                 indexResult.setTook(System.nanoTime() - index.startTime());
                 indexResult.freeze();
                 return indexResult;
-            } finally {
-                releaseInFlightDocs(reservedDocs);
             }
         } catch (RuntimeException | IOException e) {
             try {
@@ -1227,7 +1607,48 @@ public class DataCopyEngine extends Engine {
         }
     }
 
+    public synchronized void setCheckPoint(long checkPoint){
+        localCheckpointTracker.markSeqNoAsProcessed(checkPoint);
+        localCheckpointTracker.markSeqNoAsPersisted(checkPoint);
+    }
+
     protected final IndexingStrategy planIndexingAsNonPrimary(Index index) throws IOException {
+        assert assertNonPrimaryOrigin(index);
+        // needs to maintain the auto_id timestamp in case this replica becomes primary
+        if (canOptimizeAddDocument(index)) {
+            mayHaveBeenIndexedBefore(index);
+        }
+        final IndexingStrategy plan;
+        // unlike the primary, replicas don't really care to about creation status of documents
+        // this allows to ignore the case where a document was found in the live version maps in
+        // a delete state and return false for the created flag in favor of code simplicity
+        final long maxSeqNoOfUpdatesOrDeletes = getMaxSeqNoOfUpdatesOrDeletes();
+        if (hasBeenProcessedBefore(index)) {
+            // the operation seq# was processed and thus the same operation was already put into lucene
+            // this can happen during recovery where older operations are sent from the translog that are already
+            // part of the lucene commit (either from a peer recovery or a local translog)
+            // or due to concurrent indexing & recovery. For the former it is important to skip lucene as the operation in
+            // question may have been deleted in an out of order op that is not replayed.
+            // See testRecoverFromStoreWithOutOfOrderDelete for an example of local recovery
+            // See testRecoveryWithOutOfOrderDelete for an example of peer recovery
+            plan = IndexingStrategy.processButSkipLucene(false, index.version());
+        } else if (maxSeqNoOfUpdatesOrDeletes <= localCheckpointTracker.getProcessedCheckpoint()) {
+            // see Engine#getMaxSeqNoOfUpdatesOrDeletes for the explanation of the optimization using sequence numbers
+            assert maxSeqNoOfUpdatesOrDeletes < index.seqNo() : index.seqNo() + ">=" + maxSeqNoOfUpdatesOrDeletes;
+            plan = IndexingStrategy.optimizedAppendOnly(index.version(), 0);
+        } else {
+            versionMap.enforceSafeAccess();
+            final OpVsLuceneDocStatus opVsLucene = compareOpToLuceneDocBasedOnSeqNo(index);
+            if (opVsLucene == OpVsLuceneDocStatus.OP_STALE_OR_EQUAL) {
+                plan = IndexingStrategy.processAsStaleOp(softDeleteEnabled, index.version());
+            } else {
+                plan = IndexingStrategy.processNormally(opVsLucene == OpVsLuceneDocStatus.LUCENE_DOC_NOT_FOUND, index.version(), 0);
+            }
+        }
+        return plan;
+    }
+
+    protected final IndexingStrategy planIndexingAsReplica(Index index) throws IOException {
         assert assertNonPrimaryOrigin(index);
         // needs to maintain the auto_id timestamp in case this replica becomes primary
         if (canOptimizeAddDocument(index)) {
@@ -1892,7 +2313,15 @@ public class DataCopyEngine extends Engine {
         return refresh(source, SearcherScope.EXTERNAL, false);
     }
 
-    final boolean refresh(String source, SearcherScope scope, boolean block) throws EngineException {
+    final boolean refresh(String source, SearcherScope scope, boolean block) throws EngineException{
+        if(isPrimary.get()){
+            return refreshPrimary(source, scope, block);
+        }else{
+            return refreshReplica(source, scope, block);
+        }
+    }
+
+    final boolean refreshPrimary(String source, SearcherScope scope, boolean block) throws EngineException {
         // both refresh types will result in an internal refresh but only the external will also
         // pass the new reader reference to the external reader manager.
         // 内部和外部refresh都会导致internal refresh,但是只有外部的会同时把新的reader 引用传递给外部的 reader manager
@@ -1945,6 +2374,65 @@ public class DataCopyEngine extends Engine {
         maybePruneDeletes();
         mergeScheduler.refreshConfig();
         return refreshed;
+    }
+
+    final boolean refreshReplica(String source, SearcherScope scope, boolean block) throws EngineException {
+        // both refresh types will result in an internal refresh but only the external will also
+        // pass the new reader reference to the external reader manager.
+        boolean refreshed;
+        try {
+            // refresh does not need to hold readLock as ReferenceManager can handle correctly if the engine is closed in mid-way.
+            if (store.tryIncRef()) {
+                // increment the ref just to ensure nobody closes the store during a refresh
+                try {
+                    // even though we maintain 2 managers we really do the heavy-lifting only once.
+                    // the second refresh will only do the extra work we have to do for warming caches etc.
+//                    ReferenceManager<ElasticsearchDirectoryReader> referenceManager = getReferenceManager(scope);
+                    ReferenceManager<ElasticsearchDirectoryReader> referenceManager = externalReaderCopyManager;
+                    // it is intentional that we never refresh both internal / external together
+                    if (block) { //这是有意的操作，内部和外部不能同时一起刷新？
+                        referenceManager.maybeRefreshBlocking();
+                        refreshed = true;
+                    } else {
+                        refreshed = referenceManager.maybeRefresh();
+                    }
+                    refreshed = true;
+                } finally {
+                    store.decRef();
+                }
+                if (refreshed) {
+                    lastRefreshedCheckpointListener.updateRefreshedCheckpoint(lastRefreshedCheckpointCopy.get());
+                }
+            } else {
+                refreshed = false;
+            }
+        } catch (AlreadyClosedException e) {
+            failOnTragicEvent(e);
+            throw e;
+        } catch (Exception e) {
+            try {
+                failEngine("refresh failed source[" + source + "]", e);
+            } catch (Exception inner) {
+                e.addSuppressed(inner);
+            }
+            throw new RefreshFailedEngineException(shardId, e);
+        }
+//        assert refreshed == false || lastRefreshedCheckpoint() >= localCheckpointBeforeRefresh : "refresh checkpoint was not advanced; " +
+//            "local_checkpoint=" + localCheckpointBeforeRefresh + " refresh_checkpoint=" + lastRefreshedCheckpoint();
+        // TODO: maybe we should just put a scheduled job in threadPool?
+        // We check for pruning in each delete request, but we also prune here e.g. in case a delete burst comes in and then no more deletes
+        // for a long time:
+//        maybePruneDeletes();
+//        mergeScheduler.refreshConfig();
+        return refreshed;
+    }
+
+    @Override
+    public boolean refreshNeeded() {
+        if(isPrimary.get()){
+            return super.refreshNeeded();
+        }
+        return false;
     }
 
     public void syncReplica(){
@@ -2069,6 +2557,13 @@ public class DataCopyEngine extends Engine {
 
     @Override
     public CommitId flush(boolean force, boolean waitIfOngoing) throws EngineException {
+        if(isPrimary.get()){
+            return flushPrimary(force, waitIfOngoing);
+        }
+        return flushReplica(force, waitIfOngoing);
+    }
+
+    public CommitId flushPrimary(boolean force, boolean waitIfOngoing) throws EngineException {
         ensureOpen();
         if (force && waitIfOngoing == false) {
             assert false : "wait_if_ongoing must be true for a force flush: force=" + force + " wait_if_ongoing=" + waitIfOngoing;
@@ -2112,6 +2607,134 @@ public class DataCopyEngine extends Engine {
 
                         // we need to refresh in order to clear older version values
                         refresh("version_table_flush", SearcherScope.INTERNAL, true);
+                        translog.trimUnreferencedReaders();
+                    } catch (AlreadyClosedException e) {
+                        failOnTragicEvent(e);
+                        throw e;
+                    } catch (Exception e) {
+                        throw new FlushFailedEngineException(shardId, e);
+                    }
+                    refreshLastCommittedSegmentInfos();
+
+                }
+                newCommitId = lastCommittedSegmentInfos.getId();
+            } catch (FlushFailedEngineException ex) {
+                maybeFailEngine("flush", ex);
+                throw ex;
+            } finally {
+                flushLock.unlock();
+            }
+        }
+        // We don't have to do this here; we do it defensively to make sure that even if wall clock time is misbehaving
+        // (e.g., moves backwards) we will at least still sometimes prune deleted tombstones:
+        if (engineConfig.isEnableGcDeletes()) {
+            pruneDeletedTombstones();
+        }
+        return new CommitId(newCommitId);
+    }
+
+    public CommitId flushReplica(boolean force, boolean waitIfOngoing) throws EngineException {
+        ensureOpen();
+        if (force && waitIfOngoing == false) {
+            assert false : "wait_if_ongoing must be true for a force flush: force=" + force + " wait_if_ongoing=" + waitIfOngoing;
+            throw new IllegalArgumentException(
+                "wait_if_ongoing must be true for a force flush: force=" + force + " wait_if_ongoing=" + waitIfOngoing);
+        }
+        final byte[] newCommitId;
+        try (ReleasableLock lock = readLock.acquire()) {
+            ensureOpen();
+            try {
+                // TODO:liuyongheng commit的逻辑是，在每次seagmentsinfos 信息copy过来之后，判断其中是否含有 commit信息
+                // 和lastCommittedSegmentInfos 是否一致，如果不一致，则更新 lastCommittedSegmentInfos 信息，将SegmentInfos
+                // 写入新的segments_n文件中，滚动translog，返回commitid
+                boolean shouldPeriodicallyFlush = shouldPeriodicallyFlush();
+                if (force || shouldPeriodicallyFlush
+                    || getProcessedLocalCheckpoint() > Long.parseLong(
+                    lastCommittedSegmentInfos.userData.get(SequenceNumbers.LOCAL_CHECKPOINT_KEY))) {
+                    ensureCanFlush();
+                    try {
+                        // translog 也不能在这更新
+                        translog.rollGeneration();
+                        logger.trace("starting commit for flush; commitTranslog=true");
+                        // TODO:liuyongheng 这里先注释掉，后面看如何处理，是直接copy过来还是在本地commit，理论上应该copy过来，所以本地不应该有commit操作
+//                        commitIndexWriter(indexWriter, translog, null);
+                        logger.trace("finished commit for flush");
+
+                        // a temporary debugging to investigate test failure - issue#32827. Remove when the issue is resolved
+                        logger.debug("new commit on flush, force:{}, shouldPeriodicallyFlush:{}"
+                            , force, shouldPeriodicallyFlush);
+                        translog.trimUnreferencedReaders();
+                    } catch (AlreadyClosedException e) {
+                        failOnTragicEvent(e);
+                        throw e;
+                    } catch (Exception e) {
+                        throw new FlushFailedEngineException(shardId, e);
+                    }
+//                    refreshLastCommittedSegmentInfos();
+
+                }
+                newCommitId = lastCommittedSegmentInfos.getId();
+            } catch (FlushFailedEngineException ex) {
+                maybeFailEngine("flush", ex);
+                throw ex;
+            } finally {
+//                flushLock.unlock();
+            }
+        }
+        // We don't have to do this here; we do it defensively to make sure that even if wall clock time is misbehaving
+        // (e.g., moves backwards) we will at least still sometimes prune deleted tombstones:
+        if (engineConfig.isEnableGcDeletes()) {
+            pruneDeletedTombstones();
+        }
+        return new CommitId(newCommitId);
+    }
+
+    public CommitId flushReplica2(boolean force, boolean waitIfOngoing) throws EngineException {
+        ensureOpen();
+        if (force && waitIfOngoing == false) {
+            assert false : "wait_if_ongoing must be true for a force flush: force=" + force + " wait_if_ongoing=" + waitIfOngoing;
+            throw new IllegalArgumentException(
+                "wait_if_ongoing must be true for a force flush: force=" + force + " wait_if_ongoing=" + waitIfOngoing);
+        }
+        final byte[] newCommitId;
+        try (ReleasableLock lock = readLock.acquire()) {
+            ensureOpen();
+            if (flushLock.tryLock() == false) {
+                // if we can't get the lock right away we block if needed otherwise barf
+                if (waitIfOngoing) {
+                    logger.trace("waiting for in-flight flush to finish");
+                    flushLock.lock();
+                    logger.trace("acquired flush lock after blocking");
+                } else {
+                    return new CommitId(lastCommittedSegmentInfos.getId());
+                }
+            } else {
+                logger.trace("acquired flush lock immediately");
+            }
+            try {
+                // Only flush if (1) Lucene has uncommitted docs, or (2) forced by caller, or (3) the
+                // newly created commit points to a different translog generation (can free translog),
+                // or (4) the local checkpoint information in the last commit is stale, which slows down future recoveries.
+                boolean hasUncommittedChanges = indexWriter.hasUncommittedChanges();
+                boolean shouldPeriodicallyFlush = shouldPeriodicallyFlush();
+                if (hasUncommittedChanges || force || shouldPeriodicallyFlush
+                    || getProcessedLocalCheckpoint() > Long.parseLong(
+                    lastCommittedSegmentInfos.userData.get(SequenceNumbers.LOCAL_CHECKPOINT_KEY))) {
+                    ensureCanFlush();
+                    try {
+                        translog.rollGeneration();
+                        logger.trace("starting commit for flush; commitTranslog=true");
+                        // TODO:liuyongheng 这里先注释掉，后面看如何处理，是直接copy过来还是在本地commit，理论上应该copy过来，所以本地不应该有commit操作
+//                        commitIndexWriter(indexWriter, translog, null);
+                        logger.trace("finished commit for flush");
+
+                        // a temporary debugging to investigate test failure - issue#32827. Remove when the issue is resolved
+                        logger.debug("new commit on flush, hasUncommittedChanges:{}, force:{}, shouldPeriodicallyFlush:{}",
+                            hasUncommittedChanges, force, shouldPeriodicallyFlush);
+
+                        // we need to refresh in order to clear older version values
+                        // TODO:liuyongheng 不需要做refresh
+//                        refresh("version_table_flush", SearcherScope.INTERNAL, true);
                         translog.trimUnreferencedReaders();
                     } catch (AlreadyClosedException e) {
                         failOnTragicEvent(e);
@@ -2428,6 +3051,13 @@ public class DataCopyEngine extends Engine {
         return lastCommittedSegmentInfos;
     }
 
+    public long getLastCommittedSegmentInfosGen() {
+        return lastCommittedSegmentInfos.getGeneration();
+    }
+    public void setLastCommittedSegmentInfos(SegmentInfos lastCommittedSegmentInfos) {
+        this.lastCommittedSegmentInfos = lastCommittedSegmentInfos;
+    }
+
     @Override
     protected final void writerSegmentStats(SegmentsStats stats) {
         stats.addVersionMapMemoryInBytes(versionMap.ramBytesUsed());
@@ -2478,7 +3108,8 @@ public class DataCopyEngine extends Engine {
                     internalReaderManager.removeListener(versionMap);
                 }
                 try {
-                    IOUtils.close(externalReaderManager, internalReaderManager);
+//                    IOUtils.close(externalReaderManager, internalReaderManager);
+                    IOUtils.close(externalReaderCopyManager, externalReaderManager, internalReaderManager);
                 } catch (Exception e) {
                     logger.warn("Failed to close ReaderManager", e);
                 }
@@ -2511,13 +3142,17 @@ public class DataCopyEngine extends Engine {
 
     @Override
     protected final ReferenceManager<ElasticsearchDirectoryReader> getReferenceManager(SearcherScope scope) {
-        switch (scope) {
-            case INTERNAL:
-                return internalReaderManager;
-            case EXTERNAL:
-                return externalReaderManager;
-            default:
-                throw new IllegalStateException("unknown scope: " + scope);
+        if(isPrimary.get()){
+            switch (scope) {
+                case INTERNAL:
+                    return internalReaderManager;
+                case EXTERNAL:
+                    return externalReaderManager;
+                default:
+                    throw new IllegalStateException("unknown scope: " + scope);
+            }
+        }else{
+            return externalReaderCopyManager;
         }
     }
 

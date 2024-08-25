@@ -101,9 +101,9 @@ public class CopyMultiFileWriter extends AbstractRefCounted implements Releasabl
         }
         // add first, before it's created
         tempFileNames.put(tempFileName, fileName);
-        // TODO 需要加验证，后续改成StoreFileMetadata
-//        IndexOutput indexOutput = store.createVerifyingOutput(tempFileName, metadata, IOContext.DEFAULT);
-        IndexOutput indexOutput = store.directory().createOutput(tempFileName, IOContext.DEFAULT);
+        // TODO:liuyongheng 需要加验证，后续改成StoreFileMetadata
+        IndexOutput indexOutput = store.createVerifyingOutput(tempFileName, metadata, IOContext.DEFAULT);
+//        IndexOutput indexOutput = store.directory().createOutput(tempFileName, IOContext.DEFAULT);
 
         openIndexOutputs.put(fileName, indexOutput);
         return indexOutput;
@@ -124,7 +124,8 @@ public class CopyMultiFileWriter extends AbstractRefCounted implements Releasabl
         while((scratch = iterator.next()) != null) { // we iterate over all pages - this is a 0-copy for all core impls
             indexOutput.writeBytes(scratch.bytes, scratch.offset, scratch.length);
         }
-        indexState.addRecoveredBytesToFile(name, content.length());
+        // TODO:liuyongheng 这里先注释掉，但是后续也要记录数据传送数据量！
+//        indexState.addRecoveredBytesToFile(name, content.length());
         if (indexOutput.getFilePointer() >= fileMetadata.length() || lastChunk) {
             try {
                 Store.verify(indexOutput);

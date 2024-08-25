@@ -23,6 +23,8 @@ import org.apache.logging.log4j.Logger;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.IndexFormatTooNewException;
 import org.apache.lucene.index.IndexFormatTooOldException;
+import org.apache.lucene.index.SegmentInfos;
+import org.apache.lucene.store.*;
 import org.elasticsearch.Assertions;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ExceptionsHelper;
@@ -36,6 +38,7 @@ import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.util.CancellableThreads;
 import org.elasticsearch.common.util.concurrent.AbstractRefCounted;
+import org.elasticsearch.index.engine.DataCopyReadEngine;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.mapper.MapperException;
 import org.elasticsearch.index.seqno.ReplicationTracker;
@@ -51,8 +54,10 @@ import org.elasticsearch.index.translog.ChannelFactory;
 import org.elasticsearch.index.translog.Translog;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -513,6 +518,7 @@ public class RecoveryTarget extends AbstractRefCounted implements RecoveryTarget
                     store.ensureIndexHasHistoryUUID();
                 }
                 final ChannelFactory channelFactory = FileChannel::open;
+                indexShard.getEngineOrNull().getLastSyncedGlobalCheckpoint();
                 Translog.createEmptyTranslog(indexShard.shardPath().resolveTranslog(), shardId, globalCheckpoint,
                     indexShard.getPendingPrimaryTerm(), store.getTranslogUUID(), channelFactory);
                 //不用重新commit和关联，不然会导致主和副本的translogUUID不同，segments commit信息也不同。
@@ -530,6 +536,7 @@ public class RecoveryTarget extends AbstractRefCounted implements RecoveryTarget
                 state().setStage(RecoveryState.Stage.VERIFY_INDEX);
                 // 此时并不需要设置状态?
                 state().setStage(RecoveryState.Stage.TRANSLOG);
+                ((DataCopyReadEngine) indexShard.getEngineOrNull()).setCheckPoint(globalCheckpoint);
             } catch (CorruptIndexException | IndexFormatTooNewException | IndexFormatTooOldException ex) {
                 // this is a fatal exception at this stage.
                 // this means we transferred files from the remote that have not be checksummed and they are

@@ -8,22 +8,32 @@ import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
+import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.BytesRefBuilder;
 import org.apache.lucene.util.Version;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionListenerResponseHandler;
+import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.StepListener;
+import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.CheckedRunnable;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.Writeable;
+import org.elasticsearch.common.lease.Releasable;
+import org.elasticsearch.common.lease.Releasables;
 import org.elasticsearch.common.lucene.store.InputStreamIndexInput;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.CancellableThreads;
+import org.elasticsearch.common.util.concurrent.EsExecutors;
+import org.elasticsearch.common.util.concurrent.FutureUtils;
+import org.elasticsearch.common.util.concurrent.ListenableFuture;
+import org.elasticsearch.core.internal.io.IOUtils;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.engine.RecoveryEngineException;
 import org.elasticsearch.index.engine.SegmentsCopyInfo;
@@ -37,6 +47,7 @@ import org.elasticsearch.indices.recovery.*;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.*;
 
+import java.io.Closeable;
 import java.io.EOFException;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -44,9 +55,14 @@ import java.nio.file.NoSuchFileException;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
+import java.util.function.IntSupplier;
+import java.util.stream.StreamSupport;
 
 import static org.elasticsearch.common.unit.TimeValue.timeValueMillis;
 import static org.elasticsearch.index.store.Store.digestToString;
@@ -59,7 +75,7 @@ public class SourceShardCopyState {
     private final ShardId shardId;
     private IndexShard indexShard;
     private final ConcurrentLinkedQueue<SegmentsCopyInfo> segmentsCopyStateQueue = new ConcurrentLinkedQueue<>();
-    private final Set<SegmentsCopyInfo> finishSet = new HashSet<>();
+    private AtomicInteger runningReplicas = new AtomicInteger(0);
     public AtomicBoolean isCopying = new AtomicBoolean(false);
     private SegmentsCopyInfo curSegment = null;
     private SegmentsCopyInfo lastSegment = null;
@@ -70,6 +86,7 @@ public class SourceShardCopyState {
     private  ThreadPool threadPool;
     private final CancellableThreads cancellableThreads = new CancellableThreads();
     private final Map<DiscoveryNode, RemoteTargetShardCopyState>  replicas = new HashMap<>();
+// TODO:这里应该是每个router（replica）对应一个 seqno?
     private final AtomicLong requestSeqNoGenerator = new AtomicLong(0);
 
     // TODO：挪到shard stat中
@@ -85,6 +102,33 @@ public class SourceShardCopyState {
         segmentsCopyStateQueue.add(state);
     }
 
+    public boolean getIsCopying() {
+        return isCopying.get();
+    }
+
+    public void setIsCopying(boolean val) {
+        isCopying.set(val);
+    }
+
+    public SegmentsCopyInfo getCurSegment() {
+        return curSegment;
+    }
+
+    public AtomicLong getRequestSeqNoGenerator() {
+        return requestSeqNoGenerator;
+    }
+
+    public void incrRnningReplicas(){
+        runningReplicas.incrementAndGet();
+    }
+
+    public void decrRnningReplicas(){
+        if(runningReplicas.decrementAndGet() == 0){
+            isCopying.set(false);
+            curSegment.decRefDeleter();
+        }
+    }
+
     synchronized public SegmentsCopyInfo  getNextOne(){
         SegmentsCopyInfo last = null;
         if(!segmentsCopyStateQueue.isEmpty()){
@@ -96,17 +140,18 @@ public class SourceShardCopyState {
     }
 
     // TODO:需要判断是否在运行中
-    synchronized public SegmentsCopyInfo  getLatest(){
-        SegmentsCopyInfo last = null;
+    synchronized public SegmentsCopyInfo  pollLatestSci(){
+        SegmentsCopyInfo latest = null;
         while(!segmentsCopyStateQueue.isEmpty()){
-            last = segmentsCopyStateQueue.poll();
+            latest = segmentsCopyStateQueue.poll();
             if(!segmentsCopyStateQueue.isEmpty()){
-                last.decRefDeleter();
+                latest.decRefDeleter();
             }
         }
         // 注意：copy 完成之后需要执行decRefDeleter()
-        curSegment = last;
-        return last;
+        lastSegment = curSegment;
+        curSegment = latest;
+        return latest;
     }
 
     public void initSourceShardCopyState(Logger logger, ClusterService clusterService,
@@ -129,16 +174,36 @@ public class SourceShardCopyState {
     }
 
     // TODO: 需要一个listener，最终收集任务状态。
-    public void copyToOneReplica(RemoteTargetShardCopyState remoteTargetShardCopyState, SegmentsCopyInfo sci, ActionListener<Void> listener){
-        final Store store = indexShard.store();
-        if(Objects.nonNull(sci)){
-            curSegment = sci;
-        }
+    public void copyToOneReplica(RemoteTargetShardCopyState remoteTargetShardCopyState, ActionListener<Void> listener){
+
+        final ListenableFuture<Void> future = new ListenableFuture<>();
+        future.addListener(listener, EsExecutors.newDirectExecutorService());
+        final List<Closeable> resources = new CopyOnWriteArrayList<>();
+        final Closeable releaseResources = () -> IOUtils.close(resources);
+        final Consumer<Exception> onFailure = e -> {
+            assert Transports.assertNotTransportThread(SourceShardCopyState.this + "[onFailure]");
+            IOUtils.closeWhileHandlingException(releaseResources, () -> future.onFailure(e));
+        };
 
         final StepListener<SegmentsInfoResponse> sendSegmentsInfoStep = new StepListener<>();
         final StepListener<Void> sendFilesStep = new StepListener<>();
-        final StepListener<Void> sendCheckpointStep = new StepListener<>();
+        final StepListener<Void> cleanFilesStep = new StepListener<>();
+        // checkpoint 在index同步过程中已经更新了
+//        final StepListener<Void> sendCheckpointStep = new StepListener<>();
 
+        // TODO:liuyongheng 这里，我们是shard正常运行过程中执行的 segments copy，这意味着
+        // 如果store被关闭，那么indexshard的状态一定是不对的！，因此是不是没有必要执行这个操作？
+        final Releasable releaseStore = acquireStore(indexShard.store());
+        resources.add(releaseStore);
+        sendFilesStep.whenComplete(r -> IOUtils.close(releaseStore), e -> {
+            try {
+                IOUtils.close(releaseStore);
+            } catch (final IOException ex) {
+                logger.warn("releasing store caused exception", ex);
+            }
+        });
+
+        final Store store = indexShard.store();
         // 1.发送 segments info
         remoteTargetShardCopyState.sendSegmentsInfo(curSegment, internalActionTimeout, sendSegmentsInfoStep);
 
@@ -147,28 +212,119 @@ public class SourceShardCopyState {
             Set<String> currFileNames = sir.fileNames;
             // 根据replca返回的文件列表，先验证文件是否存在
             if(!checkFileList(currFileNames)){
-                finish();
+                decrRnningReplicas();
             }
-            Map<String, StoreFileMetadata> fileMetaDatas;
+            final Map<String, StoreFileMetadata> fileMetaDatas;
             // 拿到对应的文件元数据，用于验证
-            fileMetaDatas = readFilesMetaData(currFileNames, sci);
+            fileMetaDatas = readFilesMetaData(currFileNames, curSegment);
         // 2.向replica发送文件
             remoteTargetShardCopyState.sendFiles(store, fileMetaDatas.values().toArray(new StoreFileMetadata[0]), sendFilesStep);
-            },r -> {logger.error("send segments info failed", r);});
+            },
+            onFailure);
+//            r -> {logger.error("send segments info failed", r);});
 
         // 文件发送完成，处理结果，并进行下一步
         // 3. 更新checkpoint
         // 向replica发送 global check point， 客户端 应用segments，并更新 local checkpoint 和 global check point，并返回local checkpoint
         // 根据各个副本返回的checkpoint，本地更新 global checkpoint
-        sendFilesStep.whenComplete(r -> {},r -> {logger.error("send segments files failed2 ", r);});
+        sendFilesStep.whenComplete(
+            r -> {
+                final long lastKnownGlobalCheckpoint = indexShard.getLastKnownGlobalCheckpoint();
+//                final Store.MetadataSnapshot recoverySourceMetadata;
+//                try {
+//                    recoverySourceMetadata = store.getMetadata(indexShard.acquireSafeIndexCommit().getIndexCommit());
+//                } catch (IOException e) {
+//                    throw new RuntimeException(e);
+//                }
+                cleanFiles(remoteTargetShardCopyState, store, curSegment.filesMetadata, lastKnownGlobalCheckpoint, cleanFilesStep);
+            },
+            onFailure);
+//            r -> {logger.error("send segments files failed2", r);});
 
-        indexShard.getLocalCheckpoint();
-
-        // 本地对应文件 delete def -1 （所有的replica执行完才能进行-1 操作！）
-        finish();
+        cleanFilesStep.whenComplete(
+            r -> {
+                // 本地对应文件 delete def -1 （所有的replica执行完才能进行-1 操作！）
+                decrRnningReplicas();
+                IOUtils.close(resources);
+            },
+            onFailure
+//            e -> {logger.error("send segments clean files failed ", e);}
+        );
     }
 
-    public RemoteTargetShardCopyState initRemoteTargetShardCopyState(ShardId shardId, ShardRouting replicaRouting){
+    private Releasable acquireStore(Store store) {
+        store.incRef();
+        return Releasables.releaseOnce(() -> runWithGenericThreadPool(store::decRef));
+    }
+
+    private void runWithGenericThreadPool(CheckedRunnable<Exception> task) {
+        final PlainActionFuture<Void> future = new PlainActionFuture<>();
+        assert threadPool.generic().isShutdown() == false;
+        // TODO: We shouldn't use the generic thread pool here as we already execute this from the generic pool.
+        //       While practically unlikely at a min pool size of 128 we could technically block the whole pool by waiting on futures
+        //       below and thus make it impossible for the store release to execute which in turn would block the futures forever
+        threadPool.generic().execute(ActionRunnable.run(future, task));
+        FutureUtils.get(future);
+    }
+
+    private void cleanFiles(TargetShardCopyState remoteTargetShardCopyState, Store store, Map<String, StoreFileMetadata> sourceMetadata,
+                            long globalCheckpoint, ActionListener<Void> listener) {
+        // Send the CLEAN_FILES request, which takes all of the files that
+        // were transferred and renames them from their temporary file
+        // names to the actual file names. It also writes checksums for
+        // the files after they have been renamed.
+        //
+        // Once the files have been renamed, any other files that are not
+        // related to this recovery (out of date segments, for example)
+        // are deleted
+        cancellableThreads.checkForCancel();
+        //TODO:liuyongheng 删掉Store.MetadataSnapshot类型的sourceMetadata！因为已经在segmentsinfo中传过去了！
+        //或者包含更全的sourceMetadata，而不是仅仅只是lastcommit
+        remoteTargetShardCopyState.cleanFiles(globalCheckpoint, sourceMetadata,
+            ActionListener.delegateResponse(listener, (l, e) -> ActionListener.completeWith(l, () -> {
+                StoreFileMetadata[] mds = curSegment.filesMetadata.values().toArray(new StoreFileMetadata[0]);
+                ArrayUtil.timSort(mds, Comparator.comparingLong(StoreFileMetadata::length)); // check small files first
+                handleErrorOnSendFiles(store, e, mds);
+                throw e;
+            })));
+    }
+
+    private void handleErrorOnSendFiles(Store store, Exception e, StoreFileMetadata[] mds) throws Exception {
+        final IOException corruptIndexException = ExceptionsHelper.unwrapCorruption(e);
+        assert Transports.assertNotTransportThread(SourceShardCopyState.this + "[handle error on send/clean files]");
+        if (corruptIndexException != null) {
+            Exception localException = null;
+            for (StoreFileMetadata md : mds) {
+                cancellableThreads.checkForCancel();
+                logger.debug("checking integrity for file {} after remove corruption exception", md);
+                if (store.checkIntegrityNoException(md) == false) { // we are corrupted on the primary -- fail!
+                    logger.warn("{} Corrupted file detected {} checksum mismatch", shardId, md);
+                    if (localException == null) {
+                        localException = corruptIndexException;
+                    }
+//                    failEngine(corruptIndexException);
+                }
+            }
+            if (localException != null) {
+                throw localException;
+            } else { // corruption has happened on the way to replica
+                RemoteTransportException remoteException = new RemoteTransportException(
+                    "File corruption occurred on recovery but checksums are ok", null);
+                remoteException.addSuppressed(e);
+//                logger.warn(() -> new ParameterizedMessage("{} Remote file corruption on node {}, recovering {}. local checksum OK",
+//                    shardId, request.targetNode(), mds), corruptIndexException);
+                logger.warn(() -> new ParameterizedMessage("{} Remote file corruption on node {}. local checksum OK",
+                    shardId, mds), corruptIndexException);
+                logger.warn(() -> new ParameterizedMessage("{} Remote file corruption on node, recovering {}. local checksum OK",
+                    shardId, mds), corruptIndexException);
+                throw remoteException;
+            }
+        }
+        throw e;
+    }
+
+
+    public RemoteTargetShardCopyState initRemoteTargetShardCopyState(ShardId shardId, ShardRouting replicaRouting, AtomicLong  requestSeqNoGenerator){
         String nodeId = replicaRouting.currentNodeId();
         final DiscoveryNode replicaNode = clusterService.state().nodes().get(nodeId);
         // replica 不存在，直接返回
@@ -180,19 +336,16 @@ public class SourceShardCopyState {
 
         // create target node processor
         final RemoteTargetShardCopyState remoteTargetShardCopyState = new RemoteTargetShardCopyState(shardId,
-            transportService.getThreadPool(), transportService, clusterService.localNode(),replicaNode, internalActionTimeout,
+            transportService.getThreadPool(), transportService, clusterService.localNode(),replicaNode, requestSeqNoGenerator, internalActionTimeout,
             throttleTime -> addThrottleTime(throttleTime));
+        // TODO: bug，之前忘了在初始化时配置了，临时在这里配置，后续需要统一的settings进行配置！
+        remoteTargetShardCopyState.setChunkSizeInBytes(1024 * 1024 * 10 - 16);
         replicas.put(replicaNode, remoteTargetShardCopyState);
         return remoteTargetShardCopyState;
     }
 
     public boolean checkFileList(Set<String> currFileNames){
         return true;
-    }
-
-    public void finish(){
-        lastSegment = curSegment;
-        curSegment = null;
     }
 
     public Map<String, StoreFileMetadata> readFilesMetaData(Set<String> fileNames, SegmentsCopyInfo sci) {

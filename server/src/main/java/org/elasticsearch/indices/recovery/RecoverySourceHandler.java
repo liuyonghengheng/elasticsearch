@@ -151,11 +151,13 @@ public class RecoverySourceHandler {
      */
 
     public void recoverToTarget(ActionListener<RecoveryResponse> listener) {
-        if(shard.indexSettings().getSettings().get("index.datasycn.type", "operation").equals("segment")){
-            recoverToTargetCopy(listener);
-        }else{
-            recoverToTargetInternal(listener);
-        }
+//        if(shard.indexSettings().getSettings().get("index.datasycn.type", "operation").equals("segment")){
+//            recoverToTargetCopy(listener);
+//        }else{
+//            recoverToTargetInternal(listener);
+//        }
+
+        recoverToTargetInternal(listener);
     }
     public void recoverToTargetInternal(ActionListener<RecoveryResponse> listener) {
         addListener(listener);
@@ -504,6 +506,10 @@ public class RecoverySourceHandler {
                     shardId + " initiating tracking of " + request.targetAllocationId(), shard, cancellableThreads, logger);
 
                 dataCopyEnginePhase2(safeCommitRef.getIndexCommit(), softDeletesEnabled, sendFileStepP2);
+                // TODO: 不应该在这修改，
+                //  recovery 逻辑中会在translog同步过程和重放过程，修改；正常逻辑是通过数据写入同步过程更新
+                //  可能会和这里的操作有冲突！
+//                shard.updateLocalCheckpointForShard(request.targetAllocationId(), shard.getLastKnownGlobalCheckpoint());
 
             }, onFailure);
 
@@ -530,6 +536,14 @@ public class RecoverySourceHandler {
     }
 
     private long dataCopyEnginePhase2(IndexCommit snapshotP1, final boolean softDeletesEnabled, StepListener<SendFileP2Result> sendFileStepP2) throws IOException {
+        final Store.MetadataSnapshot recoverySourceMetadataOld;
+        try{
+            // TODO: 改成 final Releasable releaseStore = acquireStore(shard.store()); 这种形式，后面也需要关闭
+            recoverySourceMetadataOld = shard.store().getMetadata(snapshotP1);
+        } catch (CorruptIndexException | IndexFormatTooOldException | IndexFormatTooNewException ex) {
+            shard.failShard("recovery", ex);
+            throw ex;
+        }
         // 刷盘提交
 //        shard.flush(new FlushRequest().waitIfOngoing(true).force(true));
         // 获取最新的提交信息
@@ -556,7 +570,7 @@ public class RecoverySourceHandler {
             }
         });
         final int estimateNumOps = shard.estimateNumberOfHistoryOperations("peer-recovery", Engine.HistorySource.INDEX, startingSeqNo);
-        dataCopyPhase2(snapshotP1, commitRef.getIndexCommit(), startingSeqNo, () -> estimateNumOps, sendFileStepP2);
+        dataCopyPhase2(recoverySourceMetadataOld, commitRef.getIndexCommit(), startingSeqNo, () -> estimateNumOps, sendFileStepP2);
         return startingSeqNo;
     }
 
@@ -811,18 +825,10 @@ public class RecoverySourceHandler {
      * segments that are missing. Only segments that have the same size and
      * checksum can be reused
      */
-    void dataCopyPhase2(IndexCommit snapshotP1, IndexCommit snapshot, long startingSeqNo, IntSupplier translogOps, ActionListener<SendFileP2Result> listener) {
+    void dataCopyPhase2(Store.MetadataSnapshot recoverySourceMetadataOld, IndexCommit snapshot, long startingSeqNo, IntSupplier translogOps, ActionListener<SendFileP2Result> listener) {
         cancellableThreads.checkForCancel();
         final Store store = shard.store();
         try {
-            final Store.MetadataSnapshot recoverySourceMetadataOld;
-            try{
-                recoverySourceMetadataOld = store.getMetadata(snapshotP1);
-            } catch (CorruptIndexException | IndexFormatTooOldException | IndexFormatTooNewException ex) {
-                shard.failShard("recovery", ex);
-                throw ex;
-            }
-
             StopWatch stopWatch = new StopWatch().start();
             final Store.MetadataSnapshot recoverySourceMetadata;
             try {

@@ -49,6 +49,7 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 import static java.util.Collections.emptyMap;
@@ -103,6 +104,7 @@ public class SourceShardCopyStateTests extends ESTestCase {
             scs.version,
             scs.gen,
             scs.primaryTerm,
+            scs.refreshedCheckpoint,
             scs.infosBytes,
             scs.files,
             new ArrayList<>()
@@ -150,7 +152,8 @@ public class SourceShardCopyStateTests extends ESTestCase {
             infosBytes,
             1L,
             segmentInfos,
-            null);
+            null,
+            0L);
         SegmentsInfoRequest  sir = createSegmentsInfoRequest(segmentsCopyInfo);
         System.out.println("sir = " + sir);
         try (BytesStreamOutput buffer2 = new BytesStreamOutput()) {
@@ -291,7 +294,8 @@ public class SourceShardCopyStateTests extends ESTestCase {
             infosBytes,
             1L,
             segmentInfos,
-            null);
+            null,
+            0L);
 
         return filesMetadata;
     }
@@ -327,7 +331,7 @@ public class SourceShardCopyStateTests extends ESTestCase {
         CopyMultiFileWriter multiFileWriter;
 
         public TestTargetShardCopyState(ShardId shardId, TransportService transportService, DiscoveryNode localNode, DiscoveryNode targetNode, Long internalActionTimeout, Consumer<Long> onSourceThrottle) {
-            super(shardId, SourceShardCopyStateTests.this.threadPool, transportService, localNode, targetNode, internalActionTimeout, onSourceThrottle);
+            super(shardId, SourceShardCopyStateTests.this.threadPool, transportService, localNode, targetNode, new AtomicLong(0), internalActionTimeout, onSourceThrottle);
         }
 
         @Override

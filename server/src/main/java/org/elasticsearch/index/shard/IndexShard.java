@@ -452,6 +452,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                                  final Set<String> inSyncAllocationIds,
                                  final IndexShardRoutingTable routingTable) throws IOException {
         final ShardRouting currentRouting;
+        logger.error("#################### updata ShardState [{}]", newRouting);
         synchronized (mutex) {
             currentRouting = this.shardRouting;
             assert currentRouting != null;
@@ -3564,11 +3565,25 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
 
     public EngineFactory genEngineFactory(EngineFactory engineFactory, IndexSettings indexSettings, ShardRouting shardRouting){
         if("segment".equals(indexSettings.getSettings().get("index.datasycn.type", ""))){
-           if(shardRouting.primary()){
-               return DataCopyEngine::new;
-           }else{
-               return DataCopyReadEngine::new;
-           }
+//           if(shardRouting.primary()){
+//               return DataCopyEngine::new;
+//           }else{
+//               return DataCopyReadEngine::new;
+//           }
+            // TODO:liuyongheng 初始化时设置是否是primary，提主的时候设置primary
+            if(shardRouting.primary()){
+                return (config) -> {
+                    DataCopyEngine dataCopyEngine = new DataCopyEngine(config);
+                    dataCopyEngine.setIsPrimary(true);
+                    return dataCopyEngine;
+                };
+            }else{
+                return (config) -> {
+                    DataCopyEngine dataCopyEngine = new DataCopyEngine(config);
+                    dataCopyEngine.closeIndexWriter();
+                    return dataCopyEngine;
+                };
+            }
         }
         return engineFactory;
     }

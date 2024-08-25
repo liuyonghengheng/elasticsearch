@@ -36,7 +36,6 @@ import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.Nullable;
-import org.elasticsearch.common.SuppressForbidden;
 import org.elasticsearch.common.lease.Releasable;
 import org.elasticsearch.common.lucene.LoggerInfoStream;
 import org.elasticsearch.common.lucene.Lucene;
@@ -853,45 +852,53 @@ public class DataCopyReadEngine extends Engine {
         try (ReleasableLock releasableLock = readLock.acquire()) {
             ensureOpen();
             assert assertIncomingSequenceNumber(index.origin(), index.seqNo());
-            int reservedDocs = 0;
             try (Releasable ignored = versionMap.acquireLock(index.uid().bytes());
                  Releasable indexThrottle = doThrottle ? throttle.acquireThrottle() : () -> {}) {
                 lastWriteNanos = index.startTime();
                 final IndexingStrategy plan = indexingStrategyForOperation(index);
-                reservedDocs = plan.reservedDocs;
 
-                final IndexResult indexResult;
-                if (plan.earlyResultOnPreFlightError.isPresent()) {
-                    assert index.origin() == Operation.Origin.PRIMARY : index.origin();
-                    indexResult = plan.earlyResultOnPreFlightError.get();
-                    assert indexResult.getResultType() == Result.Type.FAILURE : indexResult.getResultType();
+                // register sequence number
+                markSeqNoAsSeen(index.seqNo());
+                assert index.seqNo() >= 0 : "ops should have an assigned seq no.; origin: " + index.origin();
+                final IndexResult indexResult = new IndexResult(
+                    plan.versionForIndexing, index.primaryTerm(), index.seqNo(), plan.currentNotFoundOrDeleted);
+                // 这里的逻辑一定是replica在执行，replica的恢复都是从primary过来，所以都可以记录到translog，
+                // 即使重复写入，影响也不大！
+//                if (index.origin().isFromTranslog() == false) {//如果doc操作本来就是来自translog，则不需要再次写入translog了
+//                    final Translog.Location location;//写入translog
+//                    if (indexResult.getResultType() == Result.Type.SUCCESS) {
+//                        location = translog.add(new Translog.Index(index, indexResult));
+//                    } else if (indexResult.getSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO) {
+//                        // if we have document failure, record it as a no-op in the translog and Lucene with the generated seq_no
+//                        final NoOp noOp = new NoOp(indexResult.getSeqNo(), index.primaryTerm(), index.origin(),
+//                            index.startTime(), indexResult.getFailure().toString());
+//                        location = innerNoOp(noOp).getTranslogLocation();
+//                    } else {
+//                        location = null;
+//                    }
+//                    indexResult.setTranslogLocation(location);
+//                }
+                final Translog.Location location;//写入translog
+                if (indexResult.getResultType() == Result.Type.SUCCESS) {
+                    location = translog.add(new Translog.Index(index, indexResult));
+                } else if (indexResult.getSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO) {
+                    // if we have document failure, record it as a no-op in the translog and Lucene with the generated seq_no
+                    final NoOp noOp = new NoOp(indexResult.getSeqNo(), index.primaryTerm(), index.origin(),
+                        index.startTime(), indexResult.getFailure().toString());
+                    location = innerNoOp(noOp).getTranslogLocation();
                 } else {
-                    // register sequence number
-                    markSeqNoAsSeen(index.seqNo());
-                    assert index.seqNo() >= 0 : "ops should have an assigned seq no.; origin: " + index.origin();
-                    indexResult = new IndexResult(
-                        plan.versionForIndexing, index.primaryTerm(), index.seqNo(), plan.currentNotFoundOrDeleted);
+                    location = null;
                 }
-                if (index.origin().isFromTranslog() == false) {//如果doc操作本来就是来自translog，则不需要再次写入translog了
-                    final Translog.Location location;//写入translog
-                    if (indexResult.getResultType() == Result.Type.SUCCESS) {
-                        location = translog.add(new Translog.Index(index, indexResult));
-                    } else if (indexResult.getSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO) {
-                        // if we have document failure, record it as a no-op in the translog and Lucene with the generated seq_no
-                        final NoOp noOp = new NoOp(indexResult.getSeqNo(), index.primaryTerm(), index.origin(),
-                            index.startTime(), indexResult.getFailure().toString());
-                        location = innerNoOp(noOp).getTranslogLocation();
-                    } else {
-                        location = null;
-                    }
-                    indexResult.setTranslogLocation(location);
-                }
+                indexResult.setTranslogLocation(location);
+
                 if (plan.indexIntoLucene && indexResult.getResultType() == Result.Type.SUCCESS) {
                     final Translog.Location translogLocation = trackTranslogLocation.get() ? indexResult.getTranslogLocation() : null;
                     versionMap.maybePutIndexUnderLock(index.uid().bytes(),//这里的uid就_id
                         new IndexVersionValue(translogLocation, plan.versionForIndexing, index.seqNo(), index.primaryTerm()));
                 }
-                localCheckpointTracker.markSeqNoAsProcessedOnReplicaCopy(indexResult.getSeqNo());
+                // TODO: 这里确认一下以前的逻辑
+//                localCheckpointTracker.markSeqNoAsProcessedOnReplicaCopy(indexResult.getSeqNo());
+                localCheckpointTracker.markSeqNoAsProcessed(indexResult.getSeqNo());
                 if (indexResult.getTranslogLocation() == null) {
                     // the op is coming from the translog (and is hence persisted already) or it does not have a sequence number
                     assert index.origin().isFromTranslog() || indexResult.getSeqNo() == SequenceNumbers.UNASSIGNED_SEQ_NO;
@@ -900,8 +907,6 @@ public class DataCopyReadEngine extends Engine {
                 indexResult.setTook(System.nanoTime() - index.startTime());
                 indexResult.freeze();
                 return indexResult;
-            } finally {
-                releaseInFlightDocs(reservedDocs);
             }
         } catch (RuntimeException | IOException e) {
             try {
@@ -915,6 +920,11 @@ public class DataCopyReadEngine extends Engine {
             }
             throw e;
         }
+    }
+
+    public synchronized void setCheckPoint(long checkPoint){
+        localCheckpointTracker.markSeqNoAsProcessed(checkPoint);
+        localCheckpointTracker.markSeqNoAsPersisted(checkPoint);
     }
 
     protected final IndexingStrategy planIndexingAsNonPrimary(Index index) throws IOException {
@@ -1582,8 +1592,55 @@ public class DataCopyReadEngine extends Engine {
         return refresh(source, SearcherScope.EXTERNAL, false);
     }
 
-    final boolean refresh(String source, SearcherScope scope, boolean block) {
-        return true;
+    final boolean refresh(String source, SearcherScope scope, boolean block) throws EngineException {
+        // both refresh types will result in an internal refresh but only the external will also
+        // pass the new reader reference to the external reader manager.
+        final long localCheckpointBeforeRefresh = localCheckpointTracker.getProcessedCheckpoint();
+        boolean refreshed;
+        try {
+            // refresh does not need to hold readLock as ReferenceManager can handle correctly if the engine is closed in mid-way.
+            if (store.tryIncRef()) {
+                // increment the ref just to ensure nobody closes the store during a refresh
+                try {
+                    // even though we maintain 2 managers we really do the heavy-lifting only once.
+                    // the second refresh will only do the extra work we have to do for warming caches etc.
+//                    ReferenceManager<ElasticsearchDirectoryReader> referenceManager = getReferenceManager(scope);
+                    ReferenceManager<ElasticsearchDirectoryReader> referenceManager = externalReaderManager;
+                    // it is intentional that we never refresh both internal / external together
+                    if (block) { //这是有意的操作，内部和外部不能同时一起刷新？
+                        referenceManager.maybeRefreshBlocking();
+                        refreshed = true;
+                    } else {
+                        refreshed = referenceManager.maybeRefresh();
+                    }
+                } finally {
+                    store.decRef();
+                }
+//                if (refreshed) {
+//                    lastRefreshedCheckpointListener.updateRefreshedCheckpoint(localCheckpointBeforeRefresh);
+//                }
+            } else {
+                refreshed = false;
+            }
+        } catch (AlreadyClosedException e) {
+            failOnTragicEvent(e);
+            throw e;
+        } catch (Exception e) {
+            try {
+                failEngine("refresh failed source[" + source + "]", e);
+            } catch (Exception inner) {
+                e.addSuppressed(inner);
+            }
+            throw new RefreshFailedEngineException(shardId, e);
+        }
+//        assert refreshed == false || lastRefreshedCheckpoint() >= localCheckpointBeforeRefresh : "refresh checkpoint was not advanced; " +
+//            "local_checkpoint=" + localCheckpointBeforeRefresh + " refresh_checkpoint=" + lastRefreshedCheckpoint();
+        // TODO: maybe we should just put a scheduled job in threadPool?
+        // We check for pruning in each delete request, but we also prune here e.g. in case a delete burst comes in and then no more deletes
+        // for a long time:
+//        maybePruneDeletes();
+//        mergeScheduler.refreshConfig();
+        return refreshed;
     }
 
     public void syncReplica(){
@@ -1742,7 +1799,8 @@ public class DataCopyReadEngine extends Engine {
                     try {
                         translog.rollGeneration();
                         logger.trace("starting commit for flush; commitTranslog=true");
-                        commitIndexWriter(indexWriter, translog, null);
+                        // TODO:liuyongheng 这里先注释掉，后面看如何处理，是直接copy过来还是在本地commit，理论上应该copy过来，所以本地不应该有commit操作
+//                        commitIndexWriter(indexWriter, translog, null);
                         logger.trace("finished commit for flush");
 
                         // a temporary debugging to investigate test failure - issue#32827. Remove when the issue is resolved
@@ -2150,12 +2208,7 @@ public class DataCopyReadEngine extends Engine {
 
     @Override
     protected final ReferenceManager<ElasticsearchDirectoryReader> getReferenceManager(SearcherScope scope) {
-        try {
-            SegmentInfos info = SegmentInfos.readCommit(store.directory(), getLastCommitSegmentsFileName(store.directory()));
-            setCurrentInfos(info);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        logger.error("!!!!!!!!!!!!! get copy reader ReferenceManager");
         return externalReaderManager;
     }
 
@@ -2422,6 +2475,11 @@ public class DataCopyReadEngine extends Engine {
             }
         }
     }
+
+    private void persistSegmentsInfo(){
+
+    }
+
     /**
      * Commits the specified index writer.
      *
@@ -2516,6 +2574,11 @@ public class DataCopyReadEngine extends Engine {
         translogDeletionPolicy.setRetentionAgeInMillis(translogRetentionAge.millis());
         translogDeletionPolicy.setRetentionSizeInBytes(translogRetentionSize.getBytes());
         softDeletesPolicy.setRetentionOperations(softDeletesRetentionOps);
+    }
+
+    @Override
+    public boolean refreshNeeded() {
+        return false;
     }
 
     public MergeStats getMergeStats() {

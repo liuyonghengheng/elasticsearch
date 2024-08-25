@@ -25,6 +25,7 @@ import org.elasticsearch.transport.TransportRequestHandler;
 import org.elasticsearch.transport.TransportResponse;
 import org.elasticsearch.transport.TransportService;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -60,6 +61,9 @@ public class SegmentsCopyTargetService {
 
         transportService.registerRequestHandler(SegmentsCopyTargetService.Actions.FILE_CHUNK, ThreadPool.Names.GENERIC, CopyFileChunkRequest::new,
             new FileChunkTransportRequestHandler());
+
+        transportService.registerRequestHandler(Actions.CLEAN_FILES, ThreadPool.Names.GENERIC, CopyCleanFilesRequest::new,
+            new CopyCleanFilesRequestHandler());
     }
 
     public LocalTargetShardCopyState getTargetShardCopyState(SegmentsInfoRequest request, ActionListener<TransportResponse> listener) {
@@ -90,7 +94,8 @@ public class SegmentsCopyTargetService {
             //如果已经存在，需要先判断状态是否正常
             if(localTargetShardCopyState.isRunning.get()){
                 // 已经在运行了，不能再接收新的请求！
-                listener.onResponse(new LocalTargetShardCopyState.ErrorResponse(LocalTargetShardCopyState.ErrorType.IS_RUNNING_ERROR));
+//                listener.onResponse(new LocalTargetShardCopyState.ErrorResponse(LocalTargetShardCopyState.ErrorType.IS_RUNNING_ERROR));
+                listener.onFailure(new IOException("##################################### segments copy task is running can not start a new seagments copy task! {}"+request.shardId()));
                 return null;
             }else{
                 return localTargetShardCopyState;
@@ -106,16 +111,21 @@ public class SegmentsCopyTargetService {
                 new ChannelActionListener<>(channel, Actions.SEGMENTS_INFO, request);
             LocalTargetShardCopyState localTargetShardCopyState = getTargetShardCopyState(request, listener);
             logger.error("SegmentCopyTargetService [{}] receive segments info request", request.shardId());
+            logger.error("SegmentCopyTargetService receive SegmentsInfo request, task status [{}]", localTargetShardCopyState.isRunning.get());
             if(localTargetShardCopyState == null){
                 // 异常情况直接返回
 //                channel.sendResponse(new LocalTargetShardCopyState.ErrorResponse(LocalTargetShardCopyState.ErrorType.PRIMARY_TERM_ERROR));
+                logger.error("##################################### segments copy task is running can not start a new seagments copy task! {}",request.shardId());
                 return;
             }
             logger.error("SegmentCopyTargetService [{}] receive segments info request", request.shardId());
 //            localTargetShardCopyState.isRunning.set(true);
-            SegmentsCopyInfo segmentsCopyInfo = new SegmentsCopyInfo(request.fileNames, null, request.segmentInfoVersion,
-                request.segmentInfoGen, request.infosBytes, request.primaryTerm, null, null);
-            localTargetShardCopyState.receiveSegmentsInfo(segmentsCopyInfo, listener);
+            if(!localTargetShardCopyState.isRunning.get()) {
+                localTargetShardCopyState.isRunning.set(true);
+                SegmentsCopyInfo segmentsCopyInfo = new SegmentsCopyInfo(request.fileNames, null, request.segmentInfoVersion,
+                    request.segmentInfoGen, request.infosBytes, request.primaryTerm, null, null, request.refreshedCheckpoint);
+                localTargetShardCopyState.receiveSegmentsInfo(segmentsCopyInfo, listener);
+            }
         }
     }
 
@@ -124,13 +134,20 @@ public class SegmentsCopyTargetService {
         final AtomicLong bytesSinceLastPause = new AtomicLong();
         @Override
         public void messageReceived(CopyFileChunkRequest request, TransportChannel channel, Task task) throws Exception {
-            logger.error("SegmentCopyTargetService [{}] receive FileChunk request", request.shardId());
+            logger.error("SegmentCopyTargetService [{}] receive FileChunk request file [{}]", request.shardId(), request.name());
             LocalTargetShardCopyState targetShardCopyState = onGoingShards.get(request.shardId());
+            logger.error("SegmentCopyTargetService receive FileChunk request, task status [{}]", targetShardCopyState.isRunning.get());
             final ActionListener<Void> listener = createOrFinishListener(targetShardCopyState, channel, SegmentsCopyTargetService.Actions.FILE_CHUNK, request);
             if (listener == null) {
                 return;
             }
-// TODO 设置限速等
+
+            if(!targetShardCopyState.isRunning.get()){
+                logger.error("file trunk stype EEEEEEEEEEEEEEEEEE  errorrrrrrrrrrrrrrrrrrrrrrrrrrrr 已经停止");
+//                listener.onFailure(new IOException("本次拷贝 已经停止不能再发送！"));
+            }
+
+// TODO 设置限速等, 这种是主要业务功能，能不能限速？难道不应该越快越好吗？
 //            final RecoveryState.Index indexState = recoveryTarget.state().getIndex();
 //            if (request.sourceThrottleTimeInNanos() != RecoveryState.Index.UNKNOWN) {
 //                indexState.addSourceThrottling(request.sourceThrottleTimeInNanos());
@@ -150,6 +167,29 @@ public class SegmentsCopyTargetService {
             }
             targetShardCopyState.writeFileChunk(request.metadata(), request.position(), request.content(), request.lastChunk(),
                 request.totalTranslogOps(), listener);
+        }
+    }
+
+    class CopyCleanFilesRequestHandler implements TransportRequestHandler<CopyCleanFilesRequest> {
+
+        @Override
+        public void messageReceived(CopyCleanFilesRequest request, TransportChannel channel, Task task) throws Exception {
+            LocalTargetShardCopyState targetShardCopyState = onGoingShards.get(request.shardId());
+            logger.error("SegmentCopyTargetService receive CleanFiles request, task status [{}]", targetShardCopyState.isRunning.get());
+            try {
+                final ActionListener<Void> listener = createOrFinishListener(targetShardCopyState, channel, Actions.CLEAN_FILES, request);
+                if (listener == null) {
+                    return;
+                }
+                if(!targetShardCopyState.isRunning.get()){
+                    logger.error("clean stype EEEEEEEEEEEEEEEEEE  errorrrrrrrrrrrrrrrrrrrrrrrrrrrr 已经停止");
+//                listener.onFailure(new IOException("本次拷贝 已经停止不能再发送！"));
+                }
+                targetShardCopyState.cleanFiles(request.getGlobalCheckpoint(), request.sourceMetaSnapshot(),
+                        listener);
+            } finally {
+
+            }
         }
     }
 
