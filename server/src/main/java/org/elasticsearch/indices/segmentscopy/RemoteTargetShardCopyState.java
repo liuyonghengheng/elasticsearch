@@ -61,7 +61,7 @@ public class RemoteTargetShardCopyState implements TargetShardCopyState{
     public final ThreadPool threadPool;
     public ShardRouting replicaRouting;
     private  int chunkSizeInBytes;
-    private  int maxConcurrentFileChunks = 4;
+    private  int maxConcurrentFileChunks = 2;
     private  long timeout;
     private  long internalActionTimeout;
     private final DiscoveryNode localNode;

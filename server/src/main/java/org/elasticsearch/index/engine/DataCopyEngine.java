@@ -688,7 +688,7 @@ public class DataCopyEngine extends Engine {
                     internalReaderManager.release(searcher);
                 }
             }
-            logger.error("ExternalReaderManager：new infos is {}", newInfos);
+            logger.error("ExternalReaderManager：new infos is {}", newInfos.files(true));
             if(newInfos == null){
                 // no change
                 System.out.println("new infos is null ,skip switch to new infos");
@@ -1453,7 +1453,7 @@ public class DataCopyEngine extends Engine {
             || index.origin() == Operation.Origin.LOCAL_RESET){
             return indexPrimary(index);
         }else{
-            return indexReplica(index);
+            return indexReplica2(index);
         }
     }
 
@@ -1560,9 +1560,10 @@ public class DataCopyEngine extends Engine {
                 assert index.seqNo() >= 0 : "ops should have an assigned seq no.; origin: " + index.origin();
                 final IndexResult indexResult = new IndexResult(
                     plan.versionForIndexing, index.primaryTerm(), index.seqNo(), plan.currentNotFoundOrDeleted);
-                // 这里的逻辑一定是replica在执行，replica的恢复都是从primary过来，所以都可以记录到translog，
-                // 即使重复写入，影响也不大！
-                if (index.origin().isFromTranslog() == false) {//如果doc操作本来就是来自translog，则不需要再次写入translog了
+                // 这里的逻辑一定是replica在执行，replica的大部分基本都是从primary过来，只有LOCAL_RESET是从本地translog恢复，
+                // 即使重复写入到translog影响也不大！
+                //如果doc操作本来就是来自本地translog，则不需要再次写入translog了
+                if (index.origin().isFromTranslog() == false) {
                     final Translog.Location location;//写入translog
                     if (indexResult.getResultType() == Result.Type.SUCCESS) {
                         location = translog.add(new Translog.Index(index, indexResult));
@@ -1583,6 +1584,132 @@ public class DataCopyEngine extends Engine {
                 }
                 // TODO: 这里确认一下以前的逻辑
 //                localCheckpointTracker.markSeqNoAsProcessedOnReplicaCopy(indexResult.getSeqNo());
+                localCheckpointTracker.markSeqNoAsProcessed(indexResult.getSeqNo());
+                if (indexResult.getTranslogLocation() == null) {
+                    // the op is coming from the translog (and is hence persisted already) or it does not have a sequence number
+                    assert index.origin().isFromTranslog() || indexResult.getSeqNo() == SequenceNumbers.UNASSIGNED_SEQ_NO;
+                    localCheckpointTracker.markSeqNoAsPersisted(indexResult.getSeqNo());
+                }
+                indexResult.setTook(System.nanoTime() - index.startTime());
+                indexResult.freeze();
+                return indexResult;
+            }
+        } catch (RuntimeException | IOException e) {
+            try {
+                if (e instanceof AlreadyClosedException == false && treatDocumentFailureAsTragicError(index)) {
+                    failEngine("index id[" + index.id() + "] origin[" + index.origin() + "] seq#[" + index.seqNo() + "]", e);
+                } else { // IO 异常，有些情况需要关闭这个engine，shard，并上报master
+                    maybeFailEngine("index id[" + index.id() + "] origin[" + index.origin() + "] seq#[" + index.seqNo() + "]", e);
+                }
+            } catch (Exception inner) {
+                e.addSuppressed(inner);
+            }
+            throw e;
+        }
+    }
+
+    public IndexResult indexReplica2(Index index) throws IOException {
+        assert Objects.equals(index.uid().field(), IdFieldMapper.NAME) : index.uid().field();
+        final boolean doThrottle = index.origin().isRecovery() == false;
+        try (ReleasableLock releasableLock = readLock.acquire()) {
+            ensureOpen();
+            assert assertIncomingSequenceNumber(index.origin(), index.seqNo());
+            try (Releasable indexThrottle = doThrottle ? throttle.acquireThrottle() : () -> {}) {
+                lastWriteNanos = index.startTime();
+                // register sequence number
+                markSeqNoAsSeen(index.seqNo());
+                assert index.seqNo() >= 0 : "ops should have an assigned seq no.; origin: " + index.origin();
+                // 这里不在使用plan，减少一些逻辑判断
+                // 唯一的问题是返回的indexResult 中的 Created字段全是True，但是对于副本来说这个并不重要,并不会被记录到translog中！
+                // translog只是用来恢复，我们只会在主分片上进行恢复translog，那个时候会正常处理这一切的
+                // 对于stale过时的数据，直接写入translog同样不会有问题，因为如果重放translog，同样会被处理为过时数据
+                final IndexResult indexResult = new IndexResult(
+                    index.version(), index.primaryTerm(), index.seqNo(), true);
+                // 这里的逻辑一定是replica在执行，replica的大部分基本都是从primary过来，只有LOCAL_RESET是从本地translog恢复，
+                // 即使重复写入到translog影响也不大
+                // 如果doc操作本来就是来自本地translog，则不需要再次写入translog了
+                // 对于 recovery 过程中重放主副本translog同时有数据写入的情况，直接写入translog同样不受影响，因为如果本地重放translog
+                // 会判断相同id的数据版本和seqno，如果是过时数据会被直接丢掉
+                if (index.origin().isFromTranslog() == false) {
+                    final Translog.Location location;//写入translog
+                    if (indexResult.getResultType() == Result.Type.SUCCESS) {
+                        location = translog.add(new Translog.Index(index, indexResult));
+                    } else if (indexResult.getSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO) {
+                        // if we have document failure, record it as a no-op in the translog and Lucene with the generated seq_no
+                        final NoOp noOp = new NoOp(indexResult.getSeqNo(), index.primaryTerm(), index.origin(),
+                            index.startTime(), indexResult.getFailure().toString());
+                        location = innerNoOp(noOp).getTranslogLocation();
+                    } else {
+                        location = null;
+                    }
+                    indexResult.setTranslogLocation(location);
+                }
+                // 这里并没有记录到versionMap中，可以降低复杂度，不需要id锁
+                // 但是副本中没有refresh的写入操作，Get Id 的查询操作 无法查询到，
+                // 如果这个副本被提升到主副本，则最近一次refresh之前得数据也会有上述问题
+                localCheckpointTracker.markSeqNoAsProcessed(indexResult.getSeqNo());
+                if (indexResult.getTranslogLocation() == null) {
+                    // the op is coming from the translog (and is hence persisted already) or it does not have a sequence number
+                    assert index.origin().isFromTranslog() || indexResult.getSeqNo() == SequenceNumbers.UNASSIGNED_SEQ_NO;
+                    localCheckpointTracker.markSeqNoAsPersisted(indexResult.getSeqNo());
+                }
+                indexResult.setTook(System.nanoTime() - index.startTime());
+                indexResult.freeze();
+                return indexResult;
+            }
+        } catch (RuntimeException | IOException e) {
+            try {
+                if (e instanceof AlreadyClosedException == false && treatDocumentFailureAsTragicError(index)) {
+                    failEngine("index id[" + index.id() + "] origin[" + index.origin() + "] seq#[" + index.seqNo() + "]", e);
+                } else { // IO 异常，有些情况需要关闭这个engine，shard，并上报master
+                    maybeFailEngine("index id[" + index.id() + "] origin[" + index.origin() + "] seq#[" + index.seqNo() + "]", e);
+                }
+            } catch (Exception inner) {
+                e.addSuppressed(inner);
+            }
+            throw e;
+        }
+    }
+
+    public IndexResult indexReplica3(Index index) throws IOException {
+        assert Objects.equals(index.uid().field(), IdFieldMapper.NAME) : index.uid().field();
+        final boolean doThrottle = index.origin().isRecovery() == false;
+        try (ReleasableLock releasableLock = readLock.acquire()) {
+            ensureOpen();
+            assert assertIncomingSequenceNumber(index.origin(), index.seqNo());
+            try (Releasable indexThrottle = doThrottle ? throttle.acquireThrottle() : () -> {}) {
+                lastWriteNanos = index.startTime();
+                // register sequence number
+                markSeqNoAsSeen(index.seqNo());
+                assert index.seqNo() >= 0 : "ops should have an assigned seq no.; origin: " + index.origin();
+                // 这里不在使用plan，减少一些逻辑判断
+                // 唯一的问题是返回的indexResult 中的 Created字段全是True，但是对于副本来说这个并不重要,并不会被记录到translog中！
+                // translog只是用来恢复，我们只会在主分片上进行恢复translog，那个时候会正常处理这一切的
+                // 对于stale过时的数据，直接写入translog同样不会有问题，因为如果重放translog，同样会被处理为过时数据
+                final IndexResult indexResult = new IndexResult(
+                    index.version(), index.primaryTerm(), index.seqNo(), true);
+                // 这里的逻辑一定是replica在执行，replica的大部分基本都是从primary过来，只有LOCAL_RESET是从本地translog恢复，
+                // 即使重复写入到translog影响也不大
+                // 如果doc操作本来就是来自本地translog，则不需要再次写入translog了
+                // 对于 recovery 过程中重放主副本translog同时有数据写入的情况，直接写入translog同样不受影响，因为如果本地重放translog
+                // 会判断相同id的数据版本和seqno，如果是过时数据会被直接丢掉
+                if (index.origin().isFromTranslog() == false) {
+                    final Translog.Location location;//写入translog
+                    if (indexResult.getResultType() == Result.Type.SUCCESS) {
+                        location = translog.add(new Translog.Index(index, indexResult));
+                    } else if (indexResult.getSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO) {
+                        // if we have document failure, record it as a no-op in the translog and Lucene with the generated seq_no
+                        final NoOp noOp = new NoOp(indexResult.getSeqNo(), index.primaryTerm(), index.origin(),
+                            index.startTime(), indexResult.getFailure().toString());
+                        location = innerNoOp(noOp).getTranslogLocation();
+                    } else {
+                        location = null;
+                    }
+                    indexResult.setTranslogLocation(location);
+                }
+                // 这里并没有记录到versionMap中，可以降低复杂度，不需要id锁
+                // 但是副本中没有refresh的写入操作，Get Id 的查询操作 无法查询到，
+                // 如果这个副本被提升到主副本，则最近一次refresh之前得数据也会有上述问题
                 localCheckpointTracker.markSeqNoAsProcessed(indexResult.getSeqNo());
                 if (indexResult.getTranslogLocation() == null) {
                     // the op is coming from the translog (and is hence persisted already) or it does not have a sequence number
@@ -1631,6 +1758,8 @@ public class DataCopyEngine extends Engine {
             // question may have been deleted in an out of order op that is not replayed.
             // See testRecoverFromStoreWithOutOfOrderDelete for an example of local recovery
             // See testRecoveryWithOutOfOrderDelete for an example of peer recovery
+            // 这种情况大概率是retry，或者并发场景下，先写后删，但是副本删先到写后到
+            // 已经处理过的，不再写入lucene，不再记录到versionmap，但是可能会写入translog
             plan = IndexingStrategy.processButSkipLucene(false, index.version());
         } else if (maxSeqNoOfUpdatesOrDeletes <= localCheckpointTracker.getProcessedCheckpoint()) {
             // see Engine#getMaxSeqNoOfUpdatesOrDeletes for the explanation of the optimization using sequence numbers
@@ -1638,6 +1767,8 @@ public class DataCopyEngine extends Engine {
             plan = IndexingStrategy.optimizedAppendOnly(index.version(), 0);
         } else {
             versionMap.enforceSafeAccess();
+            // 查询是否写入过相同的id的数据，从versionmap 或者luncene数据中，如果有，则对比seqno，如果当前数据比已写入的数据seqno大
+            // 说明是新数据，否则说明是过时的数据，不再需要写入lucene！
             final OpVsLuceneDocStatus opVsLucene = compareOpToLuceneDocBasedOnSeqNo(index);
             if (opVsLucene == OpVsLuceneDocStatus.OP_STALE_OR_EQUAL) {
                 plan = IndexingStrategy.processAsStaleOp(softDeleteEnabled, index.version());
@@ -1659,16 +1790,7 @@ public class DataCopyEngine extends Engine {
         // this allows to ignore the case where a document was found in the live version maps in
         // a delete state and return false for the created flag in favor of code simplicity
         final long maxSeqNoOfUpdatesOrDeletes = getMaxSeqNoOfUpdatesOrDeletes();
-        if (hasBeenProcessedBefore(index)) {
-            // the operation seq# was processed and thus the same operation was already put into lucene
-            // this can happen during recovery where older operations are sent from the translog that are already
-            // part of the lucene commit (either from a peer recovery or a local translog)
-            // or due to concurrent indexing & recovery. For the former it is important to skip lucene as the operation in
-            // question may have been deleted in an out of order op that is not replayed.
-            // See testRecoverFromStoreWithOutOfOrderDelete for an example of local recovery
-            // See testRecoveryWithOutOfOrderDelete for an example of peer recovery
-            plan = IndexingStrategy.processButSkipLucene(false, index.version());
-        } else if (maxSeqNoOfUpdatesOrDeletes <= localCheckpointTracker.getProcessedCheckpoint()) {
+        if (maxSeqNoOfUpdatesOrDeletes <= localCheckpointTracker.getProcessedCheckpoint()) {
             // see Engine#getMaxSeqNoOfUpdatesOrDeletes for the explanation of the optimization using sequence numbers
             assert maxSeqNoOfUpdatesOrDeletes < index.seqNo() : index.seqNo() + ">=" + maxSeqNoOfUpdatesOrDeletes;
             plan = IndexingStrategy.optimizedAppendOnly(index.version(), 0);
@@ -1689,7 +1811,7 @@ public class DataCopyEngine extends Engine {
             return planIndexingAsPrimary(index);
         } else {
             // non-primary mode (i.e., replica or recovery)
-            return planIndexingAsNonPrimary(index);
+            return planIndexingAsReplica(index);
         }
     }
 
@@ -2422,7 +2544,7 @@ public class DataCopyEngine extends Engine {
         // TODO: maybe we should just put a scheduled job in threadPool?
         // We check for pruning in each delete request, but we also prune here e.g. in case a delete burst comes in and then no more deletes
         // for a long time:
-//        maybePruneDeletes();
+        maybePruneDeletes();
 //        mergeScheduler.refreshConfig();
         return refreshed;
     }
