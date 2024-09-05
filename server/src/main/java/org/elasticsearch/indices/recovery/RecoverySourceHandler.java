@@ -27,7 +27,6 @@ import org.apache.lucene.index.IndexFormatTooNewException;
 import org.apache.lucene.index.IndexFormatTooOldException;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
-import org.apache.lucene.store.NIOFSDirectory;
 import org.apache.lucene.store.RateLimiter;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.SetOnce;
@@ -36,7 +35,6 @@ import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.StepListener;
-import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.action.support.ThreadedActionListener;
 import org.elasticsearch.action.support.replication.ReplicationResponse;
@@ -77,7 +75,6 @@ import org.elasticsearch.transport.Transports;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.lang.ref.Reference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -99,8 +96,8 @@ import java.util.stream.StreamSupport;
  * RecoverySourceHandler handles the three phases of shard recovery, which is
  * everything relating to copying the segment files as well as sending translog
  * operations across the wire once the segments have been copied.
- * 主要负责复制segment文件，发送 translog 操作
- * Note: There is always one source handler per recovery that handles all the //只有一个 source handler
+ *
+ * Note: There is always one source handler per recovery that handles all the
  * file and translog transfer. This handler is completely isolated from other recoveries
  * while the {@link RateLimiter} passed via {@link RecoverySettings} is shared across recoveries
  * originating from this nodes to throttle the number bytes send during file transfer. The transaction log
@@ -149,17 +146,7 @@ public class RecoverySourceHandler {
     /**
      * performs the recovery from the local engine to the target
      */
-
     public void recoverToTarget(ActionListener<RecoveryResponse> listener) {
-//        if(shard.indexSettings().getSettings().get("index.datasycn.type", "operation").equals("segment")){
-//            recoverToTargetCopy(listener);
-//        }else{
-//            recoverToTargetInternal(listener);
-//        }
-
-        recoverToTargetInternal(listener);
-    }
-    public void recoverToTargetInternal(ActionListener<RecoveryResponse> listener) {
         addListener(listener);
         final Closeable releaseResources = () -> IOUtils.close(resources);
         try {
@@ -185,17 +172,17 @@ public class RecoverySourceHandler {
             final SetOnce<RetentionLease> retentionLeaseRef = new SetOnce<>();
 
             runUnderPrimaryPermit(() -> {
-                    final IndexShardRoutingTable routingTable = shard.getReplicationGroup().getRoutingTable();
-                    ShardRouting targetShardRouting = routingTable.getByAllocationId(request.targetAllocationId());
-                    if (targetShardRouting == null) {
-                        logger.debug("delaying recovery of {} as it is not listed as assigned to target node {}", request.shardId(),
-                            request.targetNode());
-                        throw new DelayRecoveryException("source node does not have the shard listed in its state as allocated on the node");
-                    }
-                    assert targetShardRouting.initializing() : "expected recovery target to be initializing but was " + targetShardRouting;
-                    retentionLeaseRef.set(
-                        shard.getRetentionLeases().get(ReplicationTracker.getPeerRecoveryRetentionLeaseId(targetShardRouting)));
-                }, shardId + " validating recovery target ["+ request.targetAllocationId() + "] registered ",
+                final IndexShardRoutingTable routingTable = shard.getReplicationGroup().getRoutingTable();
+                ShardRouting targetShardRouting = routingTable.getByAllocationId(request.targetAllocationId());
+                if (targetShardRouting == null) {
+                    logger.debug("delaying recovery of {} as it is not listed as assigned to target node {}", request.shardId(),
+                        request.targetNode());
+                    throw new DelayRecoveryException("source node does not have the shard listed in its state as allocated on the node");
+                }
+                assert targetShardRouting.initializing() : "expected recovery target to be initializing but was " + targetShardRouting;
+                retentionLeaseRef.set(
+                    shard.getRetentionLeases().get(ReplicationTracker.getPeerRecoveryRetentionLeaseId(targetShardRouting)));
+            }, shardId + " validating recovery target ["+ request.targetAllocationId() + "] registered ",
                 shard, cancellableThreads, logger);
             final Engine.HistorySource historySource;
             if (softDeletesEnabled && (shard.useRetentionLeasesInPeerRecovery() || retentionLeaseRef.get() != null)) {
@@ -211,7 +198,7 @@ public class RecoverySourceHandler {
                 && isTargetSameHistory()
                 && shard.hasCompleteHistoryOperations("peer-recovery", historySource, request.startingSeqNo())
                 && (historySource == Engine.HistorySource.TRANSLOG ||
-                (retentionLeaseRef.get() != null && retentionLeaseRef.get().retainingSequenceNumber() <= request.startingSeqNo()));
+                   (retentionLeaseRef.get() != null && retentionLeaseRef.get().retainingSequenceNumber() <= request.startingSeqNo()));
             // NB check hasCompleteHistoryOperations when computing isSequenceNumberBasedRecovery, even if there is a retention lease,
             // because when doing a rolling upgrade from earlier than 7.4 we may create some leases that are initially unsatisfied. It's
             // possible there are other cases where we cannot satisfy all leases, because that's not a property we currently expect to hold.
@@ -364,216 +351,6 @@ public class RecoverySourceHandler {
         }
     }
 
-
-    public void recoverToTargetCopy(ActionListener<RecoveryResponse> listener) {
-        addListener(listener);
-        final Closeable releaseResources = () -> IOUtils.close(resources);
-        try {
-            cancellableThreads.setOnCancel((reason, beforeCancelEx) -> {
-                final RuntimeException e;
-                if (shard.state() == IndexShardState.CLOSED) { // check if the shard got closed on us
-                    e = new IndexShardClosedException(shard.shardId(), "shard is closed and recovery was canceled reason [" + reason + "]");
-                } else {
-                    e = new CancellableThreads.ExecutionCancelledException("recovery was canceled reason [" + reason + "]");
-                }
-                if (beforeCancelEx != null) {
-                    e.addSuppressed(beforeCancelEx);
-                }
-                IOUtils.closeWhileHandlingException(releaseResources, () -> future.onFailure(e));
-                throw e;
-            });
-            final Consumer<Exception> onFailure = e -> {
-                assert Transports.assertNotTransportThread(RecoverySourceHandler.this + "[onFailure]");
-                IOUtils.closeWhileHandlingException(releaseResources, () -> future.onFailure(e));
-            };
-
-            final boolean softDeletesEnabled = shard.indexSettings().isSoftDeleteEnabled();
-            final SetOnce<RetentionLease> retentionLeaseRef = new SetOnce<>();
-
-            //操作许可证下执行
-            runUnderPrimaryPermit(() -> {
-                    // 获取副本组信息
-                    final IndexShardRoutingTable routingTable = shard.getReplicationGroup().getRoutingTable();
-                    ShardRouting targetShardRouting = routingTable.getByAllocationId(request.targetAllocationId());
-                    // targetShardRouting==null 说明需要recovery的 replica shard没有分配到目标节点
-                    if (targetShardRouting == null) {
-                        logger.debug("delaying recovery of {} as it is not listed as assigned to target node {}", request.shardId(),
-                            request.targetNode());
-                        throw new DelayRecoveryException("source node does not have the shard listed in its state as allocated on the node");
-                    }
-                    // 确保replica副本处于初始化状态
-                    assert targetShardRouting.initializing() : "expected recovery target to be initializing but was " + targetShardRouting;
-                    // 确保replica副本没有被删除
-                    retentionLeaseRef.set(
-                        shard.getRetentionLeases().get(ReplicationTracker.getPeerRecoveryRetentionLeaseId(targetShardRouting)));
-                }, shardId + " validating recovery target ["+ request.targetAllocationId() + "] registered ",
-                shard, cancellableThreads, logger);
-            final Engine.HistorySource historySource;
-            if (softDeletesEnabled && (shard.useRetentionLeasesInPeerRecovery() || retentionLeaseRef.get() != null)) {
-                historySource = Engine.HistorySource.INDEX;
-            } else {
-                logger.error("segments copy is required for recovery but soft deletes are disabled or the retention lease is not present");
-                historySource = Engine.HistorySource.TRANSLOG;
-            }
-            final Closeable retentionLock = shard.acquireHistoryRetentionLock(historySource);
-            resources.add(retentionLock);
-            final long startingSeqNo;
-            logger.trace("history is retained by retention lock");
-
-            final StepListener<SendFileResult> sendFileStep = new StepListener<>();
-            final StepListener<TimeValue> prepareEngineStep = new StepListener<>();
-            final StepListener<SendFileP2Result> sendFileStepP2 = new StepListener<>();
-            final StepListener<SendSnapshotResult> sendSnapshotStep = new StepListener<>();
-            final StepListener<Void> finalizeStep = new StepListener<>();
-            Engine.IndexCommitRef safeCommitRef;
-            try {
-                safeCommitRef = acquireSafeCommit(shard);
-                resources.add(safeCommitRef);
-            } catch (final Exception e) {
-                throw new RecoveryEngineException(shard.shardId(), 1, "snapshot failed", e);
-            }
-
-            // Try and copy enough operations to the recovering peer so that if it is promoted to primary then it has a chance of being
-            // able to recover other replicas using operations-based recoveries. If we are not using retention leases then we
-            // conservatively copy all available operations. If we are using retention leases then "enough operations" is just the
-            // operations from the local checkpoint of the safe commit onwards, because when using soft deletes the safe commit retains
-            // at least as much history as anything else. The safe commit will often contain all the history retained by the current set
-            // of retention leases, but this is not guaranteed: an earlier peer recovery from a different primary might have created a
-            // retention lease for some history that this primary already discarded, since we discard history when the global checkpoint
-            // advances and not when creating a new safe commit. In any case this is a best-effort thing since future recoveries can
-            // always fall back to file-based ones, and only really presents a problem if this primary fails before things have settled
-            // down.
-            startingSeqNo = softDeletesEnabled
-                ? Long.parseLong(safeCommitRef.getIndexCommit().getUserData().get(SequenceNumbers.LOCAL_CHECKPOINT_KEY)) + 1L
-                : 0;
-            logger.trace("performing file-based recovery followed by history replay starting at [{}]", startingSeqNo);
-
-            try {
-                final int estimateNumOps = shard.estimateNumberOfHistoryOperations("peer-recovery", historySource, startingSeqNo);
-                final Releasable releaseStore = acquireStore(shard.store());
-                resources.add(releaseStore);
-                sendFileStep.whenComplete(r -> IOUtils.close(safeCommitRef, releaseStore), e -> {
-                    try {
-                        IOUtils.close(safeCommitRef, releaseStore);
-                    } catch (final IOException ex) {
-                        logger.warn("releasing snapshot caused exception", ex);
-                    }
-                });
-
-                final StepListener<ReplicationResponse> deleteRetentionLeaseStep = new StepListener<>();
-                runUnderPrimaryPermit(() -> {
-                        try {
-                            // If the target previously had a copy of this shard then a file-based recovery might move its global
-                            // checkpoint backwards. We must therefore remove any existing retention lease so that we can create a
-                            // new one later on in the recovery.
-                            // 如果target以前有这个shard的副本，那么基于文件的恢复可能会向后移动其全局检查点。
-                            // 因此，我们必须删除任何现有的保留租约，以便在稍后的恢复中创建新的保留租约。
-                            shard.removePeerRecoveryRetentionLease(request.targetNode().getId(),
-                                new ThreadedActionListener<>(logger, shard.getThreadPool(), ThreadPool.Names.GENERIC,
-                                    deleteRetentionLeaseStep, false));
-                        } catch (RetentionLeaseNotFoundException e) {
-                            logger.debug("no peer-recovery retention lease for " + request.targetAllocationId());
-                            deleteRetentionLeaseStep.onResponse(null);
-                        }
-                    }, shardId + " removing retention lease for [" + request.targetAllocationId() + "]",
-                    shard, cancellableThreads, logger);
-
-                deleteRetentionLeaseStep.whenComplete(ignored -> {
-                    assert Transports.assertNotTransportThread(RecoverySourceHandler.this + "[phase1]");
-                    phase1(safeCommitRef.getIndexCommit(), startingSeqNo, () -> estimateNumOps, sendFileStep);
-                }, onFailure);
-
-            } catch (final Exception e) {
-                throw new RecoveryEngineException(shard.shardId(), 1, "sendFileStep failed", e);
-            }
-            assert startingSeqNo >= 0 : "startingSeqNo must be non negative. got: " + startingSeqNo;
-
-            sendFileStep.whenComplete(r -> {
-                assert Transports.assertNotTransportThread(RecoverySourceHandler.this + "[prepareTargetForTranslog]");
-                // For a sequence based recovery, the target can keep its local translog
-                prepareTargetForTranslog(
-                    shard.estimateNumberOfHistoryOperations("peer-recovery", historySource, startingSeqNo), prepareEngineStep);
-            }, onFailure);
-            prepareEngineStep.whenComplete(prepareEngineTime -> {
-                assert Transports.assertNotTransportThread(RecoverySourceHandler.this + "[phase2]");
-                /*
-                 * add shard to replication group (shard will receive replication requests from this point on) now that engine is open.
-                 * This means that any document indexed into the primary after this will be replicated to this replica as well
-                 * make sure to do this before sampling the max sequence number in the next step, to ensure that we send
-                 * all documents up to maxSeqNo in phase2.
-                 */
-                runUnderPrimaryPermit(() -> shard.initiateTracking(request.targetAllocationId()),
-                    shardId + " initiating tracking of " + request.targetAllocationId(), shard, cancellableThreads, logger);
-
-                dataCopyEnginePhase2(safeCommitRef.getIndexCommit(), softDeletesEnabled, sendFileStepP2);
-                // TODO: 不应该在这修改，
-                //  recovery 逻辑中会在translog同步过程和重放过程，修改；正常逻辑是通过数据写入同步过程更新
-                //  可能会和这里的操作有冲突！
-//                shard.updateLocalCheckpointForShard(request.targetAllocationId(), shard.getLastKnownGlobalCheckpoint());
-
-            }, onFailure);
-
-            // Recovery target can trim all operations >= startingSeqNo as we have sent all these operations in the phase 2
-            final long trimAboveSeqNo = startingSeqNo - 1;
-            sendFileStepP2.whenComplete(r -> finalizeRecovery(r.targetLocalCheckpoint, trimAboveSeqNo, finalizeStep), onFailure);
-
-            finalizeStep.whenComplete(r -> {
-                final long phase1ThrottlingWaitTime = 0L; // TODO: return the actual throttle time
-                final SendFileResult sendFileResult = sendFileStep.result();
-                final RecoveryResponse response = new RecoveryResponse(sendFileResult.phase1FileNames, sendFileResult.phase1FileSizes,
-                    sendFileResult.phase1ExistingFileNames, sendFileResult.phase1ExistingFileSizes, sendFileResult.totalSize,
-                    sendFileResult.existingTotalSize, sendFileResult.took.millis(), phase1ThrottlingWaitTime,
-                    prepareEngineStep.result().millis(), 0, 0L);
-                try {
-                    future.onResponse(response);
-                } finally {
-                    IOUtils.close(resources);
-                }
-            }, onFailure);
-        } catch (Exception e) {
-            IOUtils.closeWhileHandlingException(releaseResources, () -> future.onFailure(e));
-        }
-    }
-
-    private long dataCopyEnginePhase2(IndexCommit snapshotP1, final boolean softDeletesEnabled, StepListener<SendFileP2Result> sendFileStepP2) throws IOException {
-        final Store.MetadataSnapshot recoverySourceMetadataOld;
-        try{
-            // TODO: 改成 final Releasable releaseStore = acquireStore(shard.store()); 这种形式，后面也需要关闭
-            recoverySourceMetadataOld = shard.store().getMetadata(snapshotP1);
-        } catch (CorruptIndexException | IndexFormatTooOldException | IndexFormatTooNewException ex) {
-            shard.failShard("recovery", ex);
-            throw ex;
-        }
-        // 刷盘提交
-//        shard.flush(new FlushRequest().waitIfOngoing(true).force(true));
-        // 获取最新的提交信息
-        final Engine.IndexCommitRef commitRef;
-        try {
-            // 内部会执行刷盘
-            commitRef = acquireLastCommit(shard);
-            resources.add(commitRef);
-        } catch (final Exception e) {
-            throw new RecoveryEngineException(shard.shardId(), 1, "snapshot failed", e);
-        }
-
-        long startingSeqNo = softDeletesEnabled
-            ? Long.parseLong(commitRef.getIndexCommit().getUserData().get(SequenceNumbers.LOCAL_CHECKPOINT_KEY)) + 1L
-            : 0;
-        // 再执行一遍类似phase1
-        final Releasable releaseStore = acquireStore(shard.store());
-        resources.add(releaseStore);
-        sendFileStepP2.whenComplete(r -> IOUtils.close(commitRef, releaseStore), e -> {
-            try {
-                IOUtils.close(commitRef, releaseStore);
-            } catch (final IOException ex) {
-                logger.warn("releasing snapshot caused exception", ex);
-            }
-        });
-        final int estimateNumOps = shard.estimateNumberOfHistoryOperations("peer-recovery", Engine.HistorySource.INDEX, startingSeqNo);
-        dataCopyPhase2(recoverySourceMetadataOld, commitRef.getIndexCommit(), startingSeqNo, () -> estimateNumOps, sendFileStepP2);
-        return startingSeqNo;
-    }
-
     private boolean isTargetSameHistory() {
         final String targetHistoryUUID = request.metadataSnapshot().getHistoryUUID();
         assert targetHistoryUUID != null || shard.indexSettings().getIndexVersionCreated().before(Version.V_6_0_0_rc1) :
@@ -631,21 +408,11 @@ public class RecoverySourceHandler {
 
     /**
      * Releasing a safe commit can access some commit files. It's better not to use {@link CancellableThreads} to interact
-     * with the file systems due to interrupt (see {@link NIOFSDirectory} javadocs for more detail).
+     * with the file systems due to interrupt (see {@link org.apache.lucene.store.NIOFSDirectory} javadocs for more detail).
      * This method acquires a safe commit and wraps it to make sure that it will be released using the generic thread pool.
      */
     private Engine.IndexCommitRef acquireSafeCommit(IndexShard shard) {
         final Engine.IndexCommitRef commitRef = shard.acquireSafeIndexCommit();
-        final AtomicBoolean closed = new AtomicBoolean(false);
-        return new Engine.IndexCommitRef(commitRef.getIndexCommit(), () -> {
-            if (closed.compareAndSet(false, true)) {
-                runWithGenericThreadPool(commitRef::close);
-            }
-        });
-    }
-
-    private Engine.IndexCommitRef acquireLastCommit(IndexShard shard) {
-        final Engine.IndexCommitRef commitRef = shard.acquireLastIndexCommit(true);
         final AtomicBoolean closed = new AtomicBoolean(false);
         return new Engine.IndexCommitRef(commitRef.getIndexCommit(), () -> {
             if (closed.compareAndSet(false, true)) {
@@ -815,133 +582,6 @@ public class RecoverySourceHandler {
         }
     }
 
-
-    /**
-     * Perform phase1 of the recovery operations. Once this {@link IndexCommit}
-     * snapshot has been performed no commit operations (files being fsync'd)
-     * are effectively allowed on this index until all recovery phases are done
-     * <p>
-     * Phase1 examines the segment files on the target node and copies over the
-     * segments that are missing. Only segments that have the same size and
-     * checksum can be reused
-     */
-    void dataCopyPhase2(Store.MetadataSnapshot recoverySourceMetadataOld, IndexCommit snapshot, long startingSeqNo, IntSupplier translogOps, ActionListener<SendFileP2Result> listener) {
-        cancellableThreads.checkForCancel();
-        final Store store = shard.store();
-        try {
-            StopWatch stopWatch = new StopWatch().start();
-            final Store.MetadataSnapshot recoverySourceMetadata;
-            try {
-                recoverySourceMetadata = store.getMetadata(snapshot);
-            } catch (CorruptIndexException | IndexFormatTooOldException | IndexFormatTooNewException ex) {
-                shard.failShard("recovery", ex);
-                throw ex;
-            }
-            for (String name : snapshot.getFileNames()) {
-                final StoreFileMetadata md = recoverySourceMetadata.get(name);
-                if (md == null) {
-                    logger.info("Snapshot differs from actual index for file: {} meta: {}", name, recoverySourceMetadata.asMap());
-                    throw new CorruptIndexException("Snapshot differs from actual index - maybe index was removed metadata has " +
-                        recoverySourceMetadata.asMap().size() + " files", name);
-                }
-            }
-            if (canSkipPhase1(recoverySourceMetadata, recoverySourceMetadataOld) == false) {
-                final List<String> phase1FileNames = new ArrayList<>();
-                final List<Long> phase1FileSizes = new ArrayList<>();
-                final List<String> phase1ExistingFileNames = new ArrayList<>();
-                final List<Long> phase1ExistingFileSizes = new ArrayList<>();
-
-                // Total size of segment files that are recovered
-                long totalSizeInBytes = 0;
-                // Total size of segment files that were able to be re-used
-                long existingTotalSizeInBytes = 0;
-
-                // Generate a "diff" of all the identical, different, and missing
-                // segment files on the target node, using the existing files on
-                // the source node
-                final Store.RecoveryDiff diff = recoverySourceMetadata.recoveryDiff(recoverySourceMetadataOld);
-                for (StoreFileMetadata md : diff.identical) {
-                    phase1ExistingFileNames.add(md.name());
-                    phase1ExistingFileSizes.add(md.length());
-                    existingTotalSizeInBytes += md.length();
-                    if (logger.isTraceEnabled()) {
-                        logger.trace("recovery [phase1]: not recovering [{}], exist in local store and has checksum [{}]," +
-                            " size [{}]", md.name(), md.checksum(), md.length());
-                    }
-                    totalSizeInBytes += md.length();
-                }
-                List<StoreFileMetadata> phase1Files = new ArrayList<>(diff.different.size() + diff.missing.size());
-                phase1Files.addAll(diff.different);
-                phase1Files.addAll(diff.missing);
-                for (StoreFileMetadata md : phase1Files) {
-                    if (recoverySourceMetadataOld.asMap().containsKey(md.name())) {
-                        logger.trace("recovery [phase1]: recovering [{}], exists in local store, but is different: remote [{}], local [{}]",
-                            md.name(), recoverySourceMetadataOld.asMap().get(md.name()), md);
-                    } else {
-                        logger.trace("recovery [phase1]: recovering [{}], does not exist in remote", md.name());
-                    }
-                    phase1FileNames.add(md.name());
-                    phase1FileSizes.add(md.length());
-                    totalSizeInBytes += md.length();
-                }
-
-                logger.trace("recovery [phase1]: recovering_files [{}] with total_size [{}], reusing_files [{}] with total_size [{}]",
-                    phase1FileNames.size(), new ByteSizeValue(totalSizeInBytes),
-                    phase1ExistingFileNames.size(), new ByteSizeValue(existingTotalSizeInBytes));
-                final StepListener<Void> sendFileInfoStep = new StepListener<>();
-                final StepListener<Void> sendFilesStep = new StepListener<>();
-                final StepListener<RecoveryCleanFilesP2Response> cleanFilesStep = new StepListener<>();
-                cancellableThreads.checkForCancel();
-                recoveryTarget.receiveFileInfoCopyP2(phase1FileNames, phase1FileSizes, phase1ExistingFileNames,
-                    phase1ExistingFileSizes, translogOps.getAsInt(), sendFileInfoStep);
-
-                sendFileInfoStep.whenComplete(r ->
-                    sendFilesCopyP2(store, phase1Files.toArray(new StoreFileMetadata[0]), translogOps, sendFilesStep), listener::onFailure);
-                final AtomicLong targetLocalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
-                // 不需要再创建 retention lease 了
-                sendFilesStep.whenComplete(r ->
-                    {
-                        final long lastKnownGlobalCheckpoint = shard.getLastKnownGlobalCheckpoint();
-                        // Establishes new empty translog on the replica with global checkpoint set to lastKnownGlobalCheckpoint. We want
-                        // the commit we just copied to be a safe commit on the replica, so why not set the global checkpoint on the replica
-                        // to the max seqno of this commit? Because (in rare corner cases) this commit might not be a safe commit here on
-                        // the primary, and in these cases the max seqno would be too high to be valid as a global checkpoint.
-                        cleanFilesCopyP2(store, recoverySourceMetadata, translogOps, lastKnownGlobalCheckpoint, targetLocalCheckpoint, cleanFilesStep);
-                    },
-                    listener::onFailure);
-
-                final long totalSize = totalSizeInBytes;
-                final long existingTotalSize = existingTotalSizeInBytes;
-                cleanFilesStep.whenComplete(r -> {
-                    final TimeValue took = stopWatch.totalTime();
-                    logger.trace("recovery [phase2]: took [{}]", took);
-                    final long localCheckpoint;
-                    if(r==null){
-                        localCheckpoint = startingSeqNo;
-                    }else{
-                        localCheckpoint = r.localCheckpoint;
-                    }
-                    listener.onResponse(new SendFileP2Result(phase1FileNames, phase1FileSizes, totalSize, phase1ExistingFileNames,
-                        phase1ExistingFileSizes, existingTotalSize, localCheckpoint, took));
-                }, listener::onFailure);
-            } else {
-                logger.trace("skipping [phase1] since source and target have identical sync id [{}]", recoverySourceMetadata.getSyncId());
-
-                // but we must still create a retention lease
-                final StepListener<RetentionLease> createRetentionLeaseStep = new StepListener<>();
-                createRetentionLease(startingSeqNo, createRetentionLeaseStep);
-                createRetentionLeaseStep.whenComplete(retentionLease -> {
-                    final TimeValue took = stopWatch.totalTime();
-                    logger.trace("recovery [phase1]: took [{}]", took);
-                    listener.onResponse(new SendFileP2Result(Collections.emptyList(), Collections.emptyList(), 0L, Collections.emptyList(),
-                        Collections.emptyList(), 0L, 0L, took));
-                }, listener::onFailure);
-
-            }
-        } catch (Exception e) {
-            throw new RecoverFilesRecoveryException(request.shardId(), 0, new ByteSizeValue(0L), e);
-        }
-    }
     void createRetentionLease(final long startingSeqNo, ActionListener<RetentionLease> listener) {
         runUnderPrimaryPermit(() -> {
                 // Clone the peer recovery retention lease belonging to the source shard. We are retaining history between the the local
@@ -1213,35 +853,6 @@ public class RecoverySourceHandler {
         }
     }
 
-    static final class SendFileP2Result {
-        final long targetLocalCheckpoint;
-        final List<String> phase1FileNames;
-        final List<Long> phase1FileSizes;
-        final long totalSize;
-
-        final List<String> phase1ExistingFileNames;
-        final List<Long> phase1ExistingFileSizes;
-        final long existingTotalSize;
-
-        final TimeValue took;
-
-        SendFileP2Result(List<String> phase1FileNames, List<Long> phase1FileSizes, long totalSize,
-                       List<String> phase1ExistingFileNames, List<Long> phase1ExistingFileSizes, long existingTotalSize,
-                         long targetLocalCheckpoint, TimeValue took) {
-            this.phase1FileNames = phase1FileNames;
-            this.phase1FileSizes = phase1FileSizes;
-            this.totalSize = totalSize;
-            this.phase1ExistingFileNames = phase1ExistingFileNames;
-            this.phase1ExistingFileSizes = phase1ExistingFileSizes;
-            this.existingTotalSize = existingTotalSize;
-            this.targetLocalCheckpoint = targetLocalCheckpoint;
-            this.took = took;
-        }
-
-        static final SendFileP2Result EMPTY = new SendFileP2Result(Collections.emptyList(), Collections.emptyList(), 0L,
-            Collections.emptyList(), Collections.emptyList(), 0L, 0L, TimeValue.ZERO);
-    }
-
     /**
      * Cancels the recovery and interrupts all eligible threads.
      */
@@ -1354,76 +965,6 @@ public class RecoverySourceHandler {
         multiFileSender.start();
     }
 
-
-    void sendFilesCopyP2(Store store, StoreFileMetadata[] files, IntSupplier translogOps, ActionListener<Void> listener) {
-        ArrayUtil.timSort(files, Comparator.comparingLong(StoreFileMetadata::length)); // send smallest first
-
-        final MultiChunkTransfer<StoreFileMetadata, FileChunk>multiFileSender = new MultiChunkTransfer<StoreFileMetadata, FileChunk>(
-            logger, threadPool.getThreadContext(), listener, maxConcurrentFileChunks, Arrays.asList(files)) {
-
-            final Deque<byte[]> buffers = new ConcurrentLinkedDeque<>();
-            InputStreamIndexInput currentInput = null;
-            long offset = 0;
-
-            @Override
-            protected void onNewResource(StoreFileMetadata md) throws IOException {
-                offset = 0;
-                IOUtils.close(currentInput, () -> currentInput = null);
-                final IndexInput indexInput = store.directory().openInput(md.name(), IOContext.READONCE);
-                currentInput = new InputStreamIndexInput(indexInput, md.length()) {
-                    @Override
-                    public void close() throws IOException {
-                        IOUtils.close(indexInput, super::close); // InputStreamIndexInput's close is a noop
-                    }
-                };
-            }
-
-            private byte[] acquireBuffer() {
-                final byte[] buffer = buffers.pollFirst();
-                if (buffer != null) {
-                    return buffer;
-                }
-                return new byte[chunkSizeInBytes];
-            }
-
-            @Override
-            protected FileChunk nextChunkRequest(StoreFileMetadata md) throws IOException {
-                assert Transports.assertNotTransportThread("read file chunk");
-                cancellableThreads.checkForCancel();
-                final byte[] buffer = acquireBuffer();
-                final int bytesRead = currentInput.read(buffer);
-                if (bytesRead == -1) {
-                    throw new CorruptIndexException("file truncated; length=" + md.length() + " offset=" + offset, md.name());
-                }
-                final boolean lastChunk = offset + bytesRead == md.length();
-                final FileChunk chunk = new FileChunk(md, new BytesArray(buffer, 0, bytesRead), offset, lastChunk,
-                    () -> buffers.addFirst(buffer));
-                offset += bytesRead;
-                return chunk;
-            }
-
-            @Override
-            protected void executeChunkRequest(FileChunk request, ActionListener<Void> listener) {
-                cancellableThreads.checkForCancel();
-                recoveryTarget.writeFileChunkCopyP2(
-                    request.md, request.position, request.content, request.lastChunk, translogOps.getAsInt(),
-                    ActionListener.runBefore(listener, request::close));
-            }
-
-            @Override
-            protected void handleError(StoreFileMetadata md, Exception e) throws Exception {
-                handleErrorOnSendFiles(store, e, new StoreFileMetadata[]{md});
-            }
-
-            @Override
-            public void close() throws IOException {
-                IOUtils.close(currentInput, () -> currentInput = null);
-            }
-        };
-        resources.add(multiFileSender);
-        multiFileSender.start();
-    }
-
     private void cleanFiles(Store store, Store.MetadataSnapshot sourceMetadata, IntSupplier translogOps,
                             long globalCheckpoint, ActionListener<Void> listener) {
         // Send the CLEAN_FILES request, which takes all of the files that
@@ -1442,34 +983,6 @@ public class RecoverySourceHandler {
                 handleErrorOnSendFiles(store, e, mds);
                 throw e;
             })));
-    }
-
-    private void cleanFilesCopyP2(Store store, Store.MetadataSnapshot sourceMetadata, IntSupplier translogOps,
-                            long globalCheckpoint, final AtomicLong targetLocalCheckpoint, ActionListener<RecoveryCleanFilesP2Response> listener) {
-        // Send the CLEAN_FILES request, which takes all of the files that
-        // were transferred and renames them from their temporary file
-        // names to the actual file names. It also writes checksums for
-        // the files after they have been renamed.
-        //
-        // Once the files have been renamed, any other files that are not
-        // related to this recovery (out of date segments, for example)
-        // are deleted
-        cancellableThreads.checkForCancel();
-
-        ActionListener<RecoveryCleanFilesP2Response> delegateResponse = ActionListener.delegateResponse(listener, (l, e) -> ActionListener.completeWith(l, () -> {
-            StoreFileMetadata[] mds = StreamSupport.stream(sourceMetadata.spliterator(), false).toArray(StoreFileMetadata[]::new);
-            ArrayUtil.timSort(mds, Comparator.comparingLong(StoreFileMetadata::length)); // check small files first
-            handleErrorOnSendFiles(store, e, mds);
-            throw e;
-        }));
-
-        final ActionListener<Long> voidListener = ActionListener.delegateFailure(delegateResponse, (l, newCheckpoint) -> {
-            // 这里到要正完只需要保留一种方法就行
-            targetLocalCheckpoint.updateAndGet(curr -> newCheckpoint);
-            l.onResponse(new RecoveryCleanFilesP2Response(newCheckpoint));
-        });
-
-        recoveryTarget.cleanFilesCopyP2(translogOps.getAsInt(), globalCheckpoint, sourceMetadata, voidListener);
     }
 
     private void handleErrorOnSendFiles(Store store, Exception e, StoreFileMetadata[] mds) throws Exception {

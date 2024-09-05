@@ -75,20 +75,9 @@ public class AsyncRecoveryTarget implements RecoveryTargetHandler {
     }
 
     @Override
-    public void receiveFileInfoCopyP2(List<String> phase1FileNames, List<Long> phase1FileSizes, List<String> phase1ExistingFileNames, List<Long> phase1ExistingFileSizes, int totalTranslogOps, ActionListener<Void> listener) {
-        executor.execute(() -> target.receiveFileInfoCopyP2(
-            phase1FileNames, phase1FileSizes, phase1ExistingFileNames, phase1ExistingFileSizes, totalTranslogOps, listener));
-    }
-
-    @Override
     public void cleanFiles(int totalTranslogOps, long globalCheckpoint, Store.MetadataSnapshot sourceMetadata,
                            ActionListener<Void> listener) {
         executor.execute(() -> target.cleanFiles(totalTranslogOps, globalCheckpoint, sourceMetadata, listener));
-    }
-
-    @Override
-    public void cleanFilesCopyP2(int totalTranslogOps, long globalCheckpoint, Store.MetadataSnapshot sourceMetadata, ActionListener<Long> listener) {
-        executor.execute(() -> target.cleanFilesCopyP2(totalTranslogOps, globalCheckpoint, sourceMetadata, listener));
     }
 
     @Override
@@ -96,11 +85,5 @@ public class AsyncRecoveryTarget implements RecoveryTargetHandler {
                                boolean lastChunk, int totalTranslogOps, ActionListener<Void> listener) {
         final BytesReference copy = new BytesArray(BytesRef.deepCopyOf(content.toBytesRef()));
         executor.execute(() -> target.writeFileChunk(fileMetadata, position, copy, lastChunk, totalTranslogOps, listener));
-    }
-
-    @Override
-    public void writeFileChunkCopyP2(StoreFileMetadata fileMetadata, long position, BytesReference content, boolean lastChunk, int totalTranslogOps, ActionListener<Void> listener) {
-        final BytesReference copy = new BytesArray(BytesRef.deepCopyOf(content.toBytesRef()));
-        executor.execute(() -> target.writeFileChunkCopyP2(fileMetadata, position, copy, lastChunk, totalTranslogOps, listener));
     }
 }

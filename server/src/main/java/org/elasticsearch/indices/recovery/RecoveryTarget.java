@@ -23,8 +23,6 @@ import org.apache.logging.log4j.Logger;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.IndexFormatTooNewException;
 import org.apache.lucene.index.IndexFormatTooOldException;
-import org.apache.lucene.index.SegmentInfos;
-import org.apache.lucene.store.*;
 import org.elasticsearch.Assertions;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ExceptionsHelper;
@@ -38,7 +36,6 @@ import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.util.CancellableThreads;
 import org.elasticsearch.common.util.concurrent.AbstractRefCounted;
-import org.elasticsearch.index.engine.DataCopyReadEngine;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.mapper.MapperException;
 import org.elasticsearch.index.seqno.ReplicationTracker;
@@ -50,14 +47,10 @@ import org.elasticsearch.index.shard.IndexShardState;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.store.Store;
 import org.elasticsearch.index.store.StoreFileMetadata;
-import org.elasticsearch.index.translog.ChannelFactory;
 import org.elasticsearch.index.translog.Translog;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -419,25 +412,6 @@ public class RecoveryTarget extends AbstractRefCounted implements RecoveryTarget
     }
 
     @Override
-    public void receiveFileInfoCopyP2(List<String> phase1FileNames, List<Long> phase1FileSizes, List<String> phase1ExistingFileNames, List<Long> phase1ExistingFileSizes, int totalTranslogOps, ActionListener<Void> listener) {
-        ActionListener.completeWith(listener, () -> {
-            final RecoveryState.Index index = state().getIndex();
-            index.setFileDetailsCompleteFalse();
-// 理论上不需要再设置一遍了，因为phase1都已经设置过了
-//            for (int i = 0; i < phase1ExistingFileNames.size(); i++) {
-//                index.addFileDetail(phase1ExistingFileNames.get(i), phase1ExistingFileSizes.get(i), true);
-//            }
-            for (int i = 0; i < phase1FileNames.size(); i++) {
-                index.addFileDetail(phase1FileNames.get(i), phase1FileSizes.get(i), false);
-            }
-            index.setFileDetailsComplete();
-            state().getTranslog().totalOperations(totalTranslogOps);
-            state().getTranslog().totalOperationsOnStart(totalTranslogOps);
-            return null;
-        });
-    }
-
-    @Override
     public void cleanFiles(int totalTranslogOps, long globalCheckpoint, Store.MetadataSnapshot sourceMetadata,
                            ActionListener<Void> listener) {
         ActionListener.completeWith(listener, () -> {
@@ -453,15 +427,9 @@ public class RecoveryTarget extends AbstractRefCounted implements RecoveryTarget
                 if (indexShard.indexSettings().getIndexVersionCreated().before(Version.V_6_0_0_rc1)) {
                     store.ensureIndexHasHistoryUUID();
                 }
-                if("segment".equals(indexShard.indexSettings().getSettings().get("index.datasycn.type", ""))){
-                    final ChannelFactory channelFactory = FileChannel::open;
-                    Translog.createEmptyTranslog(indexShard.shardPath().resolveTranslog(), shardId, globalCheckpoint,
-                        indexShard.getPendingPrimaryTerm(), store.getTranslogUUID(), channelFactory);
-                }else{
-                    final String translogUUID = Translog.createEmptyTranslog(
-                        indexShard.shardPath().resolveTranslog(), globalCheckpoint, shardId, indexShard.getPendingPrimaryTerm());
-                    store.associateIndexWithNewTranslog(translogUUID);
-                }
+                final String translogUUID = Translog.createEmptyTranslog(
+                    indexShard.shardPath().resolveTranslog(), globalCheckpoint, shardId, indexShard.getPendingPrimaryTerm());
+                store.associateIndexWithNewTranslog(translogUUID);
 
                 if (indexShard.getRetentionLeases().leases().isEmpty()) {
                     // if empty, may be a fresh IndexShard, so write an empty leases file to disk
@@ -503,85 +471,8 @@ public class RecoveryTarget extends AbstractRefCounted implements RecoveryTarget
     }
 
     @Override
-    public void cleanFilesCopyP2(int totalTranslogOps, long globalCheckpoint, Store.MetadataSnapshot sourceMetadata, ActionListener<Long> listener) {
-        ActionListener.completeWith(listener, () -> {
-            state().getTranslog().totalOperations(totalTranslogOps);
-            // first, we go and move files that were created with the recovery id suffix to
-            // the actual names, its ok if we have a corrupted index here, since we have replicas
-            // to recover from in case of a full cluster shutdown just when this code executes...
-            multiFileWriter.renameAllTempFiles();
-            final Store store = store();
-            store.incRef();
-            try {
-                store.cleanupAndVerify2("recovery CleanFilesRequestHandler", sourceMetadata);
-                if (indexShard.indexSettings().getIndexVersionCreated().before(Version.V_6_0_0_rc1)) {
-                    store.ensureIndexHasHistoryUUID();
-                }
-                final ChannelFactory channelFactory = FileChannel::open;
-                indexShard.getEngineOrNull().getLastSyncedGlobalCheckpoint();
-                Translog.createEmptyTranslog(indexShard.shardPath().resolveTranslog(), shardId, globalCheckpoint,
-                    indexShard.getPendingPrimaryTerm(), store.getTranslogUUID(), channelFactory);
-                //不用重新commit和关联，不然会导致主和副本的translogUUID不同，segments commit信息也不同。
-//                store.associateIndexWithNewTranslog(translogUUID);
-
-                if (indexShard.getRetentionLeases().leases().isEmpty()) {
-                    // if empty, may be a fresh IndexShard, so write an empty leases file to disk
-                    indexShard.persistRetentionLeases();
-                    assert indexShard.loadRetentionLeases().leases().isEmpty();
-                } else {
-                    assert indexShard.assertRetentionLeasesPersisted();
-                }
-                // 此时并不需要检查状态
-//                indexShard.maybeCheckIndex();
-                state().setStage(RecoveryState.Stage.VERIFY_INDEX);
-                // 此时并不需要设置状态?
-                state().setStage(RecoveryState.Stage.TRANSLOG);
-                ((DataCopyReadEngine) indexShard.getEngineOrNull()).setCheckPoint(globalCheckpoint);
-            } catch (CorruptIndexException | IndexFormatTooNewException | IndexFormatTooOldException ex) {
-                // this is a fatal exception at this stage.
-                // this means we transferred files from the remote that have not be checksummed and they are
-                // broken. We have to clean up this shard entirely, remove all files and bubble it up to the
-                // source shard since this index might be broken there as well? The Source can handle this and checks
-                // its content on disk if possible.
-                try {
-                    try {
-                        store.removeCorruptionMarker();
-                    } finally {
-                        Lucene.cleanLuceneIndex(store.directory()); // clean up and delete all files
-                    }
-                } catch (Exception e) {
-                    logger.debug("Failed to clean lucene index", e);
-                    ex.addSuppressed(e);
-                }
-                RecoveryFailedException rfe = new RecoveryFailedException(state(), "failed to clean after recovery", ex);
-                fail(rfe, true);
-                throw rfe;
-            } catch (Exception ex) {
-                RecoveryFailedException rfe = new RecoveryFailedException(state(), "failed to clean after recovery", ex);
-                fail(rfe, true);
-                throw rfe;
-            } finally {
-                store.decRef();
-            }
-            logger.error("cleanFilesCopyP2: target replica get Checkpoint:", indexShard().getLocalCheckpoint());
-            return indexShard().getLocalCheckpoint();
-        });
-    }
-
-    @Override
     public void writeFileChunk(StoreFileMetadata fileMetadata, long position, BytesReference content,
                                boolean lastChunk, int totalTranslogOps, ActionListener<Void> listener) {
-        try {
-            state().getTranslog().totalOperations(totalTranslogOps);
-            multiFileWriter.writeFileChunk(fileMetadata, position, content, lastChunk);
-            listener.onResponse(null);
-        } catch (Exception e) {
-            listener.onFailure(e);
-        }
-    }
-
-    @Override
-    public void writeFileChunkCopyP2(StoreFileMetadata fileMetadata, long position, BytesReference content, boolean lastChunk, int totalTranslogOps, ActionListener<Void> listener) {
         try {
             state().getTranslog().totalOperations(totalTranslogOps);
             multiFileWriter.writeFileChunk(fileMetadata, position, content, lastChunk);

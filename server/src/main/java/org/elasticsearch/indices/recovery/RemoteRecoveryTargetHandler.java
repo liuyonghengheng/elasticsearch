@@ -38,7 +38,6 @@ import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.index.seqno.ReplicationTracker;
 import org.elasticsearch.index.seqno.RetentionLeases;
-import org.elasticsearch.index.seqno.SequenceNumbers;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.store.Store;
 import org.elasticsearch.index.store.StoreFileMetadata;
@@ -226,74 +225,6 @@ public class RemoteRecoveryTargetHandler implements RecoveryTargetHandler {
          * would be in to restart file copy again (new deltas) if we have too many translog ops are piling up.
          */
         final RecoveryFileChunkRequest request = new RecoveryFileChunkRequest(
-            recoveryId, requestSeqNo, shardId, fileMetadata, position, content, lastChunk, totalTranslogOps, throttleTimeInNanos);
-        final Writeable.Reader<TransportResponse.Empty> reader = in -> TransportResponse.Empty.INSTANCE;
-        executeRetryableAction(action, request, fileChunkRequestOptions, ActionListener.map(listener, r -> null), reader);
-    }
-
-
-    @Override
-    public void receiveFileInfoCopyP2(List<String> phase1FileNames, List<Long> phase1FileSizes, List<String> phase1ExistingFileNames,
-                                List<Long> phase1ExistingFileSizes, int totalTranslogOps, ActionListener<Void> listener) {
-        final String action = PeerRecoveryTargetService.Actions.FILES_INFO;
-        final long requestSeqNo = requestSeqNoGenerator.getAndIncrement();
-        RecoveryFilesInfoCopyP2Request request = new RecoveryFilesInfoCopyP2Request(recoveryId, requestSeqNo, shardId, phase1FileNames, phase1FileSizes,
-            phase1ExistingFileNames, phase1ExistingFileSizes, totalTranslogOps);
-        final TransportRequestOptions options =
-            TransportRequestOptions.builder().withTimeout(recoverySettings.internalActionTimeout()).build();
-        final Writeable.Reader<TransportResponse.Empty> reader = in -> TransportResponse.Empty.INSTANCE;
-        final ActionListener<TransportResponse.Empty> responseListener = ActionListener.map(listener, r -> null);
-        executeRetryableAction(action, request, options, responseListener, reader);
-    }
-
-    @Override
-    public void cleanFilesCopyP2(int totalTranslogOps, long globalCheckpoint, Store.MetadataSnapshot sourceMetadata,
-                           ActionListener<Long> listener) {
-        final String action = PeerRecoveryTargetService.Actions.CLEAN_FILES_COPY_P2;
-        final long requestSeqNo = requestSeqNoGenerator.getAndIncrement();
-        final RecoveryCleanFilesCopyP2Request request =
-            new RecoveryCleanFilesCopyP2Request(recoveryId, requestSeqNo, shardId, sourceMetadata, totalTranslogOps, globalCheckpoint);
-        final TransportRequestOptions options =
-            TransportRequestOptions.builder().withTimeout(recoverySettings.internalActionTimeout()).build();
-
-        final Writeable.Reader<RecoveryCleanFilesP2Response> reader = RecoveryCleanFilesP2Response::new;
-        logger.error("cleanFilesCopyP2: source duan");
-        final ActionListener<RecoveryCleanFilesP2Response> responseListener = ActionListener.map(listener, r -> r.localCheckpoint);
-        executeRetryableAction(action, request, options, responseListener, reader);
-    }
-
-    @Override
-    public void writeFileChunkCopyP2(StoreFileMetadata fileMetadata, long position, BytesReference content,
-                               boolean lastChunk, int totalTranslogOps, ActionListener<Void> listener) {
-        // Pause using the rate limiter, if desired, to throttle the recovery
-        final long throttleTimeInNanos;
-        // always fetch the ratelimiter - it might be updated in real-time on the recovery settings
-        final RateLimiter rl = recoverySettings.rateLimiter();
-        if (rl != null) {
-            long bytes = bytesSinceLastPause.addAndGet(content.length());
-            if (bytes > rl.getMinPauseCheckBytes()) {
-                // Time to pause
-                bytesSinceLastPause.addAndGet(-bytes);
-                try {
-                    throttleTimeInNanos = rl.pause(bytes);
-                    onSourceThrottle.accept(throttleTimeInNanos);
-                } catch (IOException e) {
-                    throw new ElasticsearchException("failed to pause recovery", e);
-                }
-            } else {
-                throttleTimeInNanos = 0;
-            }
-        } else {
-            throttleTimeInNanos = 0;
-        }
-
-        final String action = PeerRecoveryTargetService.Actions.FILE_CHUNK;
-        final long requestSeqNo = requestSeqNoGenerator.getAndIncrement();
-        /* we send estimateTotalOperations with every request since we collect stats on the target and that way we can
-         * see how many translog ops we accumulate while copying files across the network. A future optimization
-         * would be in to restart file copy again (new deltas) if we have too many translog ops are piling up.
-         */
-        final RecoveryFileChunkCopyP2Request request = new RecoveryFileChunkCopyP2Request(
             recoveryId, requestSeqNo, shardId, fileMetadata, position, content, lastChunk, totalTranslogOps, throttleTimeInNanos);
         final Writeable.Reader<TransportResponse.Empty> reader = in -> TransportResponse.Empty.INSTANCE;
         executeRetryableAction(action, request, fileChunkRequestOptions, ActionListener.map(listener, r -> null), reader);
