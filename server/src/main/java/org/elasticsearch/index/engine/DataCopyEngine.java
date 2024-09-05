@@ -140,6 +140,8 @@ public class DataCopyEngine extends Engine {
 
     private volatile SegmentInfos lastCommittedSegmentInfos;
 
+    private volatile SegmentInfos lastRefreshSegmentInfos;
+
     private final IndexThrottle throttle;
 
     private final LocalCheckpointTracker localCheckpointTracker;
@@ -318,7 +320,7 @@ public class DataCopyEngine extends Engine {
         logger.trace("created new InternalEngine");
     }
 
-    public void setCurrentInfos(SegmentInfos si) throws IOException {
+    public void  setCurrentInfos(SegmentInfos si) throws IOException {
         if(isPrimary.get()){
             return;
         }
@@ -331,6 +333,14 @@ public class DataCopyEngine extends Engine {
 
     public void setLastRefreshedCheckpointCopy(Long lastRefreshedCheckpointCopy) {
         this.lastRefreshedCheckpointCopy.set(lastRefreshedCheckpointCopy);
+    }
+
+    public void setLastRefreshSegmentInfos(SegmentInfos lastRefreshSegmentInfos) {
+        this.lastRefreshSegmentInfos = lastRefreshSegmentInfos;
+    }
+
+    public SegmentInfos getLastRefreshSegmentInfos() {
+        return lastRefreshSegmentInfos;
     }
 
     public void closeIndexWriter(){
@@ -1160,6 +1170,7 @@ public class DataCopyEngine extends Engine {
                 internalReaderManager = new ElasticsearchReaderManager(directoryReader,
                     new RamAccountingRefreshListener(engineConfig.getCircuitBreakerService()));
                 lastCommittedSegmentInfos = store.readLastCommittedSegmentsInfo();
+                lastRefreshSegmentInfos = lastCommittedSegmentInfos;
 //                DataCopyEngine.ExternalReaderManager externalReaderManager =
 //                    new DataCopyEngine.ExternalReaderManager(internalReaderManager, externalRefreshListener, primaryTermSupplier);
                 ExternalReaderManager externalReaderManager = new ExternalReaderManager(internalReaderManager, externalRefreshListener);
@@ -2644,6 +2655,14 @@ public class DataCopyEngine extends Engine {
 
     @Override
     public boolean shouldPeriodicallyFlush() {
+        if(isPrimary.get()){
+            return shouldPeriodicallyFlushPrimary();
+        }else{
+            return shouldPeriodicallyFlushReplica();
+        }
+    }
+
+    public boolean shouldPeriodicallyFlushPrimary() {
         ensureOpen();
         if (shouldPeriodicallyFlushAfterBigMerge.get()) {
             return true;
@@ -2677,12 +2696,47 @@ public class DataCopyEngine extends Engine {
             || localCheckpointTracker.getProcessedCheckpoint() == localCheckpointTracker.getMaxSeqNo();
     }
 
+    public boolean shouldPeriodicallyFlushReplica() {
+        ensureOpen();
+        if (shouldPeriodicallyFlushAfterBigMerge.get()) {
+            return true;
+        }
+        final long localCheckpointOfLastCommit =
+            Long.parseLong(lastCommittedSegmentInfos.userData.get(SequenceNumbers.LOCAL_CHECKPOINT_KEY));
+        final long translogGenerationOfLastCommit =
+            translog.getMinGenerationForSeqNo(localCheckpointOfLastCommit + 1).translogFileGeneration;
+        final long flushThreshold = config().getIndexSettings().getFlushThresholdSize().getBytes();
+        if (translog.sizeInBytesByMinGen(translogGenerationOfLastCommit) < flushThreshold) {
+            return false;
+        }
+        /*
+         * We flush to reduce the size of uncommitted translog but strictly speaking the uncommitted size won't always be
+         * below the flush-threshold after a flush. To avoid getting into an endless loop of flushing, we only enable the
+         * periodically flush condition if this condition is disabled after a flush. The condition will change if the new
+         * commit points to the later generation the last commit's(eg. gen-of-last-commit < gen-of-new-commit)[1].
+         *
+         * When the local checkpoint equals to max_seqno, and translog-gen of the last commit equals to translog-gen of
+         * the new commit, we know that the last generation must contain operations because its size is above the flush
+         * threshold and the flush-threshold is guaranteed to be higher than an empty translog by the setting validation.
+         * This guarantees that the new commit will point to the newly rolled generation. In fact, this scenario only
+         * happens when the generation-threshold is close to or above the flush-threshold; otherwise we have rolled
+         * generations as the generation-threshold was reached, then the first condition (eg. [1]) is already satisfied.
+         *
+         * This method is to maintain translog only, thus IndexWriter#hasUncommittedChanges condition is not considered.
+         */
+        final long translogGenerationOfNewCommit =
+            translog.getMinGenerationForSeqNo(localCheckpointTracker.getProcessedCheckpoint() + 1).translogFileGeneration;
+        return translogGenerationOfLastCommit < translogGenerationOfNewCommit
+            || localCheckpointTracker.getProcessedCheckpoint() == localCheckpointTracker.getMaxSeqNo();
+    }
+
+
     @Override
     public CommitId flush(boolean force, boolean waitIfOngoing) throws EngineException {
         if(isPrimary.get()){
             return flushPrimary(force, waitIfOngoing);
         }
-        return flushReplica(force, waitIfOngoing);
+        return flushReplica2(force, waitIfOngoing);
     }
 
     public CommitId flushPrimary(boolean force, boolean waitIfOngoing) throws EngineException {
@@ -2765,6 +2819,18 @@ public class DataCopyEngine extends Engine {
         final byte[] newCommitId;
         try (ReleasableLock lock = readLock.acquire()) {
             ensureOpen();
+            if (flushLock.tryLock() == false) {
+                // if we can't get the lock right away we block if needed otherwise barf
+                if (waitIfOngoing) {
+                    logger.trace("waiting for in-flight flush to finish");
+                    flushLock.lock();
+                    logger.trace("acquired flush lock after blocking");
+                } else {
+                    return new CommitId(lastCommittedSegmentInfos.getId());
+                }
+            } else {
+                logger.trace("acquired flush lock immediately");
+            }
             try {
                 // TODO:liuyongheng commit的逻辑是，在每次seagmentsinfos 信息copy过来之后，判断其中是否含有 commit信息
                 // 和lastCommittedSegmentInfos 是否一致，如果不一致，则更新 lastCommittedSegmentInfos 信息，将SegmentInfos
@@ -2800,7 +2866,7 @@ public class DataCopyEngine extends Engine {
                 maybeFailEngine("flush", ex);
                 throw ex;
             } finally {
-//                flushLock.unlock();
+                flushLock.unlock();
             }
         }
         // We don't have to do this here; we do it defensively to make sure that even if wall clock time is misbehaving
@@ -2837,26 +2903,20 @@ public class DataCopyEngine extends Engine {
                 // Only flush if (1) Lucene has uncommitted docs, or (2) forced by caller, or (3) the
                 // newly created commit points to a different translog generation (can free translog),
                 // or (4) the local checkpoint information in the last commit is stale, which slows down future recoveries.
-                boolean hasUncommittedChanges = indexWriter.hasUncommittedChanges();
-                boolean shouldPeriodicallyFlush = shouldPeriodicallyFlush();
-                if (hasUncommittedChanges || force || shouldPeriodicallyFlush
-                    || getProcessedLocalCheckpoint() > Long.parseLong(
+                if (force || lastRefreshedCheckpointCopy.get() > Long.parseLong(
                     lastCommittedSegmentInfos.userData.get(SequenceNumbers.LOCAL_CHECKPOINT_KEY))) {
                     ensureCanFlush();
                     try {
                         translog.rollGeneration();
                         logger.trace("starting commit for flush; commitTranslog=true");
-                        // TODO:liuyongheng 这里先注释掉，后面看如何处理，是直接copy过来还是在本地commit，理论上应该copy过来，所以本地不应该有commit操作
-//                        commitIndexWriter(indexWriter, translog, null);
+                        // TODO:liuyongheng 这里先注释掉，后面看如何处理，是直接copy过来还是在本地commit，理论上应该copy过来?
+                        commitSegmentInfos(lastRefreshSegmentInfos, translog, null);
                         logger.trace("finished commit for flush");
 
                         // a temporary debugging to investigate test failure - issue#32827. Remove when the issue is resolved
                         logger.debug("new commit on flush, hasUncommittedChanges:{}, force:{}, shouldPeriodicallyFlush:{}",
-                            hasUncommittedChanges, force, shouldPeriodicallyFlush);
+                            force);
 
-                        // we need to refresh in order to clear older version values
-                        // TODO:liuyongheng 不需要做refresh
-//                        refresh("version_table_flush", SearcherScope.INTERNAL, true);
                         translog.trimUnreferencedReaders();
                     } catch (AlreadyClosedException e) {
                         failOnTragicEvent(e);
@@ -2865,9 +2925,9 @@ public class DataCopyEngine extends Engine {
                         throw new FlushFailedEngineException(shardId, e);
                     }
                     refreshLastCommittedSegmentInfos();
-
                 }
                 newCommitId = lastCommittedSegmentInfos.getId();
+
             } catch (FlushFailedEngineException ex) {
                 maybeFailEngine("flush", ex);
                 throw ex;
@@ -2879,6 +2939,14 @@ public class DataCopyEngine extends Engine {
         // (e.g., moves backwards) we will at least still sometimes prune deleted tombstones:
         if (engineConfig.isEnableGcDeletes()) {
             pruneDeletedTombstones();
+        }
+        // 清理没用的translog！
+        // TODO:liuyongheng 这里需要确认是否能满足translog的deletepolicy
+        try {
+            translog.trimUnreferencedReaders();
+        } catch (IOException e) {
+            logger.error("datacopyengine Replica engine trim translog Error!");
+//            throw new RuntimeException(e);
         }
         return new CommitId(newCommitId);
     }
@@ -3170,6 +3238,10 @@ public class DataCopyEngine extends Engine {
 
     @Override
     protected SegmentInfos getLastCommittedSegmentInfos() {
+        return lastCommittedSegmentInfos;
+    }
+
+    public SegmentInfos getLastCommittedSegmentInfosPublic() {
         return lastCommittedSegmentInfos;
     }
 
@@ -3530,6 +3602,56 @@ public class DataCopyEngine extends Engine {
             });
             shouldPeriodicallyFlushAfterBigMerge.set(false);
             writer.commit();
+        } catch (final Exception ex) {
+            try {
+                failEngine("lucene commit failed", ex);
+            } catch (final Exception inner) {
+                ex.addSuppressed(inner);
+            }
+            throw ex;
+        } catch (final AssertionError e) {
+            /*
+             * If assertions are enabled, IndexWriter throws AssertionError on commit if any files don't exist, but tests that randomly
+             * throw FileNotFoundException or NoSuchFileException can also hit this.
+             */
+            if (ExceptionsHelper.stackTrace(e).contains("org.apache.lucene.index.IndexWriter.filesExist")) {
+                final EngineException engineException = new EngineException(shardId, "failed to commit engine", e);
+                try {
+                    failEngine("lucene commit failed", engineException);
+                } catch (final Exception inner) {
+                    engineException.addSuppressed(inner);
+                }
+                throw engineException;
+            } else {
+                throw e;
+            }
+        }
+    }
+
+    protected void commitSegmentInfos(SegmentInfos segmentInfos, final Translog translog, @Nullable final String syncId) throws IOException {
+        ensureCanFlush();
+        try {
+            final Map<String, String> commitData = new HashMap<>(7);
+            commitData.put(Translog.TRANSLOG_UUID_KEY, translog.getTranslogUUID());
+            commitData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(lastRefreshedCheckpointCopy.get()));
+            if (syncId != null) {
+                commitData.put(Engine.SYNC_COMMIT_ID, syncId);
+            }
+            commitData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(localCheckpointTracker.getMaxSeqNo()));
+            commitData.put(MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID, Long.toString(maxUnsafeAutoIdTimestamp.get()));
+            commitData.put(HISTORY_UUID_KEY, historyUUID);
+            if (softDeleteEnabled) {
+                commitData.put(Engine.MIN_RETAINED_SEQNO, Long.toString(softDeletesPolicy.getMinRetainedSeqNo()));
+            }
+            final String currentForceMergeUUID = forceMergeUUID;
+            if (currentForceMergeUUID != null) {
+                commitData.put(FORCE_MERGE_UUID_KEY, currentForceMergeUUID);
+            }
+            logger.trace("committing writer with commit data [{}]", commitData);
+
+            shouldPeriodicallyFlushAfterBigMerge.set(false);
+            segmentInfos.setUserData(commitData, false);
+            segmentInfos.commit(store.directory());
         } catch (final Exception ex) {
             try {
                 failEngine("lucene commit failed", ex);

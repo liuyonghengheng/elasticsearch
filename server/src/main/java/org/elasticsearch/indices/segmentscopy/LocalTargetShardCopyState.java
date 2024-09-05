@@ -97,13 +97,10 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
 //            listener.onResponse(new ErrorResponse(ErrorType.PRIMARY_TERM_ERROR));
 //            return;
 //        }
-        // 设置当前同步的segments
-        lastSegmentsCopyInfo = currSegmentsCopyInfo;
-        currSegmentsCopyInfo = segmentsCopyInfo;
         // 判断version和
         SegmentInfos oldInfos = null;
-        if(lastSegmentsCopyInfo !=null && lastSegmentsCopyInfo.infos != null){
-            oldInfos = lastSegmentsCopyInfo.infos;
+        if(currSegmentsCopyInfo !=null && currSegmentsCopyInfo.infos != null){
+            oldInfos = currSegmentsCopyInfo.infos;
         }else{
             try (DirectoryReader reader = indexShard.getEngineOrNull().acquireSearcher("segmentCopy").getDirectoryReader()) {
                 logger.error("SegmentCopyTargetService :get old infos");
@@ -116,7 +113,8 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
         if(segmentsCopyInfo.version <= version){
             // 异常处理
             isRunning.set(false);
-            listener.onResponse(new ErrorResponse(ErrorType.SEGMENTS_INFO_VERSION_ERROR));
+//            listener.onResponse(new ErrorResponse(ErrorType.SEGMENTS_INFO_VERSION_ERROR));
+            listener.onFailure(new Exception("segments info version not match"));
             logger.error("SegmentCopyTargetService :version {} grater than old version {}", segmentsCopyInfo.version, version);
             return;
         }
@@ -127,17 +125,22 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
             oldFiles = new HashSet<>(oldInfos.files(false));
         } catch (IOException e) {
             // TODO:异常处理！
-            listener.onResponse(new ErrorResponse(ErrorType.GET_OLD_FILES_ERROR));
+//            listener.onResponse(new ErrorResponse(ErrorType.GET_OLD_FILES_ERROR));
+            listener.onFailure(new Exception("no files need copy"));
             isRunning.set(false);
             return;
         }
         diffFiles.removeAll(oldFiles);
         if(diffFiles.isEmpty()){
             //
-            listener.onResponse(new ErrorResponse(ErrorType.NO_FILES_NEED_COPY_ERROR));
+//            listener.onResponse(new ErrorResponse(ErrorType.NO_FILES_NEED_COPY_ERROR));
+            listener.onFailure(new Exception("no files need copy"));
             isRunning.set(false);
             return;
         }
+        // 设置当前同步的segments
+        lastSegmentsCopyInfo = currSegmentsCopyInfo;
+        currSegmentsCopyInfo = segmentsCopyInfo;
         // 正常返回
         logger.error("SegmentCopyTargetService : diff files: {}", diffFiles);
         listener.onResponse(new SegmentsInfoResponse(diffFiles));
@@ -245,6 +248,8 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
 //            }
             ((DataCopyEngine) engine).setCurrentInfos(infos);
             ((DataCopyEngine) engine).setLastRefreshedCheckpointCopy(currSegmentsCopyInfo.refreshedCheckpoint);
+            ((DataCopyEngine) engine).setLastRefreshSegmentInfos(infos);
+
         }
         engine.refresh("test");
 //        if(){
@@ -425,7 +430,7 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
                 // TODO:liuyongheng 确认需不需要check，不需要全检查，只需要检查增量copy过来的文件
 //                indexShard.maybeCheckIndex();
                 updateSegmentsInfo(store);
-                deleteFiles(store, currSegmentsCopyInfo);
+                deleteFiles(store);
             } catch (CorruptIndexException | IndexFormatTooNewException | IndexFormatTooOldException ex) {
                 // this is a fatal exception at this stage.
                 // this means we transferred files from the remote that have not be checksummed and they are
@@ -480,14 +485,26 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
     }
 
     // 不安全的删除方式！ 把历史的全删了，如果正好有查询在使用老的segments，会导致错误！
-    // TODO:liuyongheng 这里是不是应该由 IndexDeletionPolicy 来删除？
-    public boolean deleteFiles(Store store, SegmentsCopyInfo segmentsCopyInfo){
+    // TODO:liuyongheng 这里是不是应该由 IndexDeletionPolicy 来删除？不行，因为IndexDeletionPolicy
+    // 执行是有indexwriter控制的，但是我们这里没有indexwriter！
+    public boolean deleteFiles(Store store){
+        Engine engine = indexShard.getEngineOrNull();
+        SegmentInfos lastCommitSegmentInfos;
+        SegmentInfos lastRefreshSegmentInfos;
+        if(engine !=null && engine instanceof DataCopyEngine){
+            lastCommitSegmentInfos = ((DataCopyEngine) engine).getLastCommittedSegmentInfosPublic();
+            lastRefreshSegmentInfos = ((DataCopyEngine) engine).getLastRefreshSegmentInfos();
+        }else{
+            return false;
+        }
         boolean result = false;
         List<String> files = new LinkedList<>();
         try {
             Directory directory=  store.directory();
             for (String existingFile : directory.listAll()) {
-                if (Store.isAutogenerated(existingFile) || segmentsCopyInfo.files.contains(existingFile)) {
+                if (Store.isAutogenerated(existingFile)
+                    || lastCommitSegmentInfos.files(true).contains(existingFile)
+                    || lastRefreshSegmentInfos.files(true).contains(existingFile)) {
                     // don't delete snapshot file, or the checksums file (note, this is extra protection since the Store won't delete
                     // checksum)
                     continue;
