@@ -23,7 +23,19 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.NumericDocValuesField;
-import org.apache.lucene.index.*;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.IndexCommit;
+import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.LiveIndexWriterConfig;
+import org.apache.lucene.index.MergePolicy;
+import org.apache.lucene.index.SegmentCommitInfo;
+import org.apache.lucene.index.SegmentInfos;
+import org.apache.lucene.index.ShuffleForcedMergePolicy;
+import org.apache.lucene.index.SoftDeletesRetentionMergePolicy;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.DocIdSetIterator;
@@ -127,7 +139,7 @@ public class InternalEngine extends Engine {
 
     private final Lock flushLock = new ReentrantLock();
     private final ReentrantLock optimizeLock = new ReentrantLock();
-    // version映射的uid（以BytesRef的形式。我们使用哈希变体，因为我们要对其进行迭代，并检查对已有keys的删除和添加
+
     // A uid (in the form of BytesRef) to the version map
     // we use the hashed variant since we iterate over it and check removal and additions on existing keys
     private final LiveVersionMap versionMap = new LiveVersionMap();
@@ -150,7 +162,7 @@ public class InternalEngine extends Engine {
     // max_seq_no_of_updates_or_deletes tracks the max seq_no of update or delete operations that have been processed in this engine.
     // An index request is considered as an update if it overwrites existing documents with the same docId in the Lucene index.
     // The value of this marker never goes backwards, and is tracked/updated differently on primary and replica.
-    private final AtomicLong maxSeqNoOfUpdatesOrDeletes;// 最大的seq_no，主分片操作
+    private final AtomicLong maxSeqNoOfUpdatesOrDeletes;
     private final CounterMetric numVersionLookups = new CounterMetric();
     private final CounterMetric numIndexVersionsLookups = new CounterMetric();
     // Lucene operations since this engine was opened - not include operations from existing segments.
@@ -326,13 +338,13 @@ public class InternalEngine extends Engine {
      * This reference manager delegates all it's refresh calls to another (internal) ReaderManager
      * The main purpose for this is that if we have external refreshes happening we don't issue extra
      * refreshes to clear version map memory etc. this can cause excessive segment creation if heavy indexing
-     * is happening and the refresh interval is low (ie. 1 sec) 这个引用管理器将它的所有刷新调用委托给另一个（内部）ReaderManager。
-     * 这样做的主要目的是，如果发生外部刷新，我们不会发出额外的刷新来清除版本映射内存等。如果发生重索引且刷新间隔较低（即1秒），这可能会导致过度的段创建
+     * is happening and the refresh interval is low (ie. 1 sec)
+     *
      * This also prevents segment starvation where an internal reader holds on to old segments literally forever
      * since no indexing is happening and refreshes are only happening to the external reader manager, while with
      * this specialized implementation an external refresh will immediately be reflected on the internal reader
      * and old segments can be released in the same way previous version did this (as a side-effect of _refresh)
-     *///这也能避免segment饥饿，（例如一个内部的reader一直持有旧的segment 由于没有索引操作发生或者所有的刷新操作都发生在外部的reader manager，）但是当有这个特殊的实现时，一个外部的刷新会马上反映在这个内部的reader上，并且可以以与以前版本相同的方式释放旧段
+     */
     @SuppressForbidden(reason = "reference counting is required here")
     private static final class ExternalReaderManager extends ReferenceManager<ElasticsearchDirectoryReader> {
         private final BiConsumer<ElasticsearchDirectoryReader, ElasticsearchDirectoryReader> refreshListener;
@@ -770,11 +782,11 @@ public class InternalEngine extends Engine {
     /** resolves the current version of the document, returning null if not found */
     private VersionValue resolveDocVersion(final Operation op, boolean loadSeqNo) throws IOException {
         assert incrementVersionLookup(); // used for asserting in tests
-        VersionValue versionValue = getVersionFromMap(op.uid().bytes());//先尝试从VersionMap 中拿，最近的会放在这里，每次refresh都会被清空
-        if (versionValue == null) {//如果拿不到则去segment中查
+        VersionValue versionValue = getVersionFromMap(op.uid().bytes());
+        if (versionValue == null) {
             assert incrementIndexVersionLookup(); // used for asserting in tests
             final VersionsAndSeqNoResolver.DocIdAndVersion docIdAndVersion;
-            try (Searcher searcher = acquireSearcher("load_version", SearcherScope.INTERNAL)) {//如果versionmap中没找到，就根据id去索引中搜索
+            try (Searcher searcher = acquireSearcher("load_version", SearcherScope.INTERNAL)) {
                 docIdAndVersion = VersionsAndSeqNoResolver.loadDocIdAndVersion(searcher.getIndexReader(), op.uid(), loadSeqNo);
             }
             if (docIdAndVersion != null) {
@@ -788,15 +800,15 @@ public class InternalEngine extends Engine {
     }
 
     private VersionValue getVersionFromMap(BytesRef id) {
-        if (versionMap.isUnsafe()) {//unsafe 模式就是针对自动生成id的doc的优化，不需要版本
-            synchronized (versionMap) {//可以从unsafe切换成safe，但是知会执行一次 一旦最后一次操作的每一个id都添加到了map中，因此一旦我们过了这个点我们就可以安全访问map
+        if (versionMap.isUnsafe()) {
+            synchronized (versionMap) {
                 // we are switching from an unsafe map to a safe map. This might happen concurrently
                 // but we only need to do this once since the last operation per ID is to add to the version
                 // map so once we pass this point we can safely lookup from the version map.
                 if (versionMap.isUnsafe()) {
-                    refresh("unsafe_version_map", SearcherScope.INTERNAL, true); //先刷新shard
+                    refresh("unsafe_version_map", SearcherScope.INTERNAL, true);
                 }
-                versionMap.enforceSafeAccess();//再强制设置成Safe
+                versionMap.enforceSafeAccess();
             }
         }
         return versionMap.getUnderLock(id);
@@ -875,28 +887,28 @@ public class InternalEngine extends Engine {
     public IndexResult index(Index index) throws IOException {
         assert Objects.equals(index.uid().field(), IdFieldMapper.NAME) : index.uid().field();
         final boolean doThrottle = index.origin().isRecovery() == false;
-        try (ReleasableLock releasableLock = readLock.acquire()) { //读写所，这里获取读锁，可重入
-            ensureOpen(); //确保当前引擎的状态为打开，否则抛出异常
+        try (ReleasableLock releasableLock = readLock.acquire()) {
+            ensureOpen();
             assert assertIncomingSequenceNumber(index.origin(), index.seqNo());
             int reservedDocs = 0;
-            try (Releasable ignored = versionMap.acquireLock(index.uid().bytes());// 获取 doc id 锁
+            try (Releasable ignored = versionMap.acquireLock(index.uid().bytes());
                 Releasable indexThrottle = doThrottle ? throttle.acquireThrottle() : () -> {}) {
-                lastWriteNanos = index.startTime(); //记录 index 开始时间，用于merge之后时间间隔是否满足 flush 条件
-                /* A NOTE ABOUT APPEND ONLY OPTIMIZATIONS: 如果自动生成id，update就没必要检查版本了
+                lastWriteNanos = index.startTime();
+                /* A NOTE ABOUT APPEND ONLY OPTIMIZATIONS:
                  * if we have an autoGeneratedID that comes into the engine we can potentially optimize
                  * and just use addDocument instead of updateDocument and skip the entire version and index lookupVersion across the board.
                  * Yet, we have to deal with multiple document delivery, for this we use a property of the document that is added
                  * to detect if it has potentially been added before. We use the documents timestamp for this since it's something
-                 * that: 然而，我们必须处理多个文档传递，为此，我们使用添加的文档的属性来检测它以前是否可能添加过。我们使用文档时间戳，因为它是：
-                 *  - doesn't change per document 不会改变
-                 *  - is preserved in the transaction log 保存在translog中
-                 *  - and is assigned before we start to index / replicate 在我们索引或者同步副本之前保持一致
+                 * that:
+                 *  - doesn't change per document
+                 *  - is preserved in the transaction log
+                 *  - and is assigned before we start to index / replicate
                  * NOTE: it's not important for this timestamp to be consistent across nodes etc. it's just a number that is in the common
                  * case increasing and can be used in the failure case when we retry and resent documents to establish a happens before
-                 * relationship. For instance: 节点之间的时间辍不需要保持一致，他只是一个递增的数字
+                 * relationship. For instance:
                  *  - doc A has autoGeneratedIdTimestamp = 10, isRetry = false
                  *  - doc B has autoGeneratedIdTimestamp = 9, isRetry = false
-                 *  上面两条数据在写入，此时连接断了，重连之后重发了A' (这里是客户端自动重试，并且在request中设置isRetry参数值为true)
+                 *
                  *  while both docs are in in flight, we disconnect on one node, reconnect and send doc A again
                  *  - now doc A' has autoGeneratedIdTimestamp = 10, isRetry = true
                  *
@@ -904,11 +916,11 @@ public class InternalEngine extends Engine {
                  *  documents that arrive (A and B) will also use updateDocument since their timestamps are less than
                  *  maxUnsafeAutoIdTimestamp. While this is not strictly needed for doc B it is just much simpler to implement since it
                  *  will just de-optimize some doc in the worst case.
-                 *  比 maxUnsafeAutoIdTimestamp 小的都是update,
+                 *
                  *  if A arrives on the shard first we use addDocument since maxUnsafeAutoIdTimestamp is < 10. A` will then just be skipped
-                 *  or calls updateDocument. 如果A写入成功，那么maxUnsafeAutoIdTimestamp<10,A'过来就可能会被跳过或者执行更新
+                 *  or calls updateDocument.
                  */
-                final IndexingStrategy plan = indexingStrategyForOperation(index);//确定处理逻辑，生成正确的version
+                final IndexingStrategy plan = indexingStrategyForOperation(index);
                 reservedDocs = plan.reservedDocs;
 
                 final IndexResult indexResult;
@@ -917,33 +929,33 @@ public class InternalEngine extends Engine {
                     indexResult = plan.earlyResultOnPreFlightError.get();
                     assert indexResult.getResultType() == Result.Type.FAILURE : indexResult.getResultType();
                 } else {
-                    // generate or register sequence number 生成或者从请求中同步已有的seqno
+                    // generate or register sequence number
                     if (index.origin() == Operation.Origin.PRIMARY) {
                         index = new Index(index.uid(), index.parsedDoc(), generateSeqNoForOperationOnPrimary(index), index.primaryTerm(),
                             index.version(), index.versionType(), index.origin(), index.startTime(), index.getAutoGeneratedIdTimestamp(),
                             index.isRetry(), index.getIfSeqNo(), index.getIfPrimaryTerm());
 
                         final boolean toAppend = plan.indexIntoLucene && plan.useLuceneUpdateDocument == false;
-                        if (toAppend == false) {// 更新本地 MaxSeqNoOfUpdatesOrDeletes 比较本地值和传入的seqNo，取大的
+                        if (toAppend == false) {
                             advanceMaxSeqNoOfUpdatesOrDeletesOnPrimary(index.seqNo());
                         }
                     } else {
-                        markSeqNoAsSeen(index.seqNo());// 这里会比较当前next_seq 和 传入seqno+1 哪个大,并把大的复制给next_seq
-                    }//只是更新了本地的next_seq，不会对index中的 seqno值作出改变。这里更新next_seq主要是为了万一被提升为primary做准备
+                        markSeqNoAsSeen(index.seqNo());
+                    }
 
                     assert index.seqNo() >= 0 : "ops should have an assigned seq no.; origin: " + index.origin();
 
                     if (plan.indexIntoLucene || plan.addStaleOpToLucene) {
-                        indexResult = indexIntoLucene(index, plan);//写入lucene
-                    } else { //如果不需要写入lucene的话，可以通过plan 设置策略
+                        indexResult = indexIntoLucene(index, plan);
+                    } else {
                         indexResult = new IndexResult(
                             plan.versionForIndexing, index.primaryTerm(), index.seqNo(), plan.currentNotFoundOrDeleted);
                     }
                 }
-                if (index.origin().isFromTranslog() == false) {//如果doc操作本来就是来自translog，则不需要再次写入translog了
+                if (index.origin().isFromTranslog() == false) {
                     final Translog.Location location;
                     if (indexResult.getResultType() == Result.Type.SUCCESS) {
-                        location = translog.add(new Translog.Index(index, indexResult));//写入translog
+                        location = translog.add(new Translog.Index(index, indexResult));
                     } else if (indexResult.getSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO) {
                         // if we have document failure, record it as a no-op in the translog and Lucene with the generated seq_no
                         final NoOp noOp = new NoOp(indexResult.getSeqNo(), index.primaryTerm(), index.origin(),
@@ -952,20 +964,20 @@ public class InternalEngine extends Engine {
                     } else {
                         location = null;
                     }
-                    indexResult.setTranslogLocation(location);// loaction 并没有返回给用户，只是在存储在了versionMap中
+                    indexResult.setTranslogLocation(location);
                 }
                 if (plan.indexIntoLucene && indexResult.getResultType() == Result.Type.SUCCESS) {
                     final Translog.Location translogLocation = trackTranslogLocation.get() ? indexResult.getTranslogLocation() : null;
-                    versionMap.maybePutIndexUnderLock(index.uid().bytes(),//这里的uid就_id
+                    versionMap.maybePutIndexUnderLock(index.uid().bytes(),
                         new IndexVersionValue(translogLocation, plan.versionForIndexing, index.seqNo(), index.primaryTerm()));
-                }// location存储在了versionMap中
-                localCheckpointTracker.markSeqNoAsProcessed(indexResult.getSeqNo());//将seqno 标记为已经处理，更新checkpoint
+                }
+                localCheckpointTracker.markSeqNoAsProcessed(indexResult.getSeqNo());
                 if (indexResult.getTranslogLocation() == null) {
                     // the op is coming from the translog (and is hence persisted already) or it does not have a sequence number
                     assert index.origin().isFromTranslog() || indexResult.getSeqNo() == SequenceNumbers.UNASSIGNED_SEQ_NO;
                     localCheckpointTracker.markSeqNoAsPersisted(indexResult.getSeqNo());
                 }
-                indexResult.setTook(System.nanoTime() - index.startTime());//took时间在这里计算，
+                indexResult.setTook(System.nanoTime() - index.startTime());
                 indexResult.freeze();
                 return indexResult;
             } finally {
@@ -975,7 +987,7 @@ public class InternalEngine extends Engine {
             try {
                 if (e instanceof AlreadyClosedException == false && treatDocumentFailureAsTragicError(index)) {
                     failEngine("index id[" + index.id() + "] origin[" + index.origin() + "] seq#[" + index.seqNo() + "]", e);
-                } else { // IO 异常，有些情况需要关闭这个engine，shard，并上报master
+                } else {
                     maybeFailEngine("index id[" + index.id() + "] origin[" + index.origin() + "] seq#[" + index.seqNo() + "]", e);
                 }
             } catch (Exception inner) {
@@ -1035,7 +1047,7 @@ public class InternalEngine extends Engine {
         final int reservingDocs = index.parsedDoc().docs().size();
         final IndexingStrategy plan;
         // resolve an external operation into an internal one which is safe to replay
-        final boolean canOptimizeAddDocument = canOptimizeAddDocument(index);//是否可以update改成 add，自动生成id情况下
+        final boolean canOptimizeAddDocument = canOptimizeAddDocument(index);
         if (canOptimizeAddDocument && mayHaveBeenIndexedBefore(index) == false) {
             final Exception reserveError = tryAcquireInFlightDocs(index, reservingDocs);
             if (reserveError != null) {
@@ -1044,19 +1056,19 @@ public class InternalEngine extends Engine {
                 plan = IndexingStrategy.optimizedAppendOnly(1L, reservingDocs);
             }
         } else {
-            versionMap.enforceSafeAccess();//设置safe Access
+            versionMap.enforceSafeAccess();
             // resolves incoming version
-            final VersionValue versionValue = //获取version
+            final VersionValue versionValue =
                 resolveDocVersion(index, index.getIfSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO);
             final long currentVersion;
             final boolean currentNotFoundOrDeleted;
             if (versionValue == null) {
                 currentVersion = Versions.NOT_FOUND;
-                currentNotFoundOrDeleted = true; // 没发现对应数据
+                currentNotFoundOrDeleted = true;
             } else {
                 currentVersion = versionValue.version;
-                currentNotFoundOrDeleted = versionValue.isDelete(); //是否是删除
-            }//既不是UNASSIGNED 同时 已经删除或者没发现
+                currentNotFoundOrDeleted = versionValue.isDelete();
+            }
             if (index.getIfSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO && currentNotFoundOrDeleted) {
                 final VersionConflictEngineException e = new VersionConflictEngineException(shardId, index.id(),
                     index.getIfSeqNo(), index.getIfPrimaryTerm(), SequenceNumbers.UNASSIGNED_SEQ_NO,
@@ -1064,11 +1076,11 @@ public class InternalEngine extends Engine {
                 plan = IndexingStrategy.skipDueToVersionConflict(e, true, currentVersion);
             } else if (index.getIfSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO && (
                 versionValue.seqNo != index.getIfSeqNo() || versionValue.term != index.getIfPrimaryTerm()
-            )) {//（seqNo 或者 term 不是想要的）
+            )) {
                 final VersionConflictEngineException e = new VersionConflictEngineException(shardId, index.id(),
                     index.getIfSeqNo(), index.getIfPrimaryTerm(), versionValue.seqNo, versionValue.term);
                 plan = IndexingStrategy.skipDueToVersionConflict(e, currentNotFoundOrDeleted, currentVersion);
-            } else if (index.versionType().isVersionConflictForWrites( // 版本是否冲突
+            } else if (index.versionType().isVersionConflictForWrites(
                 currentVersion, index.version(), currentNotFoundOrDeleted)) {
                 final VersionConflictEngineException e =
                     new VersionConflictEngineException(shardId, index, currentVersion, currentNotFoundOrDeleted);
@@ -1080,7 +1092,7 @@ public class InternalEngine extends Engine {
                 } else {
                     plan = IndexingStrategy.processNormally(currentNotFoundOrDeleted,
                         canOptimizeAddDocument ? 1L : index.versionType().updateVersion(currentVersion, index.version()),
-                        reservingDocs);//传入plan的version,如果可以直接追加，就直接是1,否则 如果已经存在version +1，不存在为1
+                        reservingDocs);
                 }
             }
         }
@@ -1095,7 +1107,7 @@ public class InternalEngine extends Engine {
         /* Update the document's sequence number and primary term; the sequence number here is derived here from either the sequence
          * number service if this is on the primary, or the existing document's sequence number if this is on the replica. The
          * primary term here has already been set, see IndexShard#prepareIndex where the Engine$Index operation is created.
-         *///更新文档的sequence number和primary term；这里的序列号是从序列号服务派生出来的（如果它在主分片上），或者是从现有文档的序列号派生出来的，如果它在副本分片上。此处的主要术语已经设置，请参阅创建Engine$Index操作的IndexShard#prepareIndex。
+         */
         index.parsedDoc().updateSeqID(index.seqNo(), index.primaryTerm());
         index.parsedDoc().version().setLongValue(plan.versionForIndexing);
         try {
@@ -1149,7 +1161,7 @@ public class InternalEngine extends Engine {
      * returns true if the indexing operation may have already be processed by this engine.
      * Note that it is OK to rarely return true even if this is not the case. However a `false`
      * return value must always be correct.
-     * 返回true永远都不会错，但是如果返回false 必须保证是false，也就是没处理过的当成处理过的没问题
+     *
      */
     private boolean mayHaveBeenIndexedBefore(Index index) {
         assert canOptimizeAddDocument(index);
@@ -1355,7 +1367,7 @@ public class InternalEngine extends Engine {
         assert addingDocs > 0 : addingDocs;
         final long totalDocs = indexWriter.getPendingNumDocs() + inFlightDocCount.addAndGet(addingDocs);
         if (totalDocs > maxDocs) {
-            releaseInFlightDocs(addingDocs);//超过最大的doc处理数量，21亿每个shard
+            releaseInFlightDocs(addingDocs);
             return new IllegalArgumentException("Number of documents in the index can't exceed [" + maxDocs + "]");
         } else {
             return null;
@@ -1664,7 +1676,7 @@ public class InternalEngine extends Engine {
                     // the second refresh will only do the extra work we have to do for warming caches etc.
                     ReferenceManager<ElasticsearchDirectoryReader> referenceManager = getReferenceManager(scope);
                     // it is intentional that we never refresh both internal / external together
-                    if (block) { //这是有意的操作，内部和外部不能同时一起刷新？
+                    if (block) {
                         referenceManager.maybeRefreshBlocking();
                         refreshed = true;
                     } else {

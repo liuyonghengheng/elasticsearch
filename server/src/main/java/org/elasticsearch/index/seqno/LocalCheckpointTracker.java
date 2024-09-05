@@ -137,37 +137,6 @@ public class LocalCheckpointTracker {
     }
 
     /**
-     * Marks the provided sequence number as processed and updates the processed checkpoint if possible.
-     * 将seqno标记为已经处理的，并且如果可能的话更新已经处理的checkpoint
-     * @param seqNo the sequence number to mark as processed
-     */
-    public synchronized void markSeqNoAsProcessedOnReplicaCopy(final long seqNo) {
-        markSeqNoOnReplicaCopy(seqNo, processedCheckpoint, processedSeqNo);
-    }
-
-    /**
-     * Marks the provided sequence number as persisted and updates the checkpoint if possible.
-     *
-     * @param seqNo the sequence number to mark as persisted
-     */
-    public synchronized void markSeqNoAsPersistedOnReplicaCopy(final long seqNo) {
-        markSeqNoOnReplicaCopy(seqNo, persistedCheckpoint, persistedSeqNo);
-    }
-
-    private void markSeqNoOnReplicaCopy(final long seqNo, final AtomicLong checkPoint, final LongObjectHashMap<CountedBitSet> bitSetMap) {
-        assert Thread.holdsLock(this);
-        // make sure we track highest seen sequence number
-        advanceMaxSeqNo(seqNo);
-        if (seqNo <= checkPoint.get()) {// recovery 的时候可能会出现这种情况，因为可能会重放一个已经被执行过的操作。
-            // this is possible during recovery where we might replay an operation that was also replicated
-            return;
-        }
-        final CountedBitSet bitSet = getBitSetForSeqNo(bitSetMap, seqNo);
-        final int offset = seqNoToBitSetOffset(seqNo);
-        bitSet.set(offset);
-    }
-
-    /**
      * The current checkpoint which can be advanced by {@link #markSeqNoAsProcessed(long)}.
      *
      * @return the current checkpoint
