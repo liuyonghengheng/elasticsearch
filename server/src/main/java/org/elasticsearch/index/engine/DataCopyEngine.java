@@ -2698,6 +2698,10 @@ public class DataCopyEngine extends Engine {
 
     public boolean shouldPeriodicallyFlushReplica() {
         ensureOpen();
+        if(lastRefreshedCheckpointCopy.get() <= Long.parseLong(
+            lastCommittedSegmentInfos.userData.get(SequenceNumbers.LOCAL_CHECKPOINT_KEY))){
+            return false;
+        }
         if (shouldPeriodicallyFlushAfterBigMerge.get()) {
             return true;
         }

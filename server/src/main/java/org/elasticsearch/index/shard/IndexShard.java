@@ -295,6 +295,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         this.similarityService = similarityService;
         Objects.requireNonNull(store, "Store must be provided to the index shard");
 //        this.engineFactory = Objects.requireNonNull(engineFactory);
+        // TODO:liuyongheng 后续可以改造成插件形式，减少对原始代码的改动
         this.engineFactory = genEngineFactory(Objects.requireNonNull(engineFactory), indexSettings, shardRouting);
         this.store = store;
         this.indexSortSupplier = indexSortSupplier;
