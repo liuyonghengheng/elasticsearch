@@ -65,6 +65,7 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
     AtomicBoolean isRunning = new AtomicBoolean(false);
     private SegmentsCopyInfo currSegmentsCopyInfo;
     private SegmentsCopyInfo lastSegmentsCopyInfo;
+    Set<String> diffFiles;
     private Map<String, String> copiedFiles = new HashMap<>();
 
     private final CopyMultiFileWriter multiFileWriter;
@@ -141,6 +142,7 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
         // 设置当前同步的segments
         lastSegmentsCopyInfo = currSegmentsCopyInfo;
         currSegmentsCopyInfo = segmentsCopyInfo;
+        this.diffFiles = diffFiles;
         // 正常返回
         logger.error("SegmentCopyTargetService : diff files: {}", diffFiles);
         listener.onResponse(new SegmentsInfoResponse(diffFiles));
@@ -405,7 +407,7 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
                 // 需要验证 某个segmnets info 对应的文件，而不是commit对应的文件，可能还没commit
                 // 或者 commit 之前得，保持一致
 //                store.cleanupAndVerify("recovery CleanFilesRequestHandler", sourceMetadata);
-                checkFilesIntegrity(store, sourceMetadata);
+                checkFilesIntegrity(store, sourceMetadata, diffFiles);
 //                deleteFiles(store, currSegmentsCopyInfo);
                 if (indexShard.indexSettings().getIndexVersionCreated().before(Version.V_6_0_0_rc1)) {
                     store.ensureIndexHasHistoryUUID();
@@ -469,8 +471,12 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
         });
     }
 
-    public void checkFilesIntegrity(Store store, Map<String, StoreFileMetadata> sourceMetadata){
-        for(StoreFileMetadata md: sourceMetadata.values()){
+    public void checkFilesIntegrity(Store store, Map<String, StoreFileMetadata> sourceMetadata, Set<String> diffFiles){
+        for(String mdk: diffFiles){
+            StoreFileMetadata md = sourceMetadata.get(mdk);
+            if(md==null){
+                continue;
+            }
             boolean res = store.checkIntegrityNoException(md);
             if(!res){
                 logger.error("check Integrity check Integrity check Integrity check Integrity check Integrity {}", md.name());
@@ -521,7 +527,7 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
             store.deleteQuiet(files.toArray(new String [0]));
             result = true;
         }catch (Exception e){
-            e.printStackTrace();
+            logger.error("delete unused file execption:", e);
         }
         return result;
     }

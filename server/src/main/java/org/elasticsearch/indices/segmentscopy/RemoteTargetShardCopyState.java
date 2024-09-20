@@ -127,7 +127,7 @@ public class RemoteTargetShardCopyState implements TargetShardCopyState{
 
 
     void sendFiles(Store store, StoreFileMetadata[] files, ActionListener<Void> listener) {
-        ArrayUtil.timSort(files, (a, b) ->  Math.toIntExact(a.length() - b.length())); // send smallest first
+        ArrayUtil.timSort(files, Comparator.comparingLong(StoreFileMetadata::length)); // send smallest first
 
         final CopyMultiChunkTransfer<StoreFileMetadata, FileChunk> multiFileSender = new CopyMultiChunkTransfer<StoreFileMetadata, FileChunk>(
             logger, threadPool.getThreadContext(), listener, maxConcurrentFileChunks, Arrays.asList(files)) {
