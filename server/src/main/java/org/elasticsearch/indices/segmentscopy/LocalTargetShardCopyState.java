@@ -509,8 +509,8 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
             Directory directory=  store.directory();
             for (String existingFile : directory.listAll()) {
                 // TODO:liuyongheng 这里需要修改，对于segments数据文件以及元数据文件，都需要根据删除策略来删除！
-                if(existingFile.startsWith("segments_")){
-                    if(Long.parseLong(existingFile.substring(9), 36)<lastCommitSegmentInfos.getGeneration()-2){
+                if(existingFile.startsWith(IndexFileNames.SEGMENTS)){
+                    if(Long.parseLong(existingFile.substring(9), 36)<lastCommitSegmentInfos.getGeneration()-5){
                         files.add(existingFile);
                         continue;
                     }
@@ -524,7 +524,9 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
                 }
                 if(existingFile.startsWith(IndexFileNames.SEGMENTS)
                     || existingFile.equals(IndexFileNames.OLD_SEGMENTS_GEN)
-                    || existingFile.startsWith(CORRUPTED_MARKER_NAME_PREFIX)){
+                    || existingFile.startsWith(CORRUPTED_MARKER_NAME_PREFIX)
+                    || existingFile.startsWith(IndexFileNames.PENDING_SEGMENTS)
+                    || existingFile.matches("^recovery\\..*\\.segments_.*$")){
                     continue;
                 }
                 files.add(existingFile);
