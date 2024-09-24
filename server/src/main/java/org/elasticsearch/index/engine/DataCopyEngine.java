@@ -2911,6 +2911,11 @@ public class DataCopyEngine extends Engine {
                     lastCommittedSegmentInfos.userData.get(SequenceNumbers.LOCAL_CHECKPOINT_KEY))) {
                     ensureCanFlush();
                     try {
+                        // TODO:liuyongheng 这里需要根据当前segments和Globalcheckpoint共同确定translog保留
+                        // TODO:Globalcheckpoint更新的逻辑可能也要修改
+//                        translog.getDeletionPolicy().setLocalCheckpointOfSafeCommit(Long.parseLong(lastCommittedSegmentInfos.userData.get(SequenceNumbers.LOCAL_CHECKPOINT_KEY)));
+                        translog.getDeletionPolicy().setLocalCheckpointOfSafeCommit(Math.min(translog.getLastSyncedGlobalCheckpoint(),
+                            lastRefreshedCheckpointCopy.get()));
                         translog.rollGeneration();
                         logger.trace("starting commit for flush; commitTranslog=true");
                         // TODO:liuyongheng 这里先注释掉，后面看如何处理，是直接copy过来还是在本地commit，理论上应该copy过来?
