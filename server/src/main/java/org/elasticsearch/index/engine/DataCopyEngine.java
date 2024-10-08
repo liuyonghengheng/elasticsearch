@@ -327,6 +327,10 @@ public class DataCopyEngine extends Engine {
         externalReaderCopyManager.setCurrentInfos(si);
     }
 
+    public boolean getIsPrimary() {
+        return this.isPrimary.get();
+    }
+
     public void setIsPrimary(boolean isPrimary) {
         this.isPrimary.set(isPrimary);
     }
@@ -933,6 +937,9 @@ public class DataCopyEngine extends Engine {
             final long localCheckpoint = lastRefreshedCheckpointCopy.get();
             try (Translog.Snapshot snapshot = getTranslog().newSnapshot(localCheckpoint + 1, Long.MAX_VALUE)) {
                 if(!isPrimary.get()){
+                    // TODO：liuyongheng 停止所有的segmentscopy任务，并删除
+
+                    flushReplica2(true, false);
                     enableWriteEngine();
                     isPrimary.set(true);// TODO:liuyongheng 恢复失败的情况下需要复原，但是这里并没有listener，不好弄，先加个 catch处理一下
                 }

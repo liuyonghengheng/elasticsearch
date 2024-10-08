@@ -8,12 +8,16 @@ import org.elasticsearch.action.support.ChannelActionListener;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.CheckedFunction;
+import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.logging.DeprecationLogger;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.IndexService;
+import org.elasticsearch.index.engine.DataCopyEngine;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.engine.SegmentsCopyInfo;
 import org.elasticsearch.index.seqno.SequenceNumbers;
+import org.elasticsearch.index.shard.IndexEventListener;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.IndicesService;
@@ -26,11 +30,10 @@ import org.elasticsearch.transport.TransportResponse;
 import org.elasticsearch.transport.TransportService;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class SegmentsCopyTargetService {
+public class SegmentsCopyTargetService implements IndexEventListener {
 
     private static final Logger logger = LogManager.getLogger(SegmentsCopyTargetService.class);
     private static final DeprecationLogger DEPRECATION_LOGGER = DeprecationLogger.getLogger(logger.getName());
@@ -79,7 +82,7 @@ public class SegmentsCopyTargetService {
             Engine engine = indexShard.getEngineOrNull();
 
             if (engine != null && "segment".equals(indexService.getIndexSettings().getSettings()
-                .get("index.datasycn.type","operation"))) {
+                .get("index.datasycn.type","operation")) && ((DataCopyEngine) engine).getIsPrimary()) {
                 localTargetShardCopyState = new LocalTargetShardCopyState(indexShard, request.sourceNode,
                     indexService.getIndexSettings().getSettings()
                         .getAsLong("index.datasycn.segment.shard.internal_action_timeout", 500L));
@@ -87,7 +90,8 @@ public class SegmentsCopyTargetService {
                 return localTargetShardCopyState;
             }else{
                 // 异常情况要处理
-                listener.onResponse(new LocalTargetShardCopyState.ErrorResponse(LocalTargetShardCopyState.ErrorType.ENGINE_ERROR));
+                listener.onFailure(new IOException("#####################################target can not start a new copy task {}"+request.shardId()));
+//                listener.onResponse(new LocalTargetShardCopyState.ErrorResponse(LocalTargetShardCopyState.ErrorType.ENGINE_ERROR));
                 return null;
             }
         }else{
@@ -136,6 +140,15 @@ public class SegmentsCopyTargetService {
         public void messageReceived(CopyFileChunkRequest request, TransportChannel channel, Task task) throws Exception {
             logger.error("SegmentCopyTargetService [{}] receive FileChunk request file [{}]", request.shardId(), request.name());
             LocalTargetShardCopyState targetShardCopyState = onGoingShards.get(request.shardId());
+            if(targetShardCopyState == null){
+                TransportChannel.sendErrorResponse(channel, SegmentsCopyTargetService.Actions.FILE_CHUNK, request,
+                    new IOException("SegmentCopyTargetService receive FileChunk request, but have no onGoing task"));
+                return;
+            }else if(!targetShardCopyState.isRunning.get()){
+                TransportChannel.sendErrorResponse(channel, SegmentsCopyTargetService.Actions.FILE_CHUNK, request,
+                    new IOException("SegmentCopyTargetService receive FileChunk request, but task is not running"));
+                return;
+            }
             logger.error("SegmentCopyTargetService receive FileChunk request, task status [{}]", targetShardCopyState.isRunning.get());
             final ActionListener<Void> listener = createOrFinishListener(targetShardCopyState, channel, SegmentsCopyTargetService.Actions.FILE_CHUNK, request);
             if (listener == null) {
@@ -175,6 +188,15 @@ public class SegmentsCopyTargetService {
         @Override
         public void messageReceived(CopyCleanFilesRequest request, TransportChannel channel, Task task) throws Exception {
             LocalTargetShardCopyState targetShardCopyState = onGoingShards.get(request.shardId());
+            if(targetShardCopyState == null){
+                TransportChannel.sendErrorResponse(channel, SegmentsCopyTargetService.Actions.FILE_CHUNK, request,
+                    new IOException("SegmentCopyTargetService receive CleanFiles request, but have no onGoing task"));
+                return;
+            }else if(!targetShardCopyState.isRunning.get()){
+                TransportChannel.sendErrorResponse(channel, SegmentsCopyTargetService.Actions.FILE_CHUNK, request,
+                    new IOException("SegmentCopyTargetService receive CleanFiles request, but task is not running"));
+                return;
+            }
             logger.error("SegmentCopyTargetService receive CleanFiles request, task status [{}]", targetShardCopyState.isRunning.get());
             try {
                 final ActionListener<Void> listener = createOrFinishListener(targetShardCopyState, channel, Actions.CLEAN_FILES, request);
@@ -213,6 +235,34 @@ public class SegmentsCopyTargetService {
         }
 
         return listener;
+    }
+
+    @Override
+    public void beforeIndexShardClosed(ShardId shardId, @Nullable IndexShard indexShard, Settings indexSettings) {
+        if (indexShard != null) {
+            cancelSegmentsCOpyForShard(shardId, "shard closed");
+        }
+    }
+
+    public boolean cancelSegmentsCOpyForShard(ShardId shardId, String reason) {
+        boolean cancelled = false;
+        List<LocalTargetShardCopyState> matchedRecoveries = new ArrayList<>();
+        synchronized (onGoingShards) {
+            for (Iterator<LocalTargetShardCopyState> it = onGoingShards.values().iterator(); it.hasNext(); ) {
+                LocalTargetShardCopyState status = it.next();
+                if (status.shardId.equals(shardId)) {
+                    matchedRecoveries.add(status);
+                    it.remove();
+                }
+            }
+        }
+        for (LocalTargetShardCopyState removed : matchedRecoveries) {
+            logger.trace("{} canceled segments copy, (reason [{}])",
+                removed.shardId, reason);
+            removed.cancel(reason);
+            cancelled = true;
+        }
+        return cancelled;
     }
 
 }

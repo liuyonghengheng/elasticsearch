@@ -72,7 +72,7 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
     private final CopyRequestTracker requestTracker = new CopyRequestTracker();
     public CopyReadElasticsearchReaderManager mgr;
     private static final String COPY_PREFIX = "copy.";
-
+    private final Store store;
 
     public LocalTargetShardCopyState(IndexShard indexShard, DiscoveryNode sourceNode, Long internalActionTimeout) {
         super("copy_status");
@@ -88,6 +88,8 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
             ()->{});
 //        this.retriesSupported = sourceNode.getVersion().onOrAfter(Version.V_7_9_0);
         this.retriesSupported = true;
+        this.store = indexShard.store();
+        this.store.incRef();
         mgr = new CopyReadElasticsearchReaderManager((ElasticsearchDirectoryReader)(indexShard.acquireSearcher("123").getDirectoryReader()));
     }
 
@@ -543,26 +545,21 @@ public class LocalTargetShardCopyState extends AbstractRefCounted implements Tar
 
     public void cancel(String reason) {
         if (finished.compareAndSet(false, true)) {
-            try {
-                logger.debug("recovery canceled (reason: [{}])", reason);
-                cancellableThreads.cancel(reason);
-            } finally {
-            }
+            decRef();
         }
     }
 
-    public void  close() {
-        try {
-            multiFileWriter.close();
-        } finally {
-
-        }
+    public void  closeCopy() {
+        decRef();
     }
-
 
     @Override
     protected void closeInternal() {
-
+        try {
+            multiFileWriter.close();
+        } finally {
+            store.decRef();
+        }
     }
 
     public ActionListener<Void> markRequestReceivedAndCreateListener(long requestSeqNo, ActionListener<Void> listener) {
