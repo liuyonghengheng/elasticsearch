@@ -49,7 +49,7 @@ public class SegmentsCopyTargetService implements IndexEventListener {
     private final TransportService transportService;
     private final SegmentsCopySettings segmentsCopySettings;
 
-    private final Map<ShardId, LocalTargetShardCopyState> onGoingShards = new HashMap<>();
+    private static final Map<ShardId, LocalTargetShardCopyState> onGoingShards = new HashMap<>();
 
     @Inject
     public SegmentsCopyTargetService(IndicesService indicesService, ClusterService clusterService, TransportService transportService,
@@ -82,7 +82,7 @@ public class SegmentsCopyTargetService implements IndexEventListener {
             Engine engine = indexShard.getEngineOrNull();
 
             if (engine != null && "segment".equals(indexService.getIndexSettings().getSettings()
-                .get("index.datasycn.type","operation")) && ((DataCopyEngine) engine).getIsPrimary()) {
+                .get("index.datasycn.type","operation"))) { //((DataCopyEngine) engine).getIsPrimary()
                 localTargetShardCopyState = new LocalTargetShardCopyState(indexShard, request.sourceNode,
                     indexService.getIndexSettings().getSettings()
                         .getAsLong("index.datasycn.segment.shard.internal_action_timeout", 500L));
@@ -244,7 +244,7 @@ public class SegmentsCopyTargetService implements IndexEventListener {
         }
     }
 
-    public boolean cancelSegmentsCOpyForShard(ShardId shardId, String reason) {
+    public static boolean cancelSegmentsCOpyForShard(ShardId shardId, String reason) {
         boolean cancelled = false;
         List<LocalTargetShardCopyState> matchedRecoveries = new ArrayList<>();
         synchronized (onGoingShards) {

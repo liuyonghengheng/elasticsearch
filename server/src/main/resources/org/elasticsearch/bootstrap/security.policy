@@ -164,4 +164,5 @@ grant {
   permission java.io.FilePermission "/sys/fs/cgroup/memory", "read";
   permission java.io.FilePermission "/sys/fs/cgroup/memory/-", "read";
 
+  permission java.lang.reflect.ReflectPermission "suppressAccessChecks";
 };

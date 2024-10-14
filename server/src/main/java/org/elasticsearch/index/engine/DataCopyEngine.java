@@ -86,6 +86,7 @@ import org.elasticsearch.index.translog.TranslogConfig;
 import org.elasticsearch.index.translog.TranslogCorruptedException;
 import org.elasticsearch.index.translog.TranslogDeletionPolicy;
 import org.elasticsearch.index.translog.TranslogStats;
+import org.elasticsearch.indices.segmentscopy.SegmentsCopyTargetService;
 import org.elasticsearch.indices.segmentscopy.SourceShardCopyState;
 import org.elasticsearch.search.suggest.completion.CompletionStats;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -203,6 +204,7 @@ public class DataCopyEngine extends Engine {
     private LastRefreshedSegmentsInfoListener lastRefreshedSegmentsInfoListener;
 
     private AtomicLong lastRefreshedCheckpointCopy = new AtomicLong();
+    private ReplicaCommitsManager replicaCommitsManager;
 
 //    private SegmentsCopyStateQueue segmentsCopyStateQueue = new SegmentsCopyStateQueue();
     public DataCopyEngine(EngineConfig engineConfig) {
@@ -227,6 +229,7 @@ public class DataCopyEngine extends Engine {
         ElasticsearchReaderManager internalReaderManager = null;
         EngineMergeScheduler scheduler = null;
         boolean success = false;
+        isPrimary.set(engineConfig.getIndexSettings().getSettings().getAsBoolean("isPrimary",Boolean.FALSE));
 
         this.externalReaderCopyManager = createReaderManager(new RefreshWarmerListener(logger, isClosed, engineConfig));
         try {
@@ -289,15 +292,15 @@ public class DataCopyEngine extends Engine {
             this.lastRefreshedCheckpointListener = new LastRefreshedCheckpointListener(localCheckpointTracker.getProcessedCheckpoint());
             this.internalReaderManager.addListener(lastRefreshedCheckpointListener);
             maxSeqNoOfUpdatesOrDeletes = new AtomicLong(SequenceNumbers.max(localCheckpointTracker.getMaxSeqNo(), translog.getMaxSeqNo()));
-            if (softDeleteEnabled && localCheckpointTracker.getPersistedCheckpoint() < localCheckpointTracker.getMaxSeqNo()) {
-                try (Searcher searcher =
-                         acquireSearcher("restore_version_map_and_checkpoint_tracker", SearcherScope.INTERNAL)) {
-                    restoreVersionMapAndCheckpointTracker(Lucene.wrapAllDocsLive(searcher.getDirectoryReader()));
-                } catch (IOException e) {
-                    throw new EngineCreationFailureException(config().getShardId(),
-                        "failed to restore version map and local checkpoint tracker", e);
-                }
-            }
+//            if (softDeleteEnabled && localCheckpointTracker.getPersistedCheckpoint() < localCheckpointTracker.getMaxSeqNo()) {
+//                try (Searcher searcher =
+//                         acquireSearcher("restore_version_map_and_checkpoint_tracker", SearcherScope.INTERNAL)) {
+//                    restoreVersionMapAndCheckpointTracker(Lucene.wrapAllDocsLive(searcher.getDirectoryReader()));
+//                } catch (IOException e) {
+//                    throw new EngineCreationFailureException(config().getShardId(),
+//                        "failed to restore version map and local checkpoint tracker", e);
+//                }
+//            }
             completionStatsCache = new CompletionStatsCache(() -> acquireSearcher("completion_stats"));
             this.externalReaderManager.addListener(completionStatsCache);
 
@@ -307,6 +310,10 @@ public class DataCopyEngine extends Engine {
                 localCheckpointTracker.getProcessedCheckpoint());
             this.externalReaderManager.addListener(this.lastRefreshedSegmentsInfoListener);
             this.lastRefreshedCheckpointCopy.set(localCheckpointTracker.getProcessedCheckpoint());
+            if(!isPrimary.get()){
+                logger.error("++++++++++++++++++++++++++++++++++++ primary is false");
+                enableReadEngine();
+            }
             success = true;
         } finally {
             if (success == false) {
@@ -377,6 +384,18 @@ public class DataCopyEngine extends Engine {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public void enableReplicaCommitsManager(){
+        if(replicaCommitsManager == null){
+            replicaCommitsManager = new ReplicaCommitsManager(store, combinedDeletionPolicy, lastCommittedSegmentInfos, indexWriter.getInfoStream());
+        }
+    }
+
+    public void enableReadEngine(){
+        setIsPrimary(false);
+        enableReplicaCommitsManager();
+        closeIndexWriter();
     }
 
     public void disableReadEngine(){
@@ -938,8 +957,8 @@ public class DataCopyEngine extends Engine {
             try (Translog.Snapshot snapshot = getTranslog().newSnapshot(localCheckpoint + 1, Long.MAX_VALUE)) {
                 if(!isPrimary.get()){
                     // TODO：liuyongheng 停止所有的segmentscopy任务，并删除
-
-                    flushReplica2(true, false);
+                    SegmentsCopyTargetService.cancelSegmentsCOpyForShard(shardId, "primary promotion");
+                    flushReplica2(true, true);
                     enableWriteEngine();
                     isPrimary.set(true);// TODO:liuyongheng 恢复失败的情况下需要复原，但是这里并没有listener，不好弄，先加个 catch处理一下
                 }
@@ -2921,8 +2940,8 @@ public class DataCopyEngine extends Engine {
                         // TODO:liuyongheng 这里需要根据当前segments和Globalcheckpoint共同确定translog保留
                         // TODO:Globalcheckpoint更新的逻辑可能也要修改
 //                        translog.getDeletionPolicy().setLocalCheckpointOfSafeCommit(Long.parseLong(lastCommittedSegmentInfos.userData.get(SequenceNumbers.LOCAL_CHECKPOINT_KEY)));
-                        translog.getDeletionPolicy().setLocalCheckpointOfSafeCommit(Math.min(translog.getLastSyncedGlobalCheckpoint(),
-                            lastRefreshedCheckpointCopy.get()));
+//                        translog.getDeletionPolicy().setLocalCheckpointOfSafeCommit(Math.min(translog.getLastSyncedGlobalCheckpoint(),
+//                            lastRefreshedCheckpointCopy.get()));
                         translog.rollGeneration();
                         logger.trace("starting commit for flush; commitTranslog=true");
                         // TODO:liuyongheng 这里先注释掉，后面看如何处理，是直接copy过来还是在本地commit，理论上应该copy过来?
@@ -3653,7 +3672,8 @@ public class DataCopyEngine extends Engine {
             if (syncId != null) {
                 commitData.put(Engine.SYNC_COMMIT_ID, syncId);
             }
-            commitData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(localCheckpointTracker.getMaxSeqNo()));
+//            commitData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(localCheckpointTracker.getMaxSeqNo()));
+            commitData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(lastRefreshedCheckpointCopy.get()));
             commitData.put(MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID, Long.toString(maxUnsafeAutoIdTimestamp.get()));
             commitData.put(HISTORY_UUID_KEY, historyUUID);
             if (softDeleteEnabled) {
@@ -3667,7 +3687,8 @@ public class DataCopyEngine extends Engine {
 
             shouldPeriodicallyFlushAfterBigMerge.set(false);
             segmentInfos.setUserData(commitData, false);
-            segmentInfos.commit(store.directory());
+//            segmentInfos.commit(store.directory());
+            replicaCommitsManager.commit(segmentInfos);
         } catch (final Exception ex) {
             try {
                 failEngine("lucene commit failed", ex);
@@ -4096,6 +4117,44 @@ public class DataCopyEngine extends Engine {
 
     public SourceShardCopyState getSourceShardCopyState(){
         return sourceShardCopyState;
+    }
+
+    class ReplicaCommitsManager{
+        private final Store store;
+        private final IndexDeletionPolicy deletionpolicy;
+        private final DataCopyIndexFileDeleter deleter;
+        private final Object lock = new Object();
+        private final InfoStream infoStream;
+
+        public ReplicaCommitsManager(Store store, IndexDeletionPolicy deletionpolicy, SegmentInfos segmentInfos, InfoStream infoStream) {
+            this.store = store;
+            this.deletionpolicy = deletionpolicy;
+            this.infoStream = infoStream;
+
+            Directory dir =  this.store.directory();
+            String[] files = new String[0];
+            try {
+                files = this.store.directory().listAll();
+                this.deleter = new DataCopyIndexFileDeleter(files,dir, dir,
+                    this.deletionpolicy, segmentInfos, this.infoStream, this, true, false);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        public void commit(SegmentInfos segmentInfos) throws IOException {
+            segmentInfos.commit(store.directory());
+            this.deleter.checkpoint(segmentInfos, true);
+        }
+
+        public boolean deleterExistsFile(String fileName){
+            return this.deleter.exists(fileName);
+        }
+
+    }
+
+    public boolean commitIncludeFile(String fileName){
+        return replicaCommitsManager.deleterExistsFile(fileName);
     }
 
 }

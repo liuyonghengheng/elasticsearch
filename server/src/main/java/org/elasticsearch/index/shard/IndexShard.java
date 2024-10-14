@@ -142,19 +142,10 @@ import org.elasticsearch.threadpool.ThreadPool;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.lang.reflect.Field;
 import java.nio.channels.ClosedByInterruptException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -3572,19 +3563,45 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
 //               return DataCopyReadEngine::new;
 //           }
             // TODO:liuyongheng 初始化时设置是否是primary，提主的时候设置primary
-            if(shardRouting.primary()){
-                return (config) -> {
-                    DataCopyEngine dataCopyEngine = new DataCopyEngine(config);
-                    dataCopyEngine.setIsPrimary(true);
-                    return dataCopyEngine;
-                };
-            }else{
-                return (config) -> {
-                    DataCopyEngine dataCopyEngine = new DataCopyEngine(config);
-                    dataCopyEngine.closeIndexWriter();
-                    return dataCopyEngine;
-                };
-            }
+//            if(shardRouting.primary()){
+//                return (config) -> {
+//                    DataCopyEngine dataCopyEngine = new DataCopyEngine(config);
+//                    dataCopyEngine.setIsPrimary(true);
+//                    return dataCopyEngine;
+//                };
+//            }else{
+//                return (config) -> {
+//                    DataCopyEngine dataCopyEngine = new DataCopyEngine(config);
+//                    dataCopyEngine.enableReadEngine();
+//                    return dataCopyEngine;
+//                };
+//            }
+
+            //TODO: 反射方式是不安全的方法，需要修改security.policy文件并开启发射权限，不是一个好的选择
+            //后续如果修改，别忘了修改security.policy文件
+            return (config) -> {
+                Settings settings = config.getIndexSettings().getSettings();
+                try {
+                    Field field = settings.getClass().getDeclaredField("settings");
+                    field.setAccessible(true);
+                    Map<String, Object> originalMap = (Map<String, Object>) field.get(settings);
+                    Map<String, Object> newMap = new HashMap<>(originalMap);
+
+                    if(shardRouting.primary()){
+                        newMap.put("isPrimary", Boolean.TRUE);
+                    }else{
+                        newMap.put("isPrimary", Boolean.FALSE);
+                    }
+                    Map<String, Object> newUnmodifiableMap = Collections.unmodifiableMap(newMap);
+                    field.set(settings, newUnmodifiableMap);
+
+                } catch (NoSuchFieldException e) {
+                    logger.info("------------------");
+                } catch (IllegalAccessException e) {
+                    logger.info("------------------");
+                }
+                return new DataCopyEngine(config);
+            };
         }
         return engineFactory;
     }
