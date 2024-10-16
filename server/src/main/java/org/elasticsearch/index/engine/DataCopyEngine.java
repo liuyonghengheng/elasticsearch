@@ -292,18 +292,23 @@ public class DataCopyEngine extends Engine {
             this.lastRefreshedCheckpointListener = new LastRefreshedCheckpointListener(localCheckpointTracker.getProcessedCheckpoint());
             this.internalReaderManager.addListener(lastRefreshedCheckpointListener);
             maxSeqNoOfUpdatesOrDeletes = new AtomicLong(SequenceNumbers.max(localCheckpointTracker.getMaxSeqNo(), translog.getMaxSeqNo()));
-//            if (softDeleteEnabled && localCheckpointTracker.getPersistedCheckpoint() < localCheckpointTracker.getMaxSeqNo()) {
-//                try (Searcher searcher =
-//                         acquireSearcher("restore_version_map_and_checkpoint_tracker", SearcherScope.INTERNAL)) {
-//                    restoreVersionMapAndCheckpointTracker(Lucene.wrapAllDocsLive(searcher.getDirectoryReader()));
-//                } catch (IOException e) {
-//                    throw new EngineCreationFailureException(config().getShardId(),
-//                        "failed to restore version map and local checkpoint tracker", e);
-//                }
-//            }
+            if (softDeleteEnabled && localCheckpointTracker.getPersistedCheckpoint() < localCheckpointTracker.getMaxSeqNo()) {
+                logger.error("-------------------------PersistedCheckpoint:"+localCheckpointTracker.getPersistedCheckpoint());
+                logger.error("-------------------------MaxSeqNo:"+localCheckpointTracker.getMaxSeqNo());
+                try (Searcher searcher =
+                         acquireSearcher("restore_version_map_and_checkpoint_tracker", SearcherScope.INTERNAL)) {
+                    if(isPrimary.get()){
+                        restoreVersionMapAndCheckpointTracker(Lucene.wrapAllDocsLive(searcher.getDirectoryReader()));
+                    }else{
+                        restoreCheckpointTracker(Lucene.wrapAllDocsLive(searcher.getDirectoryReader()));
+                    }
+                } catch (IOException e) {
+                    throw new EngineCreationFailureException(config().getShardId(),
+                        "failed to restore version map and local checkpoint tracker", e);
+                }
+            }
             completionStatsCache = new CompletionStatsCache(() -> acquireSearcher("completion_stats"));
             this.externalReaderManager.addListener(completionStatsCache);
-
             this.externalReaderCopyManager.addListener(versionMap);
             this.externalReaderCopyManager.addListener(completionStatsCache);
             this.lastRefreshedSegmentsInfoListener = new LastRefreshedSegmentsInfoListener(engineConfig.getPrimaryTermSupplier(),
@@ -2821,6 +2826,8 @@ public class DataCopyEngine extends Engine {
                         throw new FlushFailedEngineException(shardId, e);
                     }
                     refreshLastCommittedSegmentInfos();
+                    logger.error("+++++++++++++++++++++++++++lastCommittedSegmentInfos persist:"+lastCommittedSegmentInfos.userData.get(SequenceNumbers.LOCAL_CHECKPOINT_KEY));
+                    logger.error("+++++++++++++++++++++++++++lastCommittedSegmentInfos maxseqno:"+lastCommittedSegmentInfos.userData.get(SequenceNumbers.MAX_SEQ_NO));
 
                 }
                 newCommitId = lastCommittedSegmentInfos.getId();
@@ -4113,6 +4120,39 @@ public class DataCopyEngine extends Engine {
         }
         // remove live entries in the version map
         refresh("restore_version_map_and_checkpoint_tracker", SearcherScope.INTERNAL, true);
+    }
+
+    /**
+     * Restores the live version map and local checkpoint of this engine using documents (including soft-deleted)
+     * after the local checkpoint in the safe commit. This step ensures the live version map and checkpoint tracker
+     * are in sync with the Lucene commit.
+     */
+    // TODO:这里直接跳过versionmap,并且也不执行refresh，因为这在replica中的意义不大，并且replica不能执行主动的有indexwriter的refresh！
+    private void restoreCheckpointTracker(DirectoryReader directoryReader) throws IOException {
+        final IndexSearcher searcher = new IndexSearcher(directoryReader);
+        searcher.setQueryCache(null);
+        final Query query = new BooleanQuery.Builder()
+            .add(LongPoint.newRangeQuery(
+                SeqNoFieldMapper.NAME, getPersistedLocalCheckpoint() + 1, Long.MAX_VALUE), BooleanClause.Occur.MUST)
+            // exclude non-root nested documents
+            .add(new DocValuesFieldExistsQuery(SeqNoFieldMapper.PRIMARY_TERM_NAME), BooleanClause.Occur.MUST)
+            .build();
+        final Weight weight = searcher.createWeight(searcher.rewrite(query), ScoreMode.COMPLETE_NO_SCORES, 1.0f);
+        for (LeafReaderContext leaf : directoryReader.leaves()) {
+            final Scorer scorer = weight.scorer(leaf);
+            if (scorer == null) {
+                continue;
+            }
+            final CombinedDocValues dv = new CombinedDocValues(leaf.reader());
+            final IdOnlyFieldVisitor idFieldVisitor = new IdOnlyFieldVisitor();
+            final DocIdSetIterator iterator = scorer.iterator();
+            int docId;
+            while ((docId = iterator.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
+                final long seqNo = dv.docSeqNo(docId);
+                localCheckpointTracker.markSeqNoAsProcessed(seqNo);
+                localCheckpointTracker.markSeqNoAsPersisted(seqNo);
+            }
+        }
     }
 
     public SourceShardCopyState getSourceShardCopyState(){
