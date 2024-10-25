@@ -284,29 +284,31 @@ public class DataCopyEngine extends Engine {
             pendingTranslogRecovery.set(true);
             for (ReferenceManager.RefreshListener listener: engineConfig.getExternalRefreshListener()) {
                 this.externalReaderManager.addListener(listener);
-                this.externalReaderCopyManager.addListener(listener);
             }
             for (ReferenceManager.RefreshListener listener: engineConfig.getInternalRefreshListener()) {
                 this.internalReaderManager.addListener(listener);
+                this.externalReaderCopyManager.addListener(listener);
             }
             this.lastRefreshedCheckpointListener = new LastRefreshedCheckpointListener(localCheckpointTracker.getProcessedCheckpoint());
             this.internalReaderManager.addListener(lastRefreshedCheckpointListener);
+            this.externalReaderCopyManager.addListener(lastRefreshedCheckpointListener);
             maxSeqNoOfUpdatesOrDeletes = new AtomicLong(SequenceNumbers.max(localCheckpointTracker.getMaxSeqNo(), translog.getMaxSeqNo()));
             if (softDeleteEnabled && localCheckpointTracker.getPersistedCheckpoint() < localCheckpointTracker.getMaxSeqNo()) {
                 logger.error("-------------------------PersistedCheckpoint:"+localCheckpointTracker.getPersistedCheckpoint());
                 logger.error("-------------------------MaxSeqNo:"+localCheckpointTracker.getMaxSeqNo());
                 try (Searcher searcher =
                          acquireSearcher("restore_version_map_and_checkpoint_tracker", SearcherScope.INTERNAL)) {
-                    if(isPrimary.get()){
-                        restoreVersionMapAndCheckpointTracker(Lucene.wrapAllDocsLive(searcher.getDirectoryReader()));
-                    }else{
-                        restoreCheckpointTracker(Lucene.wrapAllDocsLive(searcher.getDirectoryReader()));
-                    }
+                    restoreVersionMapAndCheckpointTracker(Lucene.wrapAllDocsLive(searcher.getDirectoryReader()));
                 } catch (IOException e) {
                     throw new EngineCreationFailureException(config().getShardId(),
                         "failed to restore version map and local checkpoint tracker", e);
                 }
             }
+
+            for (ReferenceManager.RefreshListener listener: engineConfig.getExternalRefreshListener()) {
+                this.externalReaderCopyManager.addListener(listener);
+            }
+
             completionStatsCache = new CompletionStatsCache(() -> acquireSearcher("completion_stats"));
             this.externalReaderManager.addListener(completionStatsCache);
             this.externalReaderCopyManager.addListener(versionMap);
@@ -4148,11 +4150,35 @@ public class DataCopyEngine extends Engine {
             final DocIdSetIterator iterator = scorer.iterator();
             int docId;
             while ((docId = iterator.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
+                final long primaryTerm = dv.docPrimaryTerm(docId);
                 final long seqNo = dv.docSeqNo(docId);
                 localCheckpointTracker.markSeqNoAsProcessed(seqNo);
                 localCheckpointTracker.markSeqNoAsPersisted(seqNo);
+                idFieldVisitor.reset();
+                leaf.reader().document(docId, idFieldVisitor);
+                if (idFieldVisitor.getId() == null) {
+                    assert dv.isTombstone(docId);
+                    continue;
+                }
+                final BytesRef uid = new Term(IdFieldMapper.NAME, Uid.encodeId(idFieldVisitor.getId())).bytes();
+                try (Releasable ignored = versionMap.acquireLock(uid)) {
+                    final VersionValue curr = versionMap.getUnderLock(uid);
+                    if (curr == null ||
+                        compareOpToVersionMapOnSeqNo(idFieldVisitor.getId(), seqNo, primaryTerm, curr) == OpVsLuceneDocStatus.OP_NEWER) {
+                        if (dv.isTombstone(docId)) {
+                            // use 0L for the start time so we can prune this delete tombstone quickly
+                            // when the local checkpoint advances (i.e., after a recovery completed).
+                            final long startTime = 0L;
+                            versionMap.putDeleteUnderLock(uid, new DeleteVersionValue(dv.docVersion(docId), seqNo, primaryTerm, startTime));
+                        } else {
+                            versionMap.putIndexUnderLock(uid, new IndexVersionValue(null, dv.docVersion(docId), seqNo, primaryTerm));
+                        }
+                    }
+                }
             }
         }
+        // remove live entries in the version map
+        refresh("restore_version_map_and_checkpoint_tracker", SearcherScope.INTERNAL, true);
     }
 
     public SourceShardCopyState getSourceShardCopyState(){
